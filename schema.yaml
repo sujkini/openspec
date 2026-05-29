@@ -1,0 +1,267 @@
+name: gs-speckit
+version: 1
+description: GS Spec Kit workflow — Jira-driven, gated, with repo assessment and constitution
+
+artifacts:
+  - id: validation
+    generates: validation.md
+    description: Spec quality gate — automated scoring of input specification
+    template: validation.md
+    instruction: |
+      You are the "Specification Validator": a quality gate for software specs before engineering or agentic codegen.
+
+      Mission: Reduce rework by catching ambiguous, incomplete, inconsistent, or un-testable requirements early. Make gaps explicit as questions and actionable edits — do not invent product behavior.
+
+      Operating constraints:
+      - Do not fabricate repositories, APIs, ports, behaviors, timelines, or dependencies not stated in the spec.
+      - Prefer marking "missing" over guessing.
+
+      Process:
+      1. Extract the input specification (from Jira ticket content provided by user, or user description).
+      2. Read the validation template for the output structure.
+      3. Evaluate against two dimensions:
+
+         A) Completeness Audit (60% weight):
+         - Context & Motivation (why, impact, pain)
+         - User Personas / Actors (explicit roles)
+         - Acceptance Criteria & Edge Cases (explicit "done", negatives)
+         - Scope Boundaries & Dependencies (out-of-scope, blockers)
+         - Impacted Repositories / Systems (explicit repo/service names)
+         If any core pillar is missing, cap completeness_score at 60.
+
+         B) Quality Audit (40% weight, INVEST heuristics):
+         - Ambiguity: unquantified adjectives without metrics
+         - Testability: ACs that cannot map to automated tests
+         - Sizing: multiple independent deliverables in one ticket
+         - Consistency: contradictions between sections
+
+      4. Produce validation.md with scoring and findings.
+      5. Scoring: overall_score = round(0.6 * completeness_score + 0.4 * quality_score)
+         - PASS: overall_score >= 80 AND no blockers
+         - NEEDS_REVISION: overall_score < 80 OR non-fatal gaps
+         - BLOCKED: severe contradictions
+
+      Gate behavior:
+      - PASS: Present summary, ask user to approve.
+      - NEEDS_REVISION: Present issues, ask user whether to proceed or stop.
+      - BLOCKED: Halt. Do NOT offer a proceed option.
+
+      ## APPROVAL GATE
+      After writing this artifact:
+      1. SUMMARIZE key findings (overall score, status, missing elements, quality issues, blockers).
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Address every point raised. Rewrite. Present updated summary. Ask again.
+      4. ON APPROVE: Confirm and state what is unlocked next.
+    requires: []
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Feature specification — user stories, requirements, success criteria
+    template: spec.md
+    instruction: |
+      Create detailed functional specifications from the validated input.
+
+      Process:
+      1. Read validation.md if it exists. Address missing_elements as explicit assumptions.
+         Resolve quality_issues in the spec.
+      2. Read the spec template for output structure.
+      3. Produce spec file(s) with:
+         - User Scenarios & Testing: User stories with priorities (P1, P2, P3).
+           Each independently testable with Given/When/Then acceptance scenarios.
+         - Requirements: Functional requirements (FR-001, FR-002, ...) derived from input.
+           Every requirement MUST be testable and unambiguous.
+           Use SHALL/MUST for normative requirements.
+         - Key Entities: Data entities if the feature involves data.
+         - Success Criteria: Measurable, technology-agnostic outcomes (SC-001, ...).
+         - Assumptions: Reasonable defaults for anything not specified.
+      4. Maximum 3 [NEEDS CLARIFICATION] markers for decisions that significantly impact scope.
+      5. Quality check: No implementation details (languages, frameworks, APIs).
+         Focused on user value. Requirements testable. Success criteria measurable.
+
+      Create one spec file per capability. Use delta format:
+      - Use ## ADDED Requirements for new capabilities.
+      - Use ## MODIFIED Requirements for changed behavior (include full updated content).
+      - Use ## REMOVED Requirements for deprecated features (include Reason and Migration).
+      Each requirement: ### Requirement: <name>
+      Each scenario: #### Scenario: <name> with WHEN/THEN format.
+
+      ## APPROVAL GATE
+      After writing specs:
+      1. SUMMARIZE: number of stories, key requirements, success criteria, assumptions.
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Revise addressing EVERY point. Rewrite. Ask again.
+      4. ON APPROVE: Confirm and state what is unlocked next.
+    requires:
+      - validation
+
+  - id: repo-assessment
+    generates: repo-assessment.md
+    description: Repository analysis — target files, guardrails, risks, reusable assets
+    template: repo-assessment.md
+    instruction: |
+      Analyze the target repository and produce a fact-based engineering inventory.
+
+      Process:
+      1. Analyze the target repository. Read (when they exist):
+         - README.md, AGENTS.md or CLAUDE.md, CONTRIBUTING.md
+         - Build/dependency files (package.json, go.mod, pyproject.toml, Cargo.toml, Makefile)
+         - Directory structure (top levels)
+         - Test infrastructure (test dirs, test config)
+         - CI/CD configuration (.github/workflows/, Jenkinsfile)
+         - Linter/formatter config (.eslintrc, .prettierrc, golangci-lint.yaml)
+      2. From analysis, determine: tech stack, project type, architecture patterns,
+         testing approach, code conventions, existing patterns.
+      3. Cross-reference with specs to identify which components the feature touches.
+      4. Produce repo-assessment.md following the template sections:
+         - Section 0: Inputs & Tooling (repo/branch/commit/status, key finding)
+         - Section 1: Target Files (every file to modify/create, with rationale and evidence)
+         - Section 2: Reference Context (files to read for patterns, not modify)
+         - Section 3: Reusable Assets (existing code to reuse, anti-duplication)
+         - Section 4: Architectural Guardrails (hard constraints from the repo)
+         - Section 5: Risks & Downstream Impacts (deps, upgrades, unverified items)
+
+      This artifact is fact-based — no principles or governance, just inventory.
+
+      ## APPROVAL GATE
+      After writing repo-assessment.md:
+      1. SUMMARIZE: target files count, key reusable assets, guardrails, top risks, unverified items.
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Address every point. Rewrite. Ask again.
+      4. ON APPROVE: Confirm and state what is unlocked next.
+    requires:
+      - specs
+
+  - id: constitution
+    generates: constitution.md
+    description: Project principles derived from repo analysis
+    template: constitution.md
+    instruction: |
+      Create the project constitution — governance principles derived from the repository's actual conventions.
+
+      Process:
+      1. Read repo-assessment.md for repo analysis results.
+      2. Read the constitution template for output structure.
+      3. Cross-reference the repo analysis with specs to identify alignment or conflicts.
+      4. Produce constitution.md:
+         - Core Principles: Derive from the repo's actual conventions (not generic best practices).
+           Each principle MUST be observable in the codebase.
+         - Additional Constraints: Tech stack requirements, compliance, deployment policies.
+         - Development Workflow: Code review, testing gates, deployment as practiced in this repo.
+         - Governance: Relationship to existing AGENTS.md/CLAUDE.md/CONTRIBUTING.md.
+
+      Every principle must be grounded in repo evidence.
+
+      ## APPROVAL GATE
+      After writing constitution.md:
+      1. SUMMARIZE: top principles with evidence, key constraints, governance highlights.
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Address every point. Rewrite. Ask again.
+      4. ON APPROVE: Confirm and state what is unlocked next.
+    requires:
+      - repo-assessment
+
+  - id: plan
+    generates: plan.md
+    description: Technical implementation plan (9 sections)
+    template: plan.md
+    instruction: |
+      Create a 9-section Technical Implementation Plan bridging spec requirements
+      and repo reality into an architecture-level blueprint.
+
+      Process:
+      1. Read all approved artifacts (specs, constitution, repo-assessment) and plan template.
+      2. Produce plan.md with sections:
+         - Section 0 — Inputs Acknowledged: Record upstream artifacts, repo pin, constitution status.
+         - Section 1 — Architectural Strategy: High-level approach constrained by constitution
+           and repo guardrails. Include "Repo-grounded reality check" paragraph.
+         - Section 2 — Persistence & State: State model from spec requirements and repo files.
+         - Section 3 — Interfaces & Contracts: Every interface boundary (only applicable subsections).
+         - Section 4 — Dependencies & Sequencing Graph: Critical path, parallelizable streams.
+         - Section 5 — Implementation Phases: Logical phases with Goal, Dependencies, Target Files,
+           Verification Hooks.
+         - Section 6 — Verification Matrix: Map spec ACs to test categories.
+         - Section 7 — Risks, Migrations & Operational Follow-ups.
+         - Section 8 — Open Questions / SME Decisions.
+
+      Traceability: Every decision traces to spec requirement or constitution principle.
+      Every risk traces to repo assessment finding or spec gap.
+
+      ## APPROVAL GATE
+      After writing plan.md:
+      1. SUMMARIZE: strategy, phase count, critical path, top 3 risks, open questions.
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Address every point. Rewrite. Ask again.
+      4. ON APPROVE: Confirm and state what is unlocked next.
+    requires:
+      - specs
+      - constitution
+      - repo-assessment
+
+  - id: tasks
+    generates: tasks.md
+    description: Execution backlog with dependency DAG, complexity scoring, per-task payloads
+    template: tasks.md
+    instruction: |
+      Create an Execution Backlog that decomposes the plan into granular, dependency-ordered tasks.
+
+      IMPORTANT: The apply phase parses checkbox format to track progress.
+      All trackable tasks MUST use: - [ ] X.Y Task description
+
+      Process:
+      1. Read all approved artifacts and the tasks template.
+      2. Section 0 — Input Coverage Checklist: Map every FR-xx, SC-xx, and plan phase to tasks.
+      3. Section 1 — Task Dependency Graph: Mermaid DAG showing dependencies.
+      4. Section 2 — Implementation Tasks: Use ## numbered group headings with
+         - [ ] X.Y checkbox format for each task. Group by plan phase.
+         Order by dependency (what must be done first).
+         Only mark tasks parallel if they touch disjoint file sets.
+      5. Section 3 — Task Manifest: Summary table (Task ID, Title, Phase, Depends On,
+         Parallel OK, Complexity, Risk). Fibonacci complexity (1,2,3,5,8).
+      6. Section 4 — Task Payloads: Per-task specification:
+         Objective, Target file(s), Non-goals/forbidden edits,
+         Implementation notes (non-code), Acceptance criteria (trace to spec IDs),
+         Downstream handoff.
+      7. Section 5 — Orchestration Notes: Retry boundaries, conflict hotspots, open questions.
+
+      Do NOT write production code. This stage is purely organizational.
+
+      ## APPROVAL GATE
+      After writing tasks.md:
+      1. SUMMARIZE: task count, tasks per phase, critical-path length, complexity points, high-risk tasks.
+      2. ASK: "Do you approve? (Approve / Reject with feedback)"
+      3. ON REJECT: Address every point. Rewrite. Ask again.
+      4. ON APPROVE: Confirm. State that /opsx:apply is now available.
+    requires:
+      - plan
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    Execute tasks following the dependency order from tasks.md.
+
+    FOR EACH TASK:
+    1. Read its payload from tasks.md Section 4.
+    2. Implement following constitution conventions.
+    3. Match existing patterns in the repository.
+    4. Respect per-task Non-goals/forbidden edits.
+    5. Run relevant tests/evals for this task.
+    6. Present to the user:
+       - What was implemented
+       - Files changed
+       - Test results (if applicable)
+    7. Ask: "Approve this task and proceed to next? (Yes / No - provide feedback)"
+    8. If No: Revise based on feedback. Present again.
+    9. Only move to next task after explicit user approval.
+
+    NEVER proceed to the next task without user validation.
+    If a task fails, halt and report with context. Suggest a fix. Wait for user input.
+
+    Respect Depends On — never start a task before its dependencies complete.
+    Respect Parallel OK flags.
+
+    After ALL tasks complete, produce a final report:
+    - Tasks completed vs planned
+    - Files changed
+    - Test results
+    - Any deviations from plan and why
