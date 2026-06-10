@@ -1,157 +1,103 @@
-# gs-speckit — OpenSpec Custom Schema
+# openspec-agile-workflow
 
-A custom OpenSpec schema that brings the [GS Spec Kit workflow](https://github.com/chirag-wrk/gs-workflow) into OpenSpec's fluid, artifact-guided framework.
+Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema: gated, Jira-driven spec-first workflow for AI-assisted development.
 
-## What This Is
-
-This schema implements a 6-artifact, gated workflow for specification-driven development:
+**Pipeline:**
 
 ```
-validation → specs → repo-assessment → constitution → plan → tasks → apply
+validation → specs → repo-assessment + constitution → plan → tasks → implementation → archive
 ```
 
-Each artifact has a **mandatory approval gate** — the AI agent will pause after creating each artifact and ask you to approve before proceeding.
+Each artifact has a **user approval gate**. Implementation runs phase-by-phase on your fork and opens a **draft PR** when done.
 
-## Origin
+## Prerequisites
 
-This workflow was originally built for the Ambient Code Platform using GitHub Spec Kit conventions. It has been adapted to work within OpenSpec's schema system while preserving:
+- [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec): `npm install -g @fission-ai/openspec`
+- [Cursor](https://cursor.com) (or another supported IDE)
 
-- The full GS workflow structure (Stage 0 through Stage 5)
-- User stories with priorities (P1/P2/P3)
-- Repository assessment as a formal artifact
-- 9-section technical implementation plans
-- Execution backlogs with dependency DAGs, complexity scoring, and per-task payloads
-- Per-task user validation during implementation
-
-## Installation
-
-### Option 1: Copy into your project
+## Install into your project
 
 ```bash
-cp -r schemas/gs-speckit/ your-project/openspec/schemas/gs-speckit/
-cp config.yaml your-project/openspec/config.yaml
-cd your-project
-openspec update
+git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+/tmp/openspec-workflow/install.sh /path/to/your-project
 ```
 
-### Option 2: In a fresh project
+Or from your project directory:
 
 ```bash
-cd your-project
-openspec init
-# Copy the schema
-cp -r /path/to/new-openspec/schemas/gs-speckit/ openspec/schemas/gs-speckit/
-# Set it as default
-cp /path/to/new-openspec/config.yaml openspec/config.yaml
-openspec schema validate gs-speckit
-openspec update
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/install.sh -o install.sh
+chmod +x install.sh
+/path/to/clone/install.sh .
 ```
+
+Restart Cursor after install.
 
 ## Usage
 
-### Full pipeline (fast-forward all planning artifacts)
+| Command | Purpose |
+|---------|---------|
+| `/opsx-new CM-830` | Start change from Jira key; writes `inputs/jira.yaml` |
+| `/opsx-continue` | Create next artifact (validation → specs → … → tasks) |
+| `/opsx-apply` | Implement tasks on your fork (per-phase approval) |
+| `/opsx-archive` | Archive completed change |
+| `/opsx-explore` | Think through ideas (no artifacts) |
+
+**Step-by-step example:**
 
 ```
-/opsx:propose "PROJ-1234: Add certificate rotation for webhook serving certs"
+/opsx-new CM-830
+/opsx-continue    → validation.json   [approve]
+/opsx-continue    → specs.md          [approve]
+/opsx-continue    → repo-assessment + constitution [approve]
+/opsx-continue    → plan.md           [approve]
+/opsx-continue    → tasks.md          [approve]
+/opsx-apply       → code on fork + draft PR
+/opsx-archive
 ```
 
-### Step-by-step (recommended — respects gates)
+## What gets installed
 
-```
-/opsx:new add-cert-rotation
-/opsx:continue          → validation.md    [GATE: approve/reject]
-/opsx:continue          → specs/           [GATE: approve/reject]
-/opsx:continue          → repo-assessment  [GATE: approve/reject]
-/opsx:continue          → constitution     [GATE: approve/reject]
-/opsx:continue          → plan.md          [GATE: approve/reject]
-/opsx:continue          → tasks.md         [GATE: approve/reject]
-/opsx:apply             → implement (per-task validation)
-/opsx:archive           → merge specs, archive change
-```
+| Source (this repo) | Target (your project) |
+|--------------------|------------------------|
+| `schemas/openspec-agile-workflow/` | `openspec/schemas/openspec-agile-workflow/` |
+| `config.yaml.example` | `openspec/config.yaml` |
+| `tooling/cursor/commands/` | `.cursor/commands/` |
+| `tooling/cursor/skills/` | `.cursor/skills/` |
 
-### Explore before committing
+## Inputs during a change
 
-```
-/opsx:explore           → think through ideas, no artifacts yet
-```
+| Input | When required |
+|-------|----------------|
+| Jira ticket key | `/opsx-new` |
+| Jira spec content | Paste into `inputs/jira-spec.md` or use Jira MCP |
+| Target repo URL | Before repo-assessment (`inputs/jira.yaml` → `target_repo`) |
+| Fork repo URL | Before `/opsx-apply` (`inputs/jira.yaml` → `fork_repo_url`) |
 
-## Artifact Dependency Graph
-
-```
-              validation
-              (no deps)
-                  │
-                  ▼
-               specs
-          (requires: validation)
-                  │
-                  ▼
-          repo-assessment
-          (requires: specs)
-                  │
-                  ▼
-           constitution
-     (requires: repo-assessment)
-                  │
-                  ▼
-               plan
-     (requires: specs + constitution
-              + repo-assessment)
-                  │
-                  ▼
-              tasks
-          (requires: plan)
-                  │
-                  ▼
-              APPLY
-          (requires: tasks)
-```
-
-## Files
-
-```
-schemas/gs-speckit/
-├── schema.yaml                  # Workflow definition + gate instructions
-└── templates/
-    ├── validation.md            # Spec quality gate (scoring template)
-    ├── spec.md                  # Feature spec (user stories, FR-xxx, scenarios)
-    ├── repo-assessment.md       # Repo analysis (target files, guardrails, risks)
-    ├── constitution.md          # Project principles (from repo conventions)
-    ├── plan.md                  # Technical plan (9 sections)
-    ├── tasks.md                 # Execution backlog (DAG, checkboxes, payloads)
-    └── checklist.md             # Quality checklist
-```
-
-## Differences from Original GS Workflow (on Ambient)
-
-| Aspect | GS on Ambient | gs-speckit on OpenSpec |
-|--------|--------------|----------------------|
-| Jira access | Auto via MCP | User pastes ticket content |
-| Gates | Hard-enforced by platform | Soft-enforced via agent instructions |
-| Agent routing | Multi-agent (provisional IDs) | Single agent |
-| Going back | Reject → revise loop only | Edit any file + continue |
-| After completion | Repo merge | /opsx:archive (specs persist) |
-| Parallel features | One pipeline | Multiple changes simultaneously |
-
-## Customization
-
-Edit `config.yaml` to inject project-specific context and per-artifact rules:
-
-```yaml
-schema: gs-speckit
-
-context: |
-  Your project-specific details here
-
-rules:
-  specs:
-    - Your custom rules for specs
-  plan:
-    - Your custom rules for planning
-```
-
-## Validation
+## Validate schema
 
 ```bash
-openspec schema validate gs-speckit
+openspec schema validate openspec-agile-workflow
 ```
+
+## Repository layout
+
+```
+schemas/openspec-agile-workflow/
+├── schema.yaml
+└── templates/
+tooling/cursor/
+├── commands/     # opsx-new, opsx-continue, opsx-apply, ...
+└── skills/
+config.yaml.example
+install.sh
+```
+
+## Important notes
+
+- **`openspec update` overwrites `.cursor/`** with stock OpenSpec commands. Re-run `install.sh` to restore this workflow's commands.
+- **`openspec init` alone** installs the default `spec-driven` schema and core commands — use **`install.sh`** for this workflow.
+- Implementation creates a **feature branch** on your fork and opens a **draft PR** to the fork's default branch (`master`/`main`).
+
+## License
+
+MIT (schema and templates). OpenSpec CLI is separate — see [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec).
