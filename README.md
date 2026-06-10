@@ -22,14 +22,6 @@ git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-project
 ```
 
-Or from your project directory:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/install.sh -o install.sh
-chmod +x install.sh
-/path/to/clone/install.sh .
-```
-
 Restart Cursor after install.
 
 ## Usage
