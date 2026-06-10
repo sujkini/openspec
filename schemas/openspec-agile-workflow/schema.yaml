@@ -13,7 +13,7 @@ templates_dir: templates
 # AGENTS.md — when required, where to look, what to do if missing
 # ---------------------------------------------------------------------------
 agents_md:
-  description: >-
+  description: 
     SME-defined execution agent roster and routing rules from the target repository.
     Used for AgentRoutingMode (constitution), phase capability mapping (plan), and
     Assigned Agent values (tasks). Not used during Spec Understanding.
@@ -57,6 +57,31 @@ agents_md:
     Do not invent agent IDs. If the user declines or defers, proceed with
     AgentRoutingMode PROVISIONAL and document that in constitution.md, plan.md,
     and tasks.md.
+
+# ---------------------------------------------------------------------------
+# target_repo — upstream GitHub repo for assessment and planning
+# ---------------------------------------------------------------------------
+target_repo:
+  description: >-
+    Upstream GitHub repository URL used for repo-assessment, constitution, plan,
+    and tasks. Distinct from fork_repo_url (user's fork for implementation).
+  collected_at: repo-understanding
+  stored_in: openspec/changes/<change>/inputs/jira.yaml
+  field: target_repo
+  not_required_at:
+    - opsx-new
+  when_missing: >-
+    Before creating repo-assessment.md (Repo Understanding stage / artifact
+    repo-assessment), read inputs/jira.yaml for target_repo. If absent or empty,
+    ask the user once: "Provide the URL of the target GitHub repository (e.g.
+    https://github.com/org/repo)." Persist target_repo to inputs/jira.yaml.
+    Do not start repo-assessment or constitution until the URL is recorded.
+    Verify the repository is accessible (clone, fetch, or GitHub MCP) before
+    writing repo-assessment.md.
+  usage: >-
+    Reference only for planning and assessment. Implementation FILE OPERATIONS
+    apply to fork_repo_url (/opsx:apply), not target_repo, unless the user
+    explicitly directs otherwise.
 
 # ---------------------------------------------------------------------------
 # fork_repo — user's fork for implementation and draft PR
@@ -142,7 +167,7 @@ workflow:
       evaluated by the user before proceeding.
     inputs:
       - specs.md
-      - GitHub repository
+      - GitHub repository (inputs/jira.yaml target_repo — required; see schema target_repo)
       - AGENTS.md (optional — ask user if missing; see agents_md.when_missing)
       - Functional SME context
     outputs:
@@ -296,12 +321,16 @@ artifacts:
       - Functional SME context when provided
 
       ## Process
-      0. Resolve AGENTS.md: check target repo and change inputs/; if absent, ask the user
+      0. Resolve target_repo (REQUIRED — see schema target_repo): read
+         inputs/jira.yaml. If target_repo is absent or empty, ask the user once,
+         persist to jira.yaml, and verify the repository is accessible. Do not
+         proceed until recorded.
+      1. Resolve AGENTS.md: check target repo and change inputs/; if absent, ask the user
          once to provide AGENTS.md before continuing (or proceed PROVISIONAL if declined).
-      1. Read and contextualize the repository; cross-reference with specs.md.
-      2. Follow repo-assessment.md template for all required sections.
-      3. Document target files, reusable assets, guardrails, and risks with evidence.
-      4. Fact-based inventory only — no governance principles (those go in constitution.md).
+      2. Read and contextualize the repository; cross-reference with specs.md.
+      3. Follow repo-assessment.md template for all required sections.
+      4. Document target files, reusable assets, guardrails, and risks with evidence.
+      5. Fact-based inventory only — no governance principles (those go in constitution.md).
 
       Co-generated with constitution.md; both evaluated together by the user.
 
@@ -330,13 +359,15 @@ artifacts:
       Derive constitution.md from repository conventions and the approved spec.
 
       ## Process
-      0. Resolve AGENTS.md: if not found in target repo or change inputs/, ask the user
+      0. Confirm target_repo is set in inputs/jira.yaml (see schema target_repo).
+         If missing, halt and resolve before constitution authoring.
+      1. Resolve AGENTS.md: if not found in target repo or change inputs/, ask the user
          once to provide AGENTS.md (see schema agents_md.when_missing).
-      1. Read repository analysis and specs.md.
-      2. Follow constitution.md template for structure.
-      3. Every principle must cite observable repo evidence.
-      4. Set AgentRoutingMode PROVIDED if AGENTS.md exists; otherwise PROVISIONAL.
-      5. No file inventories or risk analysis — those belong in repo-assessment.md.
+      2. Read repository analysis and specs.md.
+      3. Follow constitution.md template for structure.
+      4. Every principle must cite observable repo evidence.
+      5. Set AgentRoutingMode PROVIDED if AGENTS.md exists; otherwise PROVISIONAL.
+      6. No file inventories or risk analysis — those belong in repo-assessment.md.
 
       Co-generated with repo-assessment.md; joint user approval gate.
 

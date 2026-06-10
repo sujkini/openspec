@@ -70,7 +70,7 @@ Restart Cursor after install.
 |-------|----------------|
 | Jira ticket key | `/opsx-new` |
 | Jira spec content | Paste into `inputs/jira-spec.md` or use Jira MCP |
-| Target repo URL | Before repo-assessment (`inputs/jira.yaml` → `target_repo`) |
+| Target repo URL | Before **repo-assessment** — agent **prompts if empty** (`inputs/jira.yaml` → `target_repo`) |
 | Fork repo URL | Before `/opsx-apply` (`inputs/jira.yaml` → `fork_repo_url`) |
 
 ## Validate schema

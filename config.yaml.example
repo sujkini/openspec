@@ -22,6 +22,7 @@ rules:
     - No implementation details; max 3 [NEEDS CLARIFICATION] markers
     - User stories with Given/When/Then; FR-xxx and SC-xxx identifiers
   repo-assessment:
+    - Before creating repo-assessment.md, ensure target_repo is set in inputs/jira.yaml (ask user once if empty; see schema target_repo)
     - Fact-based inventory only; cite repo evidence for every target file
   constitution:
     - Every principle must cite observable repo evidence

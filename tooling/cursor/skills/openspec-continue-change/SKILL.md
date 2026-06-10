@@ -65,6 +65,11 @@ Continue working on a change by creating the next artifact.
      - `dependencies`: Completed artifacts to read for context
    - **Create the artifact file**:
      - Read any completed dependency files for context
+     - **openspec-agile-workflow — target_repo gate**: Before creating
+       `repo-assessment` or `constitution`, read `inputs/jira.yaml`. If
+       `target_repo` is absent or empty, ask the user once for the target GitHub
+       repository URL, persist to `jira.yaml`, and verify access. Do not proceed
+       until recorded (see schema `target_repo`).
      - Use `template` as the structure - fill in its sections
      - Apply `context` and `rules` as constraints when writing - but do NOT copy them into the file
      - Write to the output path specified in instructions
