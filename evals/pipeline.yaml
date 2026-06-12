@@ -7,8 +7,11 @@ description: >-
 
 command: /eval-loop
 
-# Resolve templates_dir: prefer installed project path, else distribution repo path
-templates_dir:
+# Eval workflow template source — NOT schemas/ (upstream defaults for /opsx-* only)
+refined_templates_dir: evals/refined-templates/
+
+# Upstream defaults (read-only during eval pipeline; seed refined-templates on round 1 if empty)
+schema_templates_dir:
   installed: openspec/schemas/openspec-agile-workflow/templates
   distribution: schemas/openspec-agile-workflow/templates
 
@@ -29,18 +32,20 @@ phases:
     reads:
       - evals/round-state.yaml
       - evals/baseline/evals-registry.yaml
-      - evals/baseline/evals/
+      - evals/baseline/evals/<stage>/<stage>_eval.yaml
       - evals/baseline/agents.md
       - evals/baseline/refinement-changelog.md
+      - evals/refined-templates/
     when: round >= 1
-    rule: Round 1 may have empty baseline; round 2+ must read prior evals
+    rule: Round 1 may have empty baseline; round 2+ must read prior evals and refined templates
 
   - id: epic-bug-analysis
     name: Epic Bug Analysis
     system_prompt: evals/epic-bug-analysis/SYSTEM_PROMPT.md
     reads:
       - evals/inputs/*
-      - evals/baseline/  # feedback — prior evals inform pattern matching
+      - evals/refined-templates/
+      - evals/baseline/
     writes:
       - evals/outputs/epic-bug-analysis/pattern-analysis.md
       - evals/outputs/epic-bug-analysis/rca-summary.md
@@ -52,32 +57,45 @@ phases:
     reads:
       - evals/outputs/epic-bug-analysis/*
       - evals/eval-generation/template-inventory.yaml
-      - templates_dir  # schema templates — updated versions on round 2+
+      - evals/refined-templates/
       - evals/eval-generation/stage-samples/
-      - evals/baseline/evals/
+      - evals/baseline/evals/<stage>/<stage>_eval.yaml
       - evals/baseline/agents.md
       - evals/baseline/refinement-changelog.md
     steps:
+      - id: seed-refined-templates
+        rule: >-
+          If evals/refined-templates/ is empty or missing key files, copy from
+          schema_templates_dir once. Never write eval refinements to schemas/.
       - id: inventory-templates
-        reads: [templates_dir, evals/eval-generation/template-inventory.yaml]
+        reads: [evals/refined-templates/, evals/eval-generation/template-inventory.yaml]
       - id: identify-gaps
         writes: [evals/outputs/eval-generation/template-gaps.md]
       - id: apply-template-refinements
         rule: >-
-          For every gap marked patchable in template-gaps.md, patch the corresponding
-          file under templates_dir IN PLACE. Eval YAML alone is not sufficient for
-          patchable gaps. Save .patch files and update refinement-changelog.
+          For every gap marked patchable in template-gaps.md, patch the
+          corresponding file under evals/refined-templates/ IN PLACE.
+          Save .patch files and update refinement-changelog.
         writes:
-          - templates_dir/*.md
+          - evals/refined-templates/*.md
           - evals/outputs/eval-generation/refinement-patches/*.patch
           - evals/baseline/refinement-changelog.md
       - id: refine-validation
         writes:
-          - templates_dir/validation.md
+          - evals/refined-templates/validation.md
           - evals/outputs/eval-generation/validation-refinements.md
           - evals/outputs/eval-generation/refinement-patches/validation.md.patch
       - id: create-eval-cases
-        writes: [evals/baseline/evals/<stage>/*.yaml]
+        rule: >-
+          Merge all eval cases per stage into ONE file:
+          evals/baseline/evals/<stage>/<stage>_eval.yaml
+          (e.g. constitution_eval.yaml). Do not scatter per-case files.
+        writes:
+          - evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
+          - evals/baseline/evals/constitution/constitution_eval.yaml
+          - evals/baseline/evals/plan/plan_eval.yaml
+          - evals/baseline/evals/tasks/tasks_eval.yaml
+          - evals/baseline/evals/implementation/implementation_eval.yaml
       - id: update-registry
         writes:
           - evals/baseline/evals-registry.yaml
@@ -88,12 +106,12 @@ phases:
       - evals/outputs/eval-generation/template-gaps.md
       - evals/outputs/eval-generation/validation-refinements.md
       - evals/outputs/eval-generation/refinement-patches/
-      - evals/baseline/evals/<stage>/*.yaml
+      - evals/baseline/evals/<stage>/<stage>_eval.yaml
       - evals/baseline/evals-registry.yaml
       - evals/baseline/agents.md
       - evals/baseline/refinement-changelog.md
       - evals/baseline/rounds/round-<N>/
-      - templates_dir/*.md
+      - evals/refined-templates/*.md
 
 eval_stages:
   - repo-assessment
@@ -102,23 +120,32 @@ eval_stages:
   - tasks
   - implementation
 
+stage_eval_files:
+  repo-assessment: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
+  constitution: evals/baseline/evals/constitution/constitution_eval.yaml
+  plan: evals/baseline/evals/plan/plan_eval.yaml
+  tasks: evals/baseline/evals/tasks/tasks_eval.yaml
+  implementation: evals/baseline/evals/implementation/implementation_eval.yaml
+
 refine_in_place:
-  - validation.md
-  - repo-assessment.md
-  - constitution.md
-  - plan.md
-  - tasks.md
-  - implementation.md
-  - tasks-modes/*.md
-  - implementation-checklist.md
-  - implementation-report.md
+  dir: evals/refined-templates/
+  files:
+    - validation.md
+    - repo-assessment.md
+    - constitution.md
+    - plan.md
+    - tasks.md
+    - implementation.md
+    - tasks-modes/*.md
+    - implementation-checklist.md
+    - implementation-report.md
 
 feedback_loop:
   description: >-
-    After each /eval-loop, baseline/evals/ and refined schema templates become
-    inputs to the next /eval-loop (Epic Bug Analysis and Eval Generation).
+    After each /eval-loop, baseline stage eval files and evals/refined-templates/
+    become inputs to the next /eval-loop.
   cumulative:
-    - evals/baseline/evals/
+    - evals/baseline/evals/<stage>/<stage>_eval.yaml
     - evals/baseline/evals-registry.yaml
   in_place:
-    - templates_dir
+    - evals/refined-templates/

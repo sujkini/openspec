@@ -1,8 +1,17 @@
 # Eval case schema — plan stage
 
 stage: plan
-template: plan.md
+template: evals/refined-templates/plan.md
 artifact: plan.md
+stage_eval_file: evals/baseline/evals/plan/plan_eval.yaml
+
+consolidated_schema:
+  stage: plan
+  template: evals/refined-templates/plan.md
+  artifact: plan.md
+  version: 1
+  eval_count: <N>
+  evals: [<case>, ...]
 
 required_fields:
   - id

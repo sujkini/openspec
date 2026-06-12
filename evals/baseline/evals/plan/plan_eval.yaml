@@ -1,0 +1,135 @@
+stage: plan
+template: evals/refined-templates/plan.md
+artifact: plan.md
+version: 1
+eval_count: 6
+evals:
+- id: eval-r001-plan-001
+  round: 1
+  stage: plan
+  source_issue_ids: []
+  patterns:
+  - PAT-008
+  input_refs:
+  - evals/inputs/04-user-stories.md
+  prompt: 'Plan must include phases for GA API fields istioCACertificate, istioDataPlaneNamespaceSelector, clusterID.
+
+    '
+  assertions:
+    must_cover_fr_ids: true
+    must_include_verification_matrix: true
+    must_mention:
+    - istioCACertificate
+    - istioDataPlaneNamespaceSelector
+    - clusterID
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r001-plan-002
+  round: 1
+  stage: plan
+  source_issue_ids:
+  - ISSUE-003
+  patterns:
+  - PAT-005
+  input_refs:
+  - evals/inputs/bugs/CM-770.md
+  prompt: 'Plan OLM/bundle phase must include upgrade test from prior operator version when adding new owned CRD.
+
+    '
+  assertions:
+    must_mention:
+    - OLM
+    - upgrade
+    - istiocsrs.operator.openshift.io
+    must_include_verification_matrix: true
+    must_address_risk_from_ep: OLM CRD ownership
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r001-plan-003
+  round: 1
+  stage: plan
+  source_issue_ids:
+  - ISSUE-004
+  patterns:
+  - PAT-006
+  input_refs:
+  - evals/inputs/01-ep-ard.md
+  prompt: 'Plan must include operand version compatibility verification against OSSM/Istio supported versions.
+
+    '
+  assertions:
+    must_mention:
+    - version skew
+    - bindata
+    - OSSM
+    must_include_verification_matrix: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r002-plan-001
+  round: 2
+  stage: plan
+  source_issue_ids: []
+  patterns:
+  - PAT-009
+  input_refs:
+  - evals/inputs/01-ep-ard.md
+  prompt: 'Plan must separate phases for OLM operator NP, static default NPs, and user-defined networkPolicies[].
+
+    '
+  assertions:
+    must_include_verification_matrix: true
+    must_mention:
+    - OLM bundle
+    - static
+    - networkPolicies
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r002-plan-002
+  round: 2
+  stage: plan
+  source_issue_ids: []
+  patterns:
+  - PAT-014
+  input_refs:
+  - evals/inputs/01-ep-ard.md
+  prompt: 'Plan verification matrix must cover webhook, metrics, DNS, API server egress per component.
+
+    '
+  assertions:
+    must_include_verification_matrix: true
+    must_mention:
+    - '10250'
+    - '9402'
+    - '6443'
+    - istio-csr
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r002-plan-003
+  round: 2
+  stage: plan
+  source_issue_ids:
+  - ISSUE-006
+  - ISSUE-008
+  patterns:
+  - PAT-010
+  - PAT-012
+  input_refs:
+  - evals/inputs/bugs/CM-758.md
+  - evals/inputs/bugs/CM-764.md
+  prompt: 'Plan must include verification for NP tamper-revert and delete-recreate scenarios per controller type.
+
+    '
+  assertions:
+    must_include_verification_matrix: true
+    must_mention:
+    - tamper
+    - delete
+    - reconcile
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85

@@ -13,12 +13,12 @@ One command. One feature bundle. When done, paste the next bundle into `evals/in
 
 ```
 1. Validate evals/inputs/              (stop if PASTE_ placeholders remain)
-2. Load evals/baseline/                (prior evals + agents.md — required on round 2+)
+2. Load evals/baseline/ + refined-templates/  (round 2+)
 3. Epic Bug Analysis                   → evals/outputs/epic-bug-analysis/*
 4. Eval Generation
    a. Identify template gaps           → evals/outputs/eval-generation/template-gaps.md
-   b. Apply patchable gaps              → refine templates in schemas/openspec-agile-workflow/templates/
-   c. Write eval cases                  → evals/baseline/evals/
+   b. Apply patchable gaps              → refine templates in evals/refined-templates/
+   c. Merge eval cases per stage        → evals/baseline/evals/<stage>/<stage>_eval.yaml
    d. Update registry + round snapshot
 5. Update round-state                  → increment round, snapshot under baseline/rounds/
 ```
@@ -47,25 +47,37 @@ Remove or rename `bugs/PASTE_BUG_KEY_1.md` when adding real bug files.
 3. Read **`evals/eval-generation/SYSTEM_PROMPT.md`** — execute Eval Generation fully.
 4. Do **not** stop between Epic Bug Analysis and Eval Generation unless the user explicitly asks.
 
-### Template path resolution
+### Template path (eval workflow)
 
-Use the first path that exists:
+| Read / write | Path |
+|--------------|------|
+| **Eval pipeline templates** | `evals/refined-templates/` only |
+| **Do NOT use during eval** | `schemas/openspec-agile-workflow/templates/` |
 
-1. `openspec/schemas/openspec-agile-workflow/templates/`
-2. `schemas/openspec-agile-workflow/templates/`
+Seed `evals/refined-templates/` from `schemas/` once on round 1 if empty. All refinements go to `evals/refined-templates/`.
 
-Eval Generation **reads and writes** templates at that path. Updated templates are inputs for the **next** `/eval-loop`.
+### Consolidated eval files
+
+One YAML per stage — all cases in `evals:` list:
+
+- `evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml`
+- `evals/baseline/evals/constitution/constitution_eval.yaml`
+- `evals/baseline/evals/plan/plan_eval.yaml`
+- `evals/baseline/evals/tasks/tasks_eval.yaml`
+- `evals/baseline/evals/implementation/implementation_eval.yaml`
+
+Do **not** write scattered `eval-r001-*.yaml` per-case files.
 
 ### Feedback loop (critical)
 
 | Asset | Round 1 | Round 2+ |
 |-------|---------|----------|
-| `evals/baseline/evals/` | Empty → populated | **Read + merge/update** |
+| `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Empty → populated | **Read + merge** |
 | `evals/baseline/evals-registry.yaml` | Initialized | **Read + append** |
-| Schema templates | Read → refine in place | Read **updated** copies → refine again |
-| `evals/baseline/agents.md` | Placeholder → updated if gaps | **Read + update** |
+| `evals/refined-templates/` | Seed from schemas → refine | Read **refined** copies → refine again |
+| `evals/baseline/agents.md` | Placeholder → updated | **Read + update** |
 
-Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `baseline/evals/`.
+Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `*_eval.yaml` files.
 
 ## Outputs
 
@@ -73,9 +85,9 @@ Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `base
 |----------|---------|
 | `evals/outputs/epic-bug-analysis/` | pattern-analysis, rca-summary, issue-taxonomy |
 | `evals/outputs/eval-generation/` | template-gaps, validation-refinements, patches |
-| `evals/baseline/evals/` | Cumulative eval YAML cases |
+| `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Consolidated eval cases per stage |
 | `evals/baseline/rounds/round-N/` | Round snapshot |
-| `schemas/openspec-agile-workflow/templates/*.md` | Refined templates (in place) |
+| `evals/refined-templates/*.md` | Refined templates (eval workflow source of truth) |
 | `evals/outputs/eval-generation/refinement-patches/` | Diff summary per patched template |
 | `evals/baseline/refinement-changelog.md` | Append-only template change log |
 | `evals/round-state.yaml` | Incremented round |
@@ -84,14 +96,14 @@ Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `base
 
 Tell the user:
 
-> Loop complete (round N). Review `evals/baseline/`. Replace `evals/inputs/` with the next feature bundle and run `/eval-loop` again.
+> Loop complete (round N). Review `evals/baseline/` and `evals/refined-templates/`. Replace `evals/inputs/` with the next feature bundle and run `/eval-loop` again.
 
 ## Guardrails
 
 - Do not use `/opsx-*` commands in this pipeline
 - Do not create feature-specific case folders — only generic `evals/inputs/`
-- Do not copy templates to `baseline/` — templates live in schema path only
-- Do not mark template-gaps Fixed unless the schema template file was actually patched
-- Eval YAML supplements templates; it does not replace template refinement for patchable gaps
+- Do not patch `schemas/openspec-agile-workflow/templates/` during eval — use `evals/refined-templates/`
+- Do not mark template-gaps Fixed unless `evals/refined-templates/` was actually patched
+- Write all eval cases into `<stage>_eval.yaml` — not per-case files
 - Do not delete prior eval cases without explicit user approval
 - Process bugs one at a time during Epic Bug Analysis

@@ -1,5 +1,7 @@
 # Refinement changelog — append-only
 
+**Template location:** `evals/refined-templates/` (eval workflow). Do not log changes under `schemas/` — upstream defaults stay unchanged.
+
 ## Round 1 — Istio CSR (CM-463) — 2026-06-10
 
 ### validation.md

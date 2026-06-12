@@ -28,7 +28,8 @@ From `evals/inputs/`:
 When `evals/round-state.yaml` → `round >= 1`, also read:
 
 - `evals/baseline/evals-registry.yaml`
-- `evals/baseline/evals/` (all prior eval cases)
+- `evals/baseline/evals/<stage>/<stage>_eval.yaml` (consolidated eval cases per stage)
+- `evals/refined-templates/` (current refined templates — not `schemas/`)
 - `evals/baseline/refinement-changelog.md`
 
 For each new bug/pattern, classify as **`new_pattern`** or **`recurring_pattern`** (matches a prior eval pattern).
@@ -65,7 +66,7 @@ For **each bug** in `bugs/index.yaml` (process individually):
 - Which **workflow stage** should have caught it?
   (`validation`, `specs`, `repo-assessment`, `constitution`, `plan`, `tasks`, `implementation`)
 - Functional vs non-functional classification
-- If round 2+: would an existing eval in `baseline/evals/` have caught this?
+- If round 2+: would an existing eval in `baseline/evals/<stage>/<stage>_eval.yaml` have caught this?
 
 **Output:** `evals/outputs/epic-bug-analysis/rca-summary.md`
 

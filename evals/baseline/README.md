@@ -4,10 +4,10 @@ Updated after each `/eval-loop`. Fed as input to Epic Bug Analysis and Eval Gene
 
 | Path | Purpose |
 |------|---------|
-| `evals/` | Cumulative eval cases (YAML) — **not** a template copy |
-| `evals-registry.yaml` | Master index of all eval IDs across rounds |
+| `evals/<stage>/<stage>_eval.yaml` | **One consolidated file per stage** — all eval cases in `evals:` list |
+| `evals-registry.yaml` | Master index (`stage_eval_files` + per-eval metadata) |
 | `agents.md` | Refined agent routing and conventions |
 | `refinement-changelog.md` | Append-only log of template changes |
 | `rounds/round-N/` | Snapshot per completed loop |
 
-**Templates** are NOT stored here. Eval Generation reads/writes `schemas/openspec-agile-workflow/templates/` (or `openspec/schemas/...` when installed).
+**Templates** are stored in `evals/refined-templates/` — not here, not in `schemas/`.

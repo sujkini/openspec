@@ -1,6 +1,6 @@
 # Eval pipeline — retrospective workflow improvement
 
-Continuous improvement loop for **openspec-agile-workflow**: derive evals from completed feature bundles (EP + epic + stories + PRs + bugs), refine templates in place, and accumulate learnings for the next bundle.
+Continuous improvement loop for **openspec-agile-workflow**: derive evals from completed feature bundles (EP + epic + stories + PRs + bugs), refine templates, and accumulate learnings for the next bundle.
 
 ## One command, one feature bundle
 
@@ -12,7 +12,7 @@ Paste inputs → /eval-loop → baseline updated → paste next bundle → /eval
 |------|--------|
 | 1 | Fill `evals/inputs/` with one feature bundle (links + exports) |
 | 2 | Run **`/eval-loop`** in Cursor |
-| 3 | Review `evals/baseline/` (cumulative evals + changelog) |
+| 3 | Review `evals/baseline/` and `evals/refined-templates/` |
 | 4 | Replace `evals/inputs/` with the next feature bundle |
 | 5 | Run **`/eval-loop`** again — prior evals and refined templates are auto-loaded |
 
@@ -21,75 +21,68 @@ Paste inputs → /eval-loop → baseline updated → paste next bundle → /eval
 ```
 evals/inputs/  ──────────────────►  Epic Bug Analysis  ──►  evals/outputs/epic-bug-analysis/*
                                               │
-templates (schema path)  ─────────┐          │
-baseline/evals/  ────────────────┤          ▼
-baseline/agents.md  ─────────────┴────►  Eval Generation
+evals/refined-templates/  ───────┐          │
+baseline/evals/*_eval.yaml  ───┤          ▼
+baseline/agents.md  ───────────┴────►  Eval Generation
                                               │
-                                              ├──► evals/baseline/evals/  (cumulative)
-                                              ├──► PATCH templates in schema path
+                                              ├──► evals/baseline/evals/<stage>/<stage>_eval.yaml
+                                              ├──► PATCH evals/refined-templates/
                                               └──► evals/baseline/agents.md
 ```
 
-**Round 2+:** Eval Generation reads the **same template paths** — already updated from the previous loop.
+**Round 2+:** Eval Generation reads **refined templates** and **consolidated stage eval files** from prior rounds.
+
+## Template paths
+
+| Path | Role |
+|------|------|
+| `schemas/openspec-agile-workflow/templates/` | Upstream defaults for forward `/opsx-*` workflow — **not** eval pipeline input |
+| `evals/refined-templates/` | **Eval workflow read/write** — cumulative template refinements |
+
+On round 1 (empty `refined-templates/`), seed once from `schemas/`, then refine only under `evals/refined-templates/`.
 
 ### Template refinement (mandatory for patchable gaps)
 
-After gap analysis, Eval Generation **must** write refined templates to:
-
-- `schemas/openspec-agile-workflow/templates/` (this distribution repo), or
-- `openspec/schemas/openspec-agile-workflow/templates/` (installed project)
-
 | Gap type | Action |
 |----------|--------|
-| `patchable` | Update template file in place under `schemas/.../templates/` |
+| `patchable` | Update file in `evals/refined-templates/` |
 | `eval-only` | Eval YAML only — document why in `template-gaps.md` |
 | `deferred` | Open question — do not mark Fixed |
 
-Audit trail: `evals/outputs/eval-generation/refinement-patches/*.patch` + `evals/baseline/refinement-changelog.md`
+Audit trail: `evals/outputs/eval-generation/refinement-patches/` + `evals/baseline/refinement-changelog.md`
 
-Eval cases are written **after** template patches so they enforce language already in templates.
+## Consolidated eval files (one per stage)
 
-## Template source of truth
+All eval cases for a stage live in a **single YAML file**:
 
-Eval Generation always reads and writes templates at:
+| Stage | File |
+|-------|------|
+| repo-assessment | `evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml` |
+| constitution | `evals/baseline/evals/constitution/constitution_eval.yaml` |
+| plan | `evals/baseline/evals/plan/plan_eval.yaml` |
+| tasks | `evals/baseline/evals/tasks/tasks_eval.yaml` |
+| implementation | `evals/baseline/evals/implementation/implementation_eval.yaml` |
 
-| Context | Path |
-|---------|------|
-| This distribution repo | `schemas/openspec-agile-workflow/templates/` |
-| Installed project | `openspec/schemas/openspec-agile-workflow/templates/` |
-
-Do **not** maintain a separate template copy under `baseline/`. Only `baseline/refinement-changelog.md` records what changed.
+Each file contains an `evals:` list with all cases (round 1, round 2, …). Do **not** scatter per-case `eval-r*.yaml` files.
 
 ## Directory layout
 
 | Path | Purpose |
 |------|---------|
 | `inputs/` | Generic placeholders — replace each round |
+| `refined-templates/` | Refined templates — eval workflow source of truth |
 | `outputs/epic-bug-analysis/` | Current round RCA artifacts |
-| `outputs/eval-generation/` | Current round eval drafts + gap analysis |
-| `baseline/evals/` | **Cumulative** eval cases (all rounds) |
+| `outputs/eval-generation/` | Gap analysis, patches, drafts |
+| `baseline/evals/<stage>/<stage>_eval.yaml` | Cumulative eval cases per stage |
 | `baseline/evals-registry.yaml` | Master index |
-| `baseline/agents.md` | Refined agent routing (updated each loop if needed) |
+| `baseline/agents.md` | Refined agent routing |
 | `baseline/rounds/round-N/` | Snapshot per completed loop |
-| `epic-bug-analysis/SYSTEM_PROMPT.md` | Epic Bug Analysis agent instructions |
-| `eval-generation/SYSTEM_PROMPT.md` | Eval Generation agent instructions |
+| `epic-bug-analysis/SYSTEM_PROMPT.md` | Epic Bug Analysis instructions |
+| `eval-generation/SYSTEM_PROMPT.md` | Eval Generation instructions |
 | `round-state.yaml` | Current round number |
-
-## Inputs (paste each round)
-
-| File | Content |
-|------|---------|
-| `inputs/feature-meta.yaml` | Optional label (feature name, epic key) |
-| `inputs/01-ep-ard.md` | EP / ARD link + content |
-| `inputs/02-jira-epic.md` | Epic export |
-| `inputs/03-original-repo.md` | Pre-feature repo commit/branch |
-| `inputs/04-user-stories.md` | User stories |
-| `inputs/05-repo-prs.md` | PR links for this EP |
-| `inputs/bugs/index.yaml` | Bug keys list |
-| `inputs/bugs/*.md` | One file per bug |
 
 ## Eval Generation stages
 
 Evals are created/updated for: **repo-assessment → constitution → plan → tasks → implementation**.
 
-**validation.md** is refined in place (it *is* the spec-stage eval) — not duplicated under `baseline/evals/`.
+**validation.md** is refined in `evals/refined-templates/` (spec-stage eval) — not duplicated under `baseline/evals/`.

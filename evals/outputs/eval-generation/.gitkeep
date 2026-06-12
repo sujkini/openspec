@@ -4,4 +4,4 @@ Expected files after Eval Generation:
 - template-gaps.md
 - validation-refinements.md
 - refinement-patches/
-- evals/ (optional drafts — canonical evals live in baseline/evals/)
+- evals/ (optional drafts — canonical evals live in baseline/evals/<stage>/<stage>_eval.yaml)

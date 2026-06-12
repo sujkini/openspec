@@ -1,0 +1,135 @@
+stage: tasks
+template: evals/refined-templates/tasks.md
+artifact: tasks.md
+version: 1
+eval_count: 6
+evals:
+- id: eval-r001-tasks-001
+  round: 1
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-002
+  patterns:
+  - PAT-004
+  input_refs:
+  - evals/inputs/bugs/CM-546.md
+  prompt: 'Tasks must pair deployment reconciler with status Ready condition task and e2e verification.
+
+    '
+  assertions:
+    must_pair_verification_tasks: true
+    must_mention:
+    - Ready condition
+    - updateStatus
+    - e2e
+    should_cover_operand_drift_tests:
+    - NetworkPolicy tamper revert (static-managed)
+    - NetworkPolicy delete recreate (user-defined)
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r001-tasks-002
+  round: 1
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-001
+  patterns:
+  - PAT-003
+  input_refs:
+  - evals/inputs/bugs/CM-735.md
+  prompt: 'Tasks for controller wiring must explicitly require unified manager cache registration in setup_manager.go.
+
+    '
+  assertions:
+    must_reference_plan_phases: true
+    must_mention:
+    - setup_manager.go
+    - cache
+    - istiocsrManagedResources
+    must_map_all_fr_sc: false
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r001-tasks-003
+  round: 1
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-005
+  patterns:
+  - PAT-007
+  input_refs:
+  - evals/inputs/bugs/OCPBUGS-57841.md
+  prompt: 'Tasks must include documentation task with acceptance criteria for consistent namespace placeholders.
+
+    '
+  assertions:
+    must_mention:
+    - documentation
+    - istio_project_name
+    - placeholder
+    must_include_payload_sections: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r002-tasks-001
+  round: 2
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-006
+  patterns:
+  - PAT-010
+  input_refs:
+  - evals/inputs/bugs/CM-758.md
+  prompt: 'Tasks must include e2e: patch static-managed NP spec, assert operator reverts within bounded time.
+
+    '
+  assertions:
+    must_pair_verification_tasks: true
+    must_mention:
+    - tamper
+    - static
+    - NetworkPolicy
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r002-tasks-002
+  round: 2
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-008
+  patterns:
+  - PAT-012
+  input_refs:
+  - evals/inputs/bugs/CM-764.md
+  prompt: 'Tasks must require NetworkPolicy informer/watch on user-defined controller with delete-recreate e2e.
+
+    '
+  assertions:
+    must_mention:
+    - informer
+    - Watches
+    - delete
+    must_pair_verification_tasks: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r002-tasks-003
+  round: 2
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-007
+  patterns:
+  - PAT-011
+  input_refs:
+  - evals/inputs/bugs/CM-763.md
+  prompt: 'Tasks must require idempotent reconcile — no update when spec unchanged; soak test for log spam.
+
+    '
+  assertions:
+    must_mention:
+    - unconditional update
+    - semantic equality
+    - soak
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
