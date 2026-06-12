@@ -1,0 +1,17 @@
+id: eval-r002-impl-001
+round: 2
+stage: implementation
+source_issue_ids: [ISSUE-006]
+patterns: [PAT-010]
+input_refs:
+  - evals/inputs/05-repo-prs.md
+prompt: |
+  Static NP path must use library-go ApplyNetworkPolicy with drift correction (CM-758 fix pattern).
+assertions:
+  must_follow_constitution: true
+  must_mention:
+    - ApplyNetworkPolicy
+    - library-go
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

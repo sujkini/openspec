@@ -1,0 +1,17 @@
+id: eval-r002-const-003
+round: 2
+stage: constitution
+source_issue_ids: []
+patterns: [PAT-013]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+prompt: |
+  Constitution must note opt-in security features default false for backward compatibility.
+assertions:
+  must_mention:
+    - defaultNetworkPolicy
+    - opt-in
+    - backward compatibility
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

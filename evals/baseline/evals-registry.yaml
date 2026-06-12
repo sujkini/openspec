@@ -23,6 +23,12 @@ rounds:
     updated_evals: []
     templates_changed:
       - validation.md
+      - repo-assessment.md
+      - constitution.md
+      - plan.md
+      - tasks.md
+      - implementation.md
+      - tasks-modes/single.md
     patterns_introduced:
       - PAT-001
       - PAT-002
@@ -56,6 +62,12 @@ rounds:
       - eval-r001-tasks-001
     templates_changed:
       - validation.md
+      - repo-assessment.md
+      - constitution.md
+      - plan.md
+      - tasks.md
+      - implementation.md
+      - tasks-modes/single.md
     patterns_introduced:
       - PAT-009
       - PAT-010

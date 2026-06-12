@@ -1,0 +1,19 @@
+id: eval-r001-plan-001
+round: 1
+stage: plan
+source_issue_ids: []
+patterns: [PAT-008]
+input_refs:
+  - evals/inputs/04-user-stories.md
+prompt: |
+  Plan must include phases for GA API fields istioCACertificate, istioDataPlaneNamespaceSelector, clusterID.
+assertions:
+  must_cover_fr_ids: true
+  must_include_verification_matrix: true
+  must_mention:
+    - istioCACertificate
+    - istioDataPlaneNamespaceSelector
+    - clusterID
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

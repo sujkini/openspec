@@ -1,0 +1,18 @@
+id: eval-r002-const-001
+round: 2
+stage: constitution
+source_issue_ids: [ISSUE-007]
+patterns: [PAT-011]
+input_refs:
+  - evals/baseline/agents.md
+prompt: |
+  Constitution must require compare-before-update for managed resources to prevent hot reconcile loops.
+assertions:
+  must_mention:
+    - semantic equality
+    - unconditional update
+    - reconcile loop
+  must_cite_repo_evidence: true
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

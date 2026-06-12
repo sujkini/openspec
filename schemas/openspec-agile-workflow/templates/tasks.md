@@ -94,9 +94,29 @@ When tasks touch reconciliation of operator-managed operands:
 
 Document paired Task IDs in §0 input coverage checklist.
 
+### OLM and release verification (when plan includes bundle/CRD changes)
+
+- Pair CSV/bundle changes with **OLM upgrade verification** task: install N-1 operator → upgrade to N →
+  assert owned CRD/subscription healthy (driver: CM-770 pattern).
+- Pair bindata/operand version bumps with **platform compatibility** verification against OSSM/Istio
+  minimums from EP (driver: CM-521 pattern).
+
+### Documentation tasks (when plan includes docs phase)
+
+- Route to `Docs_Agent` (or agents.md equivalent) with acceptance criteria for **placeholder naming
+  consistency** across examples (e.g. single canonical `<istio_project_name>` — driver: OCPBUGS-57841).
+
+### Controller watches (user-defined managed resources)
+
+- When tasks add runtime reconcilers for user-defined resources (e.g. `networkPolicies[]`), include
+  explicit task for `Watches()` on managed GVK with delete/recreate predicates (driver: CM-764 pattern).
+
 ## Quality self-check
 
 - [ ] Every substantive implementation task has a paired verification task
 - [ ] Reconcile/drift scenarios from plan §6 have explicit e2e or integration tasks
 - [ ] §3 manifest row count equals §4 payload subsection count
 - [ ] Assigned Agent values match agents.md (PROVIDED) or provisional IDs exactly
+- [ ] OLM upgrade and bindata version tasks paired with verification when plan requires them
+- [ ] Documentation tasks include placeholder consistency AC when integration docs are in scope
+- [ ] User-defined resource controllers have explicit watch/informer tasks when plan §6 requires delete-recreate

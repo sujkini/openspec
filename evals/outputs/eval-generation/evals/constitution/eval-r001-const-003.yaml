@@ -1,0 +1,19 @@
+id: eval-r001-const-003
+round: 1
+stage: constitution
+source_issue_ids: []
+patterns: [PAT-002]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+prompt: |
+  Constitution must document limited teardown on CR delete as governance principle from EP non-goals.
+assertions:
+  must_mention:
+    - manual cleanup
+    - stop reconciling
+    - non-goal
+  must_not_claim:
+    - full cleanup on CR delete
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

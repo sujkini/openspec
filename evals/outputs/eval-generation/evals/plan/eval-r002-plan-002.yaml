@@ -1,0 +1,19 @@
+id: eval-r002-plan-002
+round: 2
+stage: plan
+source_issue_ids: []
+patterns: [PAT-014]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+prompt: |
+  Plan verification matrix must cover webhook, metrics, DNS, API server egress per component.
+assertions:
+  must_include_verification_matrix: true
+  must_mention:
+    - "10250"
+    - "9402"
+    - "6443"
+    - istio-csr
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

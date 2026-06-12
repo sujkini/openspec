@@ -1,0 +1,17 @@
+id: eval-r002-impl-002
+round: 2
+stage: implementation
+source_issue_ids: [ISSUE-007]
+patterns: [PAT-011]
+input_refs:
+  - evals/inputs/bugs/CM-763.md
+prompt: |
+  User-defined NP reconciler must compare desired vs current before patch/update.
+assertions:
+  must_match_task_payloads: true
+  must_mention:
+    - modified
+    - equality
+scoring:
+  method: weighted_checklist
+  pass_threshold: 90

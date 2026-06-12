@@ -1,0 +1,18 @@
+id: eval-r001-tasks-003
+round: 1
+stage: tasks
+source_issue_ids: [ISSUE-005]
+patterns: [PAT-007]
+input_refs:
+  - evals/inputs/bugs/OCPBUGS-57841.md
+prompt: |
+  Tasks must include documentation task with acceptance criteria for consistent namespace placeholders.
+assertions:
+  must_mention:
+    - documentation
+    - istio_project_name
+    - placeholder
+  must_include_payload_sections: true
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

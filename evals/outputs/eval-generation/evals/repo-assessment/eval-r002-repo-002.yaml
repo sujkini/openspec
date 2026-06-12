@@ -1,0 +1,18 @@
+id: eval-r002-repo-002
+round: 2
+stage: repo-assessment
+source_issue_ids: []
+patterns: [PAT-014]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+prompt: |
+  Assessment must inventory traffic matrix ports per component from EP (6443, 9402, 10250, DNS).
+assertions:
+  must_mention:
+    - webhook
+    - metrics
+    - API server
+    - defaultNetworkPolicy
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

@@ -1,0 +1,18 @@
+id: eval-r001-impl-002
+round: 1
+stage: implementation
+source_issue_ids: [ISSUE-002]
+patterns: [PAT-004]
+input_refs:
+  - evals/inputs/bugs/CM-546.md
+prompt: |
+  Implementation must use HandleReconcileResult to set Ready when operand deployment is available.
+assertions:
+  must_use_ssa_not_create_or_update: true
+  must_include_tests: true
+  must_mention:
+    - HandleReconcileResult
+    - Ready
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

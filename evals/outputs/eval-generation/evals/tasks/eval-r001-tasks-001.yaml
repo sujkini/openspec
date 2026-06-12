@@ -1,0 +1,22 @@
+id: eval-r001-tasks-001
+round: 1
+stage: tasks
+source_issue_ids: [ISSUE-002]
+patterns: [PAT-004]
+input_refs:
+  - evals/inputs/bugs/CM-546.md
+prompt: |
+  Tasks must pair deployment reconciler with status Ready condition task and e2e verification.
+assertions:
+  must_pair_verification_tasks: true
+  must_mention:
+    - Ready condition
+    - updateStatus
+    - e2e
+  # Strengthened round 2 (CM-758, CM-764): operand reconcile features need drift/delete verification
+  should_cover_operand_drift_tests:
+    - NetworkPolicy tamper revert (static-managed)
+    - NetworkPolicy delete recreate (user-defined)
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

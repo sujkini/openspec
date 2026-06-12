@@ -1,6 +1,11 @@
---- constitution.md (before)
-+++ constitution.md (backfill)
-@@ Additional Constraints
-+### cert-manager-operator supplements
-+**Addon controllers:** unified ctrl.Manager in setup_manager.go
-+**Network policy:** drift revert, compare-before-update, delete-recreate, OLM vs operand NP split
+--- constitution.md (prior backfill)
++++ constitution.md (full bundle backfill)
+@@ Addon controllers
++Singleton semantics: namespaced default vs cluster
++CR delete / teardown: limited — manual cleanup non-goal
++Status conditions: Ready when healthy, Degraded on failure
++OLM upgrade: N-1 → N testable when new CRD joins bundle
++Operand version matrix: bindata vs OSSM/Istio minimums
++Documentation placeholders: consistent naming across examples
+@@ Network policy
++Opt-in security defaults: defaultNetworkPolicy false for backward compat

@@ -1,14 +1,11 @@
---- plan.md (before)
-+++ plan.md (backfill)
-@@ Cert-manager planning content expectations
-+### Addon operand planning supplements
-+- Phases for API, unified manager, bindata, status, OLM upgrade
-+- GA API field → phase + §6 verification mapping
-+
-+### Network policy planning supplements
-+- Separate phases: OLM operator NP, static library-go NPs, user-defined runtime NPs
-+- §6 rows: tamper-revert, delete-recreate, idempotent reconcile per controller type
-+
+--- plan.md (prior backfill)
++++ plan.md (full bundle backfill)
+@@ Addon operand supplements
++Teardown phase (limited CR delete)
++Operand version compatibility §6 row
++Documentation phase with placeholder AC
+@@ Network policy supplements
++Per-component traffic matrix §6 rows (6443, 10250, 9402, DNS, operand ports)
 @@ Quality self-check
-+- NP tamper/delete verification rows when spec touches NPs
-+- Addon GA API fields mapped to phases and verification
++NP traffic matrix rows
++OLM N-1→N and version compatibility rows

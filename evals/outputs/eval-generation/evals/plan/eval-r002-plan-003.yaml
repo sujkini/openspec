@@ -1,0 +1,19 @@
+id: eval-r002-plan-003
+round: 2
+stage: plan
+source_issue_ids: [ISSUE-006, ISSUE-008]
+patterns: [PAT-010, PAT-012]
+input_refs:
+  - evals/inputs/bugs/CM-758.md
+  - evals/inputs/bugs/CM-764.md
+prompt: |
+  Plan must include verification for NP tamper-revert and delete-recreate scenarios per controller type.
+assertions:
+  must_include_verification_matrix: true
+  must_mention:
+    - tamper
+    - delete
+    - reconcile
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85
