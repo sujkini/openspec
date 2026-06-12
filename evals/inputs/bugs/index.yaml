@@ -1,0 +1,8 @@
+# Bug index — one feature bundle at a time
+# Add one entry per bug; create matching file under bugs/
+
+bugs:
+  - key: PASTE_BUG_KEY_1
+    file: bugs/PASTE_BUG_KEY_1.md
+  # - key: PASTE_BUG_KEY_2
+  #   file: bugs/PASTE_BUG_KEY_2.md

@@ -1,0 +1,6 @@
+# Current round Epic Bug Analysis outputs — overwritten each /eval-loop
+
+Expected files after Epic Bug Analysis:
+- pattern-analysis.md
+- rca-summary.md
+- issue-taxonomy.json

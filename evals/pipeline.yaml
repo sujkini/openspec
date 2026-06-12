@@ -1,0 +1,89 @@
+name: openspec-eval-pipeline
+version: 1
+
+description: >-
+  Single-command retrospective loop: Epic Bug Analysis → Eval Generation →
+  cumulative baseline. One feature bundle per /eval-loop invocation.
+
+command: /eval-loop
+
+# Resolve templates_dir: prefer installed project path, else distribution repo path
+templates_dir:
+  installed: openspec/schemas/openspec-agile-workflow/templates
+  distribution: schemas/openspec-agile-workflow/templates
+
+phases:
+  - id: validate-inputs
+    reads:
+      - evals/inputs/feature-meta.yaml
+      - evals/inputs/01-ep-ard.md
+      - evals/inputs/02-jira-epic.md
+      - evals/inputs/03-original-repo.md
+      - evals/inputs/04-user-stories.md
+      - evals/inputs/05-repo-prs.md
+      - evals/inputs/bugs/index.yaml
+      - evals/inputs/bugs/*.md
+    rule: Stop if placeholders (PASTE_) are still unfilled
+
+  - id: load-baseline
+    reads:
+      - evals/round-state.yaml
+      - evals/baseline/evals-registry.yaml
+      - evals/baseline/evals/
+      - evals/baseline/agents.md
+      - evals/baseline/refinement-changelog.md
+    when: round >= 1
+    rule: Round 1 may have empty baseline; round 2+ must read prior evals
+
+  - id: epic-bug-analysis
+    name: Epic Bug Analysis
+    system_prompt: evals/epic-bug-analysis/SYSTEM_PROMPT.md
+    reads:
+      - evals/inputs/*
+      - evals/baseline/  # feedback — prior evals inform pattern matching
+    writes:
+      - evals/outputs/epic-bug-analysis/pattern-analysis.md
+      - evals/outputs/epic-bug-analysis/rca-summary.md
+      - evals/outputs/epic-bug-analysis/issue-taxonomy.json
+
+  - id: eval-generation
+    name: Eval Generation
+    system_prompt: evals/eval-generation/SYSTEM_PROMPT.md
+    reads:
+      - evals/outputs/epic-bug-analysis/*
+      - evals/eval-generation/template-inventory.yaml
+      - templates_dir  # schema templates — updated versions on round 2+
+      - evals/eval-generation/stage-samples/
+      - evals/baseline/evals/
+      - evals/baseline/agents.md
+    writes:
+      - evals/outputs/eval-generation/template-gaps.md
+      - evals/outputs/eval-generation/validation-refinements.md
+      - evals/outputs/eval-generation/refinement-patches/
+      - evals/baseline/evals/<stage>/*.yaml
+      - evals/baseline/evals-registry.yaml
+      - evals/baseline/agents.md
+      - evals/baseline/refinement-changelog.md
+      - evals/baseline/rounds/round-<N>/
+      - templates_dir/validation.md  # refine in place
+      - templates_dir/*.md           # other templates as needed
+
+eval_stages:
+  - repo-assessment
+  - constitution
+  - plan
+  - tasks
+  - implementation
+
+refine_in_place:
+  - validation.md
+
+feedback_loop:
+  description: >-
+    After each /eval-loop, baseline/evals/ and refined schema templates become
+    inputs to the next /eval-loop (Epic Bug Analysis and Eval Generation).
+  cumulative:
+    - evals/baseline/evals/
+    - evals/baseline/evals-registry.yaml
+  in_place:
+    - templates_dir

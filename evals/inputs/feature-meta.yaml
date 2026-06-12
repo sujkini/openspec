@@ -1,0 +1,7 @@
+# Optional label for this feature bundle (one round at a time)
+# Agent may fill round_label automatically if left empty
+
+feature_name: PASTE_FEATURE_NAME
+epic_key: PASTE_EPIC_KEY
+ga_strat_key: PASTE_GA_STRAT_KEY_OR_EMPTY
+target_repo: PASTE_TARGET_REPO_URL_OR_EMPTY

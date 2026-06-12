@@ -33,6 +33,7 @@ Restart Cursor after install.
 | `/opsx-apply` | Implement tasks on your fork (per-phase approval) |
 | `/opsx-archive` | Archive completed change |
 | `/opsx-explore` | Think through ideas (no artifacts) |
+| `/eval-loop` | Retrospective eval loop for one feature bundle (see below) |
 
 **Step-by-step example:**
 
@@ -55,6 +56,22 @@ Restart Cursor after install.
 | `config.yaml.example` | `openspec/config.yaml` |
 | `tooling/cursor/commands/` | `.cursor/commands/` |
 | `tooling/cursor/skills/` | `.cursor/skills/` |
+| `evals/` | `evals/` |
+
+## Eval pipeline (`/eval-loop`)
+
+Improve templates and accumulate evals from **completed** features (EP + epic + stories + PRs + bugs).
+
+```
+Paste bundle → /eval-loop → baseline updated → paste next bundle → /eval-loop
+```
+
+1. Fill generic placeholders in `evals/inputs/` (one feature at a time)
+2. Run **`/eval-loop`** — Epic Bug Analysis → Eval Generation (refine templates in place)
+3. Review `evals/baseline/` (cumulative evals, changelog)
+4. Replace `evals/inputs/` and run **`/eval-loop`** again — prior evals and refined templates feed the next round
+
+Templates are read/written at `schemas/openspec-agile-workflow/templates/` (or `openspec/schemas/...` when installed). See `evals/README.md`.
 
 ## Inputs during a change
 
@@ -77,8 +94,12 @@ openspec schema validate openspec-agile-workflow
 schemas/openspec-agile-workflow/
 ├── schema.yaml
 └── templates/
+evals/
+├── inputs/       # generic placeholders — paste each feature bundle
+├── baseline/     # cumulative evals + feedback loop
+└── epic-bug-analysis/ eval-generation/
 tooling/cursor/
-├── commands/     # opsx-new, opsx-continue, opsx-apply, ...
+├── commands/     # opsx-new, opsx-continue, eval-loop, ...
 └── skills/
 config.yaml.example
 install.sh

@@ -1,0 +1,67 @@
+# Template inventory — Eval Generation inputs
+# Source of truth paths are resolved at runtime (see pipeline.yaml templates_dir)
+
+agents_md:
+  workflow_schema: agents_md block in schema.yaml
+  baseline_refined: evals/baseline/agents.md
+
+spec_understanding:
+  - id: validation
+    file: validation.md
+    artifact: validation.json
+    note: Refine in place — this IS the spec-stage eval; do not duplicate under baseline/evals/
+  - id: specs
+    file: spec.md
+    artifact: specs.md
+    note: Spec authoring template; gaps inform validation refinement
+
+repo_understanding:
+  - id: repo-assessment
+    file: repo-assessment.md
+    artifact: repo-assessment.md
+    eval_stage: repo-assessment
+  - id: constitution
+    file: constitution.md
+    artifact: constitution.md
+    eval_stage: constitution
+
+planning:
+  - id: plan
+    file: plan.md
+    artifact: plan.md
+    eval_stage: plan
+
+task_creation:
+  - id: tasks
+    file: tasks.md
+    artifact: tasks.md
+    eval_stage: tasks
+  - id: tasks-skeleton
+    file: tasks-modes/skeleton.md
+  - id: tasks-payloads
+    file: tasks-modes/payloads.md
+  - id: tasks-orchestration
+    file: tasks-modes/orchestration.md
+  - id: tasks-single
+    file: tasks-modes/single.md
+  - id: tasks-impact-assessment
+    file: tasks-modes/impact_assessment.md
+  - id: tasks-payload-revision
+    file: tasks-modes/payload_revision.md
+
+implementation:
+  - id: implementation
+    file: implementation.md
+    artifact: code + phase FILE OPS
+    eval_stage: implementation
+  - id: implementation-report
+    file: implementation-report.md
+  - id: implementation-checklist
+    file: implementation-checklist.md
+  - id: adrs
+    file: adrs.md
+
+optional_not_in_eval_stages:
+  - checklist.md
+
+stage_samples_dir: evals/eval-generation/stage-samples/

@@ -1,0 +1,34 @@
+# Eval case schema — tasks stage
+
+stage: tasks
+template: tasks.md
+artifact: tasks.md
+
+required_fields:
+  - id
+  - round
+  - stage
+  - source_issue_ids
+  - input_refs
+  - assertions
+  - scoring
+  - pass_threshold
+
+assertion_types:
+  - must_map_all_fr_sc
+  - must_pair_verification_tasks
+  - must_use_valid_agent_ids
+  - must_include_payload_sections
+  - must_reference_plan_phases
+
+example:
+  id: eval-r001-tasks-001
+  round: 1
+  stage: tasks
+  source_issue_ids: [ISSUE-001]
+  assertions:
+    must_pair_verification_tasks: true
+    must_map_all_fr_sc: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80

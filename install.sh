@@ -55,6 +55,24 @@ if [[ -d "$CURSOR/skills" ]]; then
   echo "Installed .cursor/skills/"
 fi
 
+# Eval pipeline (preserves baseline/ and round-state.yaml on reinstall when already present)
+EVALS_SRC="$SCRIPT_DIR/evals"
+EVALS_DEST="$TARGET/evals"
+if [[ -d "$EVALS_SRC" ]]; then
+  if [[ -d "$EVALS_DEST" ]]; then
+    echo "evals/ exists — updating skeleton (preserving baseline/ and round-state.yaml)"
+    mkdir -p "$EVALS_DEST"
+    for item in inputs epic-bug-analysis eval-generation stages outputs pipeline.yaml README.md; do
+      cp -a "$EVALS_SRC/$item" "$EVALS_DEST/"
+    done
+    [[ ! -f "$EVALS_DEST/round-state.yaml" ]] && cp "$EVALS_SRC/round-state.yaml" "$EVALS_DEST/"
+    [[ ! -d "$EVALS_DEST/baseline" ]] && cp -a "$EVALS_SRC/baseline" "$EVALS_DEST/"
+  else
+    cp -a "$EVALS_SRC" "$EVALS_DEST"
+    echo "Installed evals/ → evals/"
+  fi
+fi
+
 echo "Validating schema ..."
 (cd "$TARGET" && openspec schema validate openspec-agile-workflow)
 
@@ -63,6 +81,7 @@ echo "Installation complete."
 echo "  1. Restart Cursor"
 echo "  2. Start a change: /opsx-new CM-XXX"
 echo "  3. Continue: /opsx-continue → /opsx-apply → /opsx-archive"
+echo "  4. Eval loop: paste feature bundle into evals/inputs/ → /eval-loop"
 echo ""
 echo "Note: running 'openspec update' overwrites .cursor/ with stock commands."
 echo "      Re-run this install.sh to restore the agile-workflow commands."

@@ -1,0 +1,7 @@
+# Current round Eval Generation working outputs — overwritten each /eval-loop
+
+Expected files after Eval Generation:
+- template-gaps.md
+- validation-refinements.md
+- refinement-patches/
+- evals/ (optional drafts — canonical evals live in baseline/evals/)
