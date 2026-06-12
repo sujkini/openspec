@@ -1,0 +1,8 @@
+--- implementation.md (before)
++++ implementation.md (backfill)
+@@ Phase Log Notes
++## Reconciler guardrails
++- Compare before update (equality/modified checks) — no hot-loop patch
++- Static library-go: revert field drift on reconcile
++- User-defined: delete → recreate via watch/informer
++- Log deviations with Task ID

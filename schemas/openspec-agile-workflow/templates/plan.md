@@ -92,6 +92,22 @@ Prefer operator-native thinking:
 - OLM/CSV/bundle constraints and upgrade edges
 - CI/e2e matrix impacts and MicroShift/OpenShift differences when spec mentions them
 
+### Addon operand planning supplements (when spec describes cert-manager-operator addon operands)
+- Separate phases for: API/CRD → unified manager wiring (`setup_manager.go`) → bindata → controller
+  reconcilers → status conditions → OLM bundle/CSV → e2e.
+- Map every new GA API field from validated_specs to ≥1 phase and ≥1 §6 verification matrix row.
+- Include OLM upgrade phase when a new owned CRD joins the bundle (N-1 → N operator upgrade testable).
+- Document singleton semantics (namespaced `default` vs cluster `cluster`) in §3.1 or phase goals.
+
+### Network policy planning supplements (when spec touches NetworkPolicy / defaultNetworkPolicy / networkPolicies[])
+- Use **separate phases** for: (1) OLM operator-namespace NP in bundle, (2) static/default managed NPs
+  (library-go path), (3) user-defined `networkPolicies[]` runtime reconciler — do not merge into one phase.
+- §6 verification matrix MUST include rows for:
+  - **Tamper-revert:** patch static-managed NP spec (e.g. egress port drift) → operator reverts within bounded time.
+  - **Delete-recreate:** delete user-defined NP → operator recreates promptly (watch/informer coverage).
+  - **Idempotent reconcile:** unchanged user-defined NP spec → no hot-loop patch/update.
+- Name controller type (library-go static vs runtime user-defined) in each verification row.
+
 ## Output hygiene
 - No preamble before the H1 title.
 - Use concrete but non-granular sequencing; phases are logical groupings, not day-by-day work.
@@ -106,6 +122,8 @@ Before finalizing, verify:
 - [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities, Verification hooks)
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)
+- [ ] When spec touches NPs: §6 includes tamper-revert and delete-recreate rows per controller type
+- [ ] When spec describes addon operands: every new GA API field maps to a phase and verification row
 - [ ] §7 risks derived from repo_assessment §5 and §11.1 UNVERIFIED items
 - [ ] §8 complete — every open question has owner + default assumption; no truncated rows
 - [ ] No false "already exists" claims contradicted by repo_assessment branch verification

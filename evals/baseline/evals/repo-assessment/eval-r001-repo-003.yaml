@@ -1,0 +1,18 @@
+id: eval-r001-repo-003
+round: 1
+stage: repo-assessment
+source_issue_ids: [ISSUE-004]
+patterns: [PAT-006]
+input_refs:
+  - evals/inputs/05-repo-prs.md
+prompt: |
+  Assessment must inventory bindata version sources and Makefile version pins for operand skew risks.
+assertions:
+  must_mention:
+    - bindata/istio-csr
+    - hack/update-istio-csr-manifests
+    - RELATED_IMAGE
+  must_document_risk: version skew with OSSM
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

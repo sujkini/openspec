@@ -1,8 +1,22 @@
-round: 0
-baseline_version: "0.0.0"
+round: 2
+baseline_version: "1.1.0"
 
-last_feature_name: null
-last_epic_key: null
-last_completed_at: null
+last_feature_name: Network Policy hardening
+last_epic_key: CM-802
+last_completed_at: "2026-06-10T14:00:00Z"
 
-history: []
+history:
+  - round: 1
+    feature_name: Istio CSR integration
+    epic_key: CM-463
+    completed_at: "2026-06-10T12:00:00Z"
+    evals_added: 15
+    evals_updated: 0
+    bugs_analyzed: 5
+  - round: 2
+    feature_name: Network Policy hardening
+    epic_key: CM-802
+    completed_at: "2026-06-10T14:00:00Z"
+    evals_added: 15
+    evals_updated: 1
+    bugs_analyzed: 3

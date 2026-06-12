@@ -1,0 +1,17 @@
+id: eval-r002-tasks-003
+round: 2
+stage: tasks
+source_issue_ids: [ISSUE-007]
+patterns: [PAT-011]
+input_refs:
+  - evals/inputs/bugs/CM-763.md
+prompt: |
+  Tasks must require idempotent reconcile — no update when spec unchanged; soak test for log spam.
+assertions:
+  must_mention:
+    - unconditional update
+    - semantic equality
+    - soak
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

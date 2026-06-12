@@ -31,6 +31,16 @@ Append one section per approved phase during `/opsx:apply`. Code changes go to t
 
 ---
 
+## Reconciler guardrails (code generation — not logged in this file)
+
+When implementing controller-runtime reconcilers (addons, user-defined NetworkPolicy, SSA-managed resources):
+
+- **Compare before update:** use equality / `modified()` checks — skip `client.Apply` or `Patch` when desired
+  state matches current (prevents hot-loop reconcile; driver: CM-763 pattern).
+- **Static managed resources (library-go):** drift in operator-owned fields must be reverted on reconcile.
+- **User-defined resources:** delete events must trigger recreate via watch/informer — verify in e2e.
+- Log intentional deviations from task payloads under **Deviations** above with Task ID and rationale.
+
 ## Phase Log Notes
 
 - Phases execute in dependency order from tasks.md §1–§2.

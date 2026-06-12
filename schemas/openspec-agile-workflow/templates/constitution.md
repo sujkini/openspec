@@ -58,6 +58,18 @@
 - **[Constraint category]:** [Rule derived from repo] — **Evidence:** `[path]`
 - **[Constraint category]:** [Rule derived from repo] — **Evidence:** `[path]`
 
+### cert-manager-operator supplements (include when repo/spec warrants)
+
+**Addon controllers:**
+- Unified `ctrl.Manager` in `setup_manager.go` — no separate per-addon manager or isolated cache.
+- Addon CRs use controller-runtime + SSA; core cert-manager uses library-go — do not mix patterns.
+
+**Network policy (when spec touches NetworkPolicy / defaultNetworkPolicy / networkPolicies[]):**
+- Static/library-go managed NPs: operator-owned field drift MUST be reverted on reconcile.
+- User-defined runtime NPs: compare desired vs current before patch — no hot-loop on unchanged spec.
+- User-defined NP delete MUST trigger prompt recreate (watch/informer required).
+- Distinguish operator-namespace NP (OLM bundle) from operand NPs (CR-driven).
+
 ## Development Workflow
 
 <!-- How work actually flows in this repo: review, CI, local verify, bundle generation -->

@@ -1,0 +1,19 @@
+id: eval-r001-repo-002
+round: 1
+stage: repo-assessment
+source_issue_ids: []
+patterns: [PAT-001, PAT-008]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+prompt: |
+  Repo assessment must distinguish namespaced singleton default CR from cluster-scoped singleton pattern.
+assertions:
+  must_mention:
+    - namespaced
+    - default
+    - istiocsrs.operator.openshift.io
+  must_cross_reference_spec: true
+  must_identify_exemplar: pkg/controller/istiocsr/
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

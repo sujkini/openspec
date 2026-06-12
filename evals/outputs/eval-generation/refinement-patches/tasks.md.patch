@@ -1,0 +1,13 @@
+--- tasks.md (before)
++++ tasks.md (backfill)
+@@ Backlog header
++## Output mode
++- Default single-pass per tasks-modes/single.md
++
++## Verification pairing (mandatory)
++- Pair implementation tasks with verification tasks
++- Operand reconcile: drift-revert, delete-recreate, idempotent reconcile e2e/unit
++- Status condition pairing for deployment/controller tasks
++
++## Quality self-check
++- Paired verification tasks for all substantive implementation work

@@ -1,11 +1,16 @@
-# Input: Original repo version (before feature implementation)
+# Input: Original repo version (before Network Policy feature)
 
-Replace placeholders each round.
+**Repository:** https://github.com/openshift/cert-manager-operator
 
-**Repository:** PASTE_REPO_URL
+**Pre-feature reference:** `master` before NetworkPolicy implementation (CM-577 / CM-802).
 
-**Commit / branch / tag (pre-feature):** PASTE_COMMIT_OR_BRANCH
+**Enhancement tracking:** CM-624 (EP)
 
-**Notes:**
+**Suggested pin:** Commit before merge of PR #320 (CM-577: Network Policy for Cert Manager Operand) — 2025-10-24.
 
-PASTE_ANY_CONTEXT_HERE
+**Post-implementation paths:**
+
+- `pkg/controller/certmanager/networkpolicies.go` (user-defined controller)
+- Static NP via library-go static-resources-controller
+- CertManager CR: `defaultNetworkPolicy`, `networkPolicies[]`
+- OLM bundle NP manifests for operator namespace

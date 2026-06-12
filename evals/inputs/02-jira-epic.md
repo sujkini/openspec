@@ -1,11 +1,28 @@
-# Input: Jira Epic
+# Input: Jira Epics — CM-802 (operator) + CM-525 (operand)
 
-Replace placeholders each round.
+## CM-802 — Operator epic
 
-**Epic key:** PASTE_EPIC_KEY
+**Link:** https://issues.redhat.com/browse/CM-802
 
-**Link:** PASTE_JIRA_EPIC_URL
+**Summary:** Tailored Network Policies for cert-manager - Operator
 
-**Content:**
+**Context:** Red Hat Product Security mandate — ship NetworkPolicies with OpenShift operators. Supports OCPSTRAT-819.
 
-PASTE_JIRA_EPIC_EXPORT_HERE
+**Goals (cert-manager):**
+
+1. Identify affected components
+2. Characterize allowed/required traffic
+3. Specify NetworkPolicy to limit traffic
+4. Implement in targeted OpenShift release
+
+**Requirements:** Implement network policies restricting ingress and egress. AdminNetworkPolicy considered but not required.
+
+## CM-525 — Operand epic
+
+**Link:** https://issues.redhat.com/browse/CM-525
+
+**Summary:** Tailored Network Policies for cert-manager (operand scope)
+
+Same security mandate and goals as CM-802; operand-focused implementation (CertManager CR fields, default + user-defined policies).
+
+**Strategy link:** OCPSTRAT-819

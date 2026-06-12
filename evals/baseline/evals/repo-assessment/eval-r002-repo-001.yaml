@@ -1,0 +1,20 @@
+id: eval-r002-repo-001
+round: 2
+stage: repo-assessment
+source_issue_ids: []
+patterns: [PAT-009]
+input_refs:
+  - evals/inputs/01-ep-ard.md
+  - evals/inputs/03-original-repo.md
+prompt: |
+  Repo assessment must identify dual NetworkPolicy controller paths: library-go static vs user-defined runtime.
+assertions:
+  must_mention:
+    - static-resources-controller
+    - networkpolicies
+    - library-go
+    - user-defined
+  must_identify_package: pkg/controller/certmanager/
+scoring:
+  method: weighted_checklist
+  pass_threshold: 80

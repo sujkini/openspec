@@ -1,0 +1,92 @@
+{
+  "round": 2,
+  "feature_name": "Network Policy hardening",
+  "epic_key": "CM-802",
+  "operand_epic_key": "CM-525",
+  "patterns": [
+    {
+      "id": "PAT-009",
+      "description": "Dual NP controller architecture: static library-go vs user-defined runtime controller",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-repo-001", "eval-r002-plan-001"]
+    },
+    {
+      "id": "PAT-010",
+      "description": "Static-managed NetworkPolicy must reconcile spec drift when tampered",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-impl-001", "eval-r002-tasks-001"]
+    },
+    {
+      "id": "PAT-011",
+      "description": "User-defined NP reconciler must use compare-before-update to avoid hot loops",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-impl-002", "eval-r002-const-001"]
+    },
+    {
+      "id": "PAT-012",
+      "description": "User-defined NP controller must watch NetworkPolicy delete for immediate recreate",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-impl-003", "eval-r002-tasks-002"]
+    },
+    {
+      "id": "PAT-013",
+      "description": "defaultNetworkPolicy opt-in false for backward compatibility",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-spec-val-001"]
+    },
+    {
+      "id": "PAT-014",
+      "description": "Per-component traffic matrix: API server, DNS, metrics, webhook, istio gRPC",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r002-plan-002", "eval-r002-repo-002"]
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISSUE-006",
+      "source_bug": "CM-758",
+      "category": "coding",
+      "type": "functional",
+      "workflow_stage": "implementation",
+      "pattern_id": "PAT-010",
+      "pattern": "Static NP spec drift not corrected without library-go ApplyNetworkPolicy enhancement",
+      "eval_implication": "Tasks and implementation evals require tamper-and-revert e2e for static NPs",
+      "evidence": ["CM-758", "PR #338"],
+      "round1_eval_gap": "eval-r001-tasks-001 — would catch if NP scenarios added"
+    },
+    {
+      "id": "ISSUE-007",
+      "source_bug": "CM-763",
+      "category": "coding",
+      "type": "non_functional",
+      "workflow_stage": "implementation",
+      "pattern_id": "PAT-011",
+      "pattern": "Unconditional update caused infinite reconcile loop",
+      "eval_implication": "Implementation eval must require semantic equality before update",
+      "evidence": ["CM-763", "PR #339"]
+    },
+    {
+      "id": "ISSUE-008",
+      "source_bug": "CM-764",
+      "category": "coding",
+      "type": "functional",
+      "workflow_stage": "tasks",
+      "pattern_id": "PAT-012",
+      "pattern": "Missing NetworkPolicy watch delayed recreate by ~8 minutes",
+      "eval_implication": "Tasks must require Watches on NetworkPolicy for user-defined controller",
+      "evidence": ["CM-764", "PR #342"]
+    }
+  ],
+  "summary": {
+    "design": 0,
+    "story_formation": 0,
+    "coding": 3,
+    "ops_docs": 0
+  },
+  "baseline_cross_check": {
+    "round": 1,
+    "recurring_patterns": 0,
+    "new_patterns": 6,
+    "strengthened_evals": ["eval-r001-tasks-001"]
+  }
+}

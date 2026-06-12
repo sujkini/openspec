@@ -1,0 +1,11 @@
+--- validation.md (round 1 base)
++++ validation.md (round 2)
+@@ addon-operator supplements
++### Network policy supplements (when spec touches NetworkPolicy / defaultNetworkPolicy / networkPolicies[])
++- Dual controller paths: static library-go vs user-defined runtime
++- Opt-in default: defaultNetworkPolicy default false
++- Traffic matrix per component
++- Drift reconciliation for static NPs
++- Idempotent reconcile for user-defined NPs
++- Delete/recreate watch/informer requirements
++- Operator OLM vs operand NP split

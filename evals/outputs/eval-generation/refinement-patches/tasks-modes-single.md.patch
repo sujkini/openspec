@@ -1,0 +1,6 @@
+--- tasks-modes/single.md (before)
++++ tasks-modes/single.md (backfill)
+@@ Completeness rules
++- Reconcile features: pair drift-revert, delete-recreate, idempotent-reconcile tests
+@@ Quality self-check
++- Operand drift/delete scenarios have paired verification tasks in §0

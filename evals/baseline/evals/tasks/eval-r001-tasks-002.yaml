@@ -1,0 +1,19 @@
+id: eval-r001-tasks-002
+round: 1
+stage: tasks
+source_issue_ids: [ISSUE-001]
+patterns: [PAT-003]
+input_refs:
+  - evals/inputs/bugs/CM-735.md
+prompt: |
+  Tasks for controller wiring must explicitly require unified manager cache registration in setup_manager.go.
+assertions:
+  must_reference_plan_phases: true
+  must_mention:
+    - setup_manager.go
+    - cache
+    - istiocsrManagedResources
+  must_map_all_fr_sc: false
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

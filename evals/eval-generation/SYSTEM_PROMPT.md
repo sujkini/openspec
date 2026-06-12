@@ -43,7 +43,66 @@ For each stage from **repo-assessment** through **implementation**, document in 
 - Required inputs and expected outputs
 - How the template would have caught issues from `issue-taxonomy.json`
 
-### 2. Create or update evals (repo-assessment → implementation)
+### 2. Identify and classify template gaps
+
+Complete `evals/outputs/eval-generation/template-gaps.md`.
+
+For each gap, set **Resolution**:
+
+| Resolution | Meaning |
+|------------|---------|
+| `patchable` | Clear template fix — **MUST** patch `schemas/.../templates/` in place |
+| `eval-only` | Enforce via eval YAML only when template change is too feature-specific |
+| `deferred` | Needs SME input — document why; do not mark Fixed |
+
+**Rule:** If Resolution is `patchable`, creating an eval case alone does **NOT** satisfy the gap.
+
+Use this table format per template:
+
+| Gap | Severity | Resolution | Fixed | Template patch | Eval |
+|-----|----------|------------|-------|----------------|------|
+
+- **Template patch** — section or supplement added/changed in the schema template file
+- **Eval** — eval case ID that enforces the requirement (written after template patch)
+- Set **Fixed: Yes** only after the schema template file is updated in place
+
+### 3. Apply template refinements (mandatory for patchable gaps)
+
+For every gap with Resolution `patchable`:
+
+1. **Read** the current template from `templates_dir`
+2. **Patch in place** — write the refined full template back to the same path
+3. **Save diff** → `evals/outputs/eval-generation/refinement-patches/<filename>.md.patch`
+4. **Append** → `evals/baseline/refinement-changelog.md` (round, template, driver bugs, summary)
+5. Set `Fixed: Yes` in `template-gaps.md`
+
+Do **NOT**:
+
+- Store refined templates only under `evals/outputs/`
+- Mark gaps Fixed when only eval YAML was added
+- Copy templates to `evals/baseline/`
+
+Templates that may be patched (see `evals/pipeline.yaml` `refine_in_place`):
+
+- `validation.md`, `repo-assessment.md`, `constitution.md`, `plan.md`, `tasks.md`, `implementation.md`
+- `tasks-modes/*.md`, `implementation-checklist.md`, `implementation-report.md` when gaps warrant
+
+### 4. Refine spec validation template
+
+Update `validation.md` in the templates directory based on:
+
+- Design-level issues from taxonomy
+- Gaps where validation should have scored or blocked
+
+Document in `evals/outputs/eval-generation/validation-refinements.md`.
+
+Save diff summary in `evals/outputs/eval-generation/refinement-patches/validation.md.patch`.
+
+`validation.md` is also a `patchable` template — apply step 3 for validation gaps before or as part of this step.
+
+### 5. Create or update evals (repo-assessment → implementation)
+
+**After** template patches — eval cases should reference requirements now present in refined templates.
 
 For each eval stage, write YAML cases under `evals/baseline/evals/<stage>/`.
 
@@ -70,31 +129,6 @@ Stages: `repo-assessment`, `constitution`, `plan`, `tasks`, `implementation`
 Minimum **3 eval cases per stage** per round (or fewer only if taxonomy has insufficient issues — document why).
 
 Draft working notes under `evals/outputs/eval-generation/evals/` if helpful; **canonical copies live in `baseline/evals/`**.
-
-### 3. Refine spec validation template
-
-Update `validation.md` in the templates directory based on:
-
-- Design-level issues from taxonomy
-- Gaps where validation should have scored or blocked
-
-Document in `evals/outputs/eval-generation/validation-refinements.md`.
-
-Save diff summary in `evals/outputs/eval-generation/refinement-patches/validation.md.patch`.
-
-### 4. Identify template gaps
-
-Complete `evals/outputs/eval-generation/template-gaps.md`:
-
-For each template: gaps found, severity, recommended fix, fixed (yes/no).
-
-### 5. Apply template refinements
-
-For gaps with clear fixes:
-
-- Patch templates in the templates directory (in place)
-- Save diff in `evals/outputs/eval-generation/refinement-patches/<template>.md.patch`
-- Append entry to `evals/baseline/refinement-changelog.md`
 
 ### 6. Update agents.md
 
@@ -140,11 +174,12 @@ Update `evals/round-state.yaml`:
 ## Done when
 
 - Epic Bug Analysis outputs consumed
-- Eval cases in `baseline/evals/` for all five stages
+- Every `patchable` gap in `template-gaps.md` has `Fixed: Yes` AND a matching entry in `refinement-changelog.md`
+- Refined templates exist in `schemas/openspec-agile-workflow/templates/` (or installed path) — not only `.patch` files
+- Eval cases in `baseline/evals/` for all five stages (written after template patches)
 - `validation.md` refined with documented rationale
-- `template-gaps.md` complete
+- `template-gaps.md` complete with Resolution column
 - `evals-registry.yaml` and `round-state.yaml` updated
-- Templates patched in schema path (not only in outputs/)
 
 Report to user:
 

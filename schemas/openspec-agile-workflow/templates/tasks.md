@@ -67,3 +67,36 @@ Provisional agent IDs (use exactly these strings):
 
 Read **AgentRoutingMode** and **ConstitutionVersion** from constitution.md header — do NOT hardcode
 PROVISIONAL when constitution says PROVIDED.
+
+## Output mode
+
+Default: single-pass per `tasks-modes/single.md` (§0–§5). Use other modes from `tasks-modes/` only when
+the user message specifies them.
+
+## Verification pairing (mandatory)
+
+For every substantive implementation task (controller, deployment, RBAC, bindata, OLM, webhook):
+
+1. Add a **paired verification task** (unit, integration, or e2e per constitution) that depends on the
+   implementation task.
+2. Verification task payloads MUST name Makefile targets from repo_assessment (e.g. `make test`, not
+   invented targets).
+3. Trace acceptance criteria to validated_specs.md FR/AC IDs.
+
+### Operand reconcile features (addon controllers, NetworkPolicy, deployments)
+
+When tasks touch reconciliation of operator-managed operands:
+
+- Pair **status condition** tasks with deployment/controller tasks (`Ready` / `Degraded`, `updateStatus`).
+- Pair **operand drift** e2e: tamper managed resource spec → assert operator reverts (static/library-go NPs).
+- Pair **delete-recreate** e2e: delete user-defined managed resource → assert prompt recreate.
+- Pair **idempotent reconcile** unit/integration: unchanged spec → no patch (compare-before-update).
+
+Document paired Task IDs in §0 input coverage checklist.
+
+## Quality self-check
+
+- [ ] Every substantive implementation task has a paired verification task
+- [ ] Reconcile/drift scenarios from plan §6 have explicit e2e or integration tasks
+- [ ] §3 manifest row count equals §4 payload subsection count
+- [ ] Assigned Agent values match agents.md (PROVIDED) or provisional IDs exactly

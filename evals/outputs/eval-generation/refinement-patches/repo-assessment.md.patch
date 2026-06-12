@@ -1,0 +1,9 @@
+--- repo-assessment.md (before)
++++ repo-assessment.md (backfill)
+@@ Controllers & Reconciliation (§4.2)
++**Network policy dual-path (when spec touches NetworkPolicy):**
++- Static/default NPs: library-go path under pkg/controller/certmanager/
++- User-defined networkPolicies[]: controller-runtime reconciler
++- Compare-before-update and delete-recreate requirements
++- OLM operator NP vs CR-driven operand NP split
++- Pre-feature branch verification vs greenfield

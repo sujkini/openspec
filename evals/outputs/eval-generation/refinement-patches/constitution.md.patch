@@ -1,0 +1,6 @@
+--- constitution.md (before)
++++ constitution.md (backfill)
+@@ Additional Constraints
++### cert-manager-operator supplements
++**Addon controllers:** unified ctrl.Manager in setup_manager.go
++**Network policy:** drift revert, compare-before-update, delete-recreate, OLM vs operand NP split

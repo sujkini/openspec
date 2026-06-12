@@ -24,7 +24,7 @@ assertion_types:
 example:
   id: eval-r001-tasks-001
   round: 1
-  stage: tasks
+  stage: tasks11BLXLMQA0z9mbtgESBEBe_4aMi02hSahBitFt4Uvd7yftgV5jaYd5JRvy0VZb6NGO3SFLIV3KJVcaHZhA
   source_issue_ids: [ISSUE-001]
   assertions:
     must_pair_verification_tasks: true

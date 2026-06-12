@@ -56,6 +56,34 @@ phases:
       - evals/eval-generation/stage-samples/
       - evals/baseline/evals/
       - evals/baseline/agents.md
+      - evals/baseline/refinement-changelog.md
+    steps:
+      - id: inventory-templates
+        reads: [templates_dir, evals/eval-generation/template-inventory.yaml]
+      - id: identify-gaps
+        writes: [evals/outputs/eval-generation/template-gaps.md]
+      - id: apply-template-refinements
+        rule: >-
+          For every gap marked patchable in template-gaps.md, patch the corresponding
+          file under templates_dir IN PLACE. Eval YAML alone is not sufficient for
+          patchable gaps. Save .patch files and update refinement-changelog.
+        writes:
+          - templates_dir/*.md
+          - evals/outputs/eval-generation/refinement-patches/*.patch
+          - evals/baseline/refinement-changelog.md
+      - id: refine-validation
+        writes:
+          - templates_dir/validation.md
+          - evals/outputs/eval-generation/validation-refinements.md
+          - evals/outputs/eval-generation/refinement-patches/validation.md.patch
+      - id: create-eval-cases
+        writes: [evals/baseline/evals/<stage>/*.yaml]
+      - id: update-registry
+        writes:
+          - evals/baseline/evals-registry.yaml
+          - evals/baseline/agents.md
+          - evals/baseline/rounds/round-<N>/
+          - evals/round-state.yaml
     writes:
       - evals/outputs/eval-generation/template-gaps.md
       - evals/outputs/eval-generation/validation-refinements.md
@@ -65,8 +93,7 @@ phases:
       - evals/baseline/agents.md
       - evals/baseline/refinement-changelog.md
       - evals/baseline/rounds/round-<N>/
-      - templates_dir/validation.md  # refine in place
-      - templates_dir/*.md           # other templates as needed
+      - templates_dir/*.md
 
 eval_stages:
   - repo-assessment
@@ -77,6 +104,14 @@ eval_stages:
 
 refine_in_place:
   - validation.md
+  - repo-assessment.md
+  - constitution.md
+  - plan.md
+  - tasks.md
+  - implementation.md
+  - tasks-modes/*.md
+  - implementation-checklist.md
+  - implementation-report.md
 
 feedback_loop:
   description: >-

@@ -1,0 +1,18 @@
+id: eval-r002-impl-003
+round: 2
+stage: implementation
+source_issue_ids: [ISSUE-008]
+patterns: [PAT-012]
+input_refs:
+  - evals/inputs/bugs/CM-764.md
+prompt: |
+  User-defined NP controller SetupWithManager must Watches NetworkPolicy with appropriate predicates.
+assertions:
+  must_follow_constitution: true
+  must_mention:
+    - Watches
+    - NetworkPolicy
+    - SetupWithManager
+scoring:
+  method: weighted_checklist
+  pass_threshold: 85

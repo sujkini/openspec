@@ -32,6 +32,23 @@ baseline/agents.md  ─────────────┴────►  E
 
 **Round 2+:** Eval Generation reads the **same template paths** — already updated from the previous loop.
 
+### Template refinement (mandatory for patchable gaps)
+
+After gap analysis, Eval Generation **must** write refined templates to:
+
+- `schemas/openspec-agile-workflow/templates/` (this distribution repo), or
+- `openspec/schemas/openspec-agile-workflow/templates/` (installed project)
+
+| Gap type | Action |
+|----------|--------|
+| `patchable` | Update template file in place under `schemas/.../templates/` |
+| `eval-only` | Eval YAML only — document why in `template-gaps.md` |
+| `deferred` | Open question — do not mark Fixed |
+
+Audit trail: `evals/outputs/eval-generation/refinement-patches/*.patch` + `evals/baseline/refinement-changelog.md`
+
+Eval cases are written **after** template patches so they enforce language already in templates.
+
 ## Template source of truth
 
 Eval Generation always reads and writes templates at:

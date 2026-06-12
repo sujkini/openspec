@@ -1,0 +1,119 @@
+{
+  "round": 1,
+  "feature_name": "Istio CSR integration",
+  "epic_key": "CM-463",
+  "ga_strat_key": "OCPSTRAT-1974",
+  "patterns": [
+    {
+      "id": "PAT-001",
+      "description": "Namespaced singleton CR named default with CEL enforcement — not cluster-scoped cluster singleton",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-repo-001", "eval-r001-const-001"]
+    },
+    {
+      "id": "PAT-002",
+      "description": "Limited teardown on CR delete — stop reconciliation only; manual cleanup documented as non-goal",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-spec-val-001"]
+    },
+    {
+      "id": "PAT-003",
+      "description": "Addon controllers must use unified ctrl.Manager cache — no separate per-controller cache",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-const-002", "eval-r001-impl-001"]
+    },
+    {
+      "id": "PAT-004",
+      "description": "Ready condition must be set when operand is healthy — status state machine completeness",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-tasks-002", "eval-r001-impl-002"]
+    },
+    {
+      "id": "PAT-005",
+      "description": "OLM upgrade path when adding new owned CRD to operator bundle",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-plan-002", "eval-r001-spec-val-002"]
+    },
+    {
+      "id": "PAT-006",
+      "description": "Operand version skew with platform dependency (OSSM/Istio minimum versions)",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-plan-003", "eval-r001-spec-val-003"]
+    },
+    {
+      "id": "PAT-007",
+      "description": "Documentation placeholder naming consistency across examples",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-tasks-003"]
+    },
+    {
+      "id": "PAT-008",
+      "description": "GA API fields: istioDataPlaneNamespaceSelector, istioCACertificate, server.clusterID",
+      "recurrence": "new",
+      "related_eval_ids": ["eval-r001-plan-001", "eval-r001-repo-002"]
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "source_bug": "CM-735",
+      "category": "coding",
+      "type": "functional",
+      "workflow_stage": "implementation",
+      "pattern_id": "PAT-003",
+      "pattern": "Separate controller cache caused reconcile skip on CR creation",
+      "eval_implication": "Constitution and implementation evals must require unified manager cache for addons",
+      "evidence": ["CM-735", "PR #324", "EP: controller-runtime addon pattern"]
+    },
+    {
+      "id": "ISSUE-002",
+      "source_bug": "CM-546",
+      "category": "coding",
+      "type": "functional",
+      "workflow_stage": "tasks",
+      "pattern_id": "PAT-004",
+      "pattern": "Ready condition not set when deployment became ready",
+      "eval_implication": "Tasks must pair status condition implementation with e2e Ready assertion",
+      "evidence": ["CM-546", "istio_csr_test.go:118", "PR #381 area"]
+    },
+    {
+      "id": "ISSUE-003",
+      "source_bug": "CM-770",
+      "category": "design",
+      "type": "non_functional",
+      "workflow_stage": "validation",
+      "pattern_id": "PAT-005",
+      "pattern": "CRD shortname change broke OLM 1.17→1.18 upgrade",
+      "eval_implication": "Validation must flag missing OLM upgrade test plan when new CRD added",
+      "evidence": ["CM-770", "PR #344", "CSV RequirementsNotMet logs"]
+    },
+    {
+      "id": "ISSUE-004",
+      "source_bug": "CM-521",
+      "category": "story_formation",
+      "type": "functional",
+      "workflow_stage": "plan",
+      "pattern_id": "PAT-006",
+      "pattern": "Bindata operand version below OSSM v3 minimum",
+      "eval_implication": "Plan verification matrix must include platform version compatibility",
+      "evidence": ["CM-521", "PR #304", "EP Version Skew section"]
+    },
+    {
+      "id": "ISSUE-005",
+      "source_bug": "OCPBUGS-57841",
+      "category": "ops_docs",
+      "type": "non_functional",
+      "workflow_stage": "tasks",
+      "pattern_id": "PAT-007",
+      "pattern": "Inconsistent namespace placeholders in integration docs",
+      "eval_implication": "Tasks must include docs AC for placeholder naming consistency",
+      "evidence": ["OCPBUGS-57841", "Red Hat docs Istio-CSR section"]
+    }
+  ],
+  "summary": {
+    "design": 1,
+    "story_formation": 1,
+    "coding": 2,
+    "ops_docs": 1
+  }
+}
