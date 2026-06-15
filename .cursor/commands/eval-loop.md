@@ -19,7 +19,8 @@ One command. One feature bundle. When done, paste the next bundle into `evals/in
    a. Identify template gaps           → evals/outputs/eval-generation/template-gaps.md
    b. Apply patchable gaps              → refine templates in evals/refined-templates/
    c. Merge eval cases per stage        → evals/baseline/evals/<stage>/<stage>_eval.yaml
-   d. Update registry + round snapshot
+   d. Sync flat stage evals             → schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+   e. Update registry + round snapshot
 5. Update round-state                  → increment round, snapshot under baseline/rounds/
 ```
 
@@ -66,6 +67,8 @@ One YAML per stage — all cases in `evals:` list:
 - `evals/baseline/evals/tasks/tasks_eval.yaml`
 - `evals/baseline/evals/implementation/implementation_eval.yaml`
 
+Also sync each merged file to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** with `template: templates/<name>.md` (forward `/opsx-continue` reads from installed `openspec/schemas/.../evals/`).
+
 Do **not** write scattered `eval-r001-*.yaml` per-case files.
 
 ### Feedback loop (critical)
@@ -86,6 +89,7 @@ Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `*_ev
 | `evals/outputs/epic-bug-analysis/` | pattern-analysis, rca-summary, issue-taxonomy |
 | `evals/outputs/eval-generation/` | template-gaps, validation-refinements, patches |
 | `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Consolidated eval cases per stage |
+| `schemas/openspec-agile-workflow/evals/<stage>_eval.yaml` | Forward workflow stage evals (synced from baseline) |
 | `evals/baseline/rounds/round-N/` | Round snapshot |
 | `evals/refined-templates/*.md` | Refined templates (eval workflow source of truth) |
 | `evals/outputs/eval-generation/refinement-patches/` | Diff summary per patched template |

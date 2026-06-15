@@ -139,6 +139,20 @@ Use rubric schema from `evals/stages/<stage>/eval-spec.yaml`.
 
 Draft working notes under `evals/outputs/eval-generation/evals/` if helpful; **canonical copies are the `*_eval.yaml` files**.
 
+#### 5b. Sync stage evals to schema package (forward `/opsx-continue`)
+
+After merging into `evals/baseline/evals/<stage>/<stage>_eval.yaml`, write the same cases to:
+
+`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`
+
+Rules for schema copies:
+
+- Same `evals:` list and `eval_count` as baseline
+- Set `template:` to `templates/<template>.md` (not `evals/refined-templates/`)
+- Keep `evals/stages/<stage>/eval-spec.yaml` `stage_eval_file` as `evals/<stage>_eval.yaml` under the schema package
+
+Installed projects read these from `openspec/schemas/openspec-agile-workflow/evals/`.
+
 ### 6. Update agents.md
 
 Append or revise `evals/baseline/agents.md` when agent routing gaps were found.

@@ -90,12 +90,19 @@ phases:
           Merge all eval cases per stage into ONE file:
           evals/baseline/evals/<stage>/<stage>_eval.yaml
           (e.g. constitution_eval.yaml). Do not scatter per-case files.
+          Then sync flat copies to schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+          with template: templates/<name>.md for forward /opsx-continue.
         writes:
           - evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
           - evals/baseline/evals/constitution/constitution_eval.yaml
           - evals/baseline/evals/plan/plan_eval.yaml
           - evals/baseline/evals/tasks/tasks_eval.yaml
           - evals/baseline/evals/implementation/implementation_eval.yaml
+          - schemas/openspec-agile-workflow/evals/repo-assessment_eval.yaml
+          - schemas/openspec-agile-workflow/evals/constitution_eval.yaml
+          - schemas/openspec-agile-workflow/evals/plan_eval.yaml
+          - schemas/openspec-agile-workflow/evals/tasks_eval.yaml
+          - schemas/openspec-agile-workflow/evals/implementation_eval.yaml
       - id: update-registry
         writes:
           - evals/baseline/evals-registry.yaml
@@ -107,6 +114,7 @@ phases:
       - evals/outputs/eval-generation/validation-refinements.md
       - evals/outputs/eval-generation/refinement-patches/
       - evals/baseline/evals/<stage>/<stage>_eval.yaml
+      - schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
       - evals/baseline/evals-registry.yaml
       - evals/baseline/agents.md
       - evals/baseline/refinement-changelog.md
@@ -121,6 +129,11 @@ eval_stages:
   - implementation
 
 stage_eval_files:
+  retrospective: evals/baseline/evals/<stage>/<stage>_eval.yaml
+  forward_workflow: schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+  installed_forward: openspec/schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+
+stage_eval_files_baseline:
   repo-assessment: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
   constitution: evals/baseline/evals/constitution/constitution_eval.yaml
   plan: evals/baseline/evals/plan/plan_eval.yaml

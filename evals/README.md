@@ -2,6 +2,12 @@
 
 Continuous improvement loop for **openspec-agile-workflow**: derive evals from completed feature bundles (EP + epic + stories + PRs + bugs), refine templates, and accumulate learnings for the next bundle.
 
+**Stage evals for `/opsx-continue`** ship with the schema package — not under `evals/`:
+
+`schemas/openspec-agile-workflow/evals/*_eval.yaml` → installed as `openspec/schemas/openspec-agile-workflow/evals/`
+
+`/eval-loop` merges cases into `evals/baseline/evals/` **and** syncs flat copies to the schema `evals/` directory.
+
 ## One command, one feature bundle
 
 ```
@@ -65,6 +71,23 @@ All eval cases for a stage live in a **single YAML file**:
 
 Each file contains an `evals:` list with all cases (round 1, round 2, …). Do **not** scatter per-case `eval-r*.yaml` files.
 
+## Forward workflow (`/opsx-continue`) — artifact eval gate
+
+After each artifact is generated (templates from `{schema_root}/templates/`):
+
+```
+generate v1 → run stage evals → refine artifact → user approval → next /opsx-continue
+```
+
+| Score with | Refine |
+|------------|--------|
+| `openspec/schemas/openspec-agile-workflow/evals/<stage>_eval.yaml` | Change artifact under `openspec/changes/<name>/` only |
+
+**Do not** edit `{schema_root}/templates/` or `evals/refined-templates/` during `/opsx-continue`.
+
+Instructions: `{schema_root}/stage-gate/SYSTEM_PROMPT.md`, `{schema_root}/stage-gate/artifact-eval-map.yaml`  
+Results: `openspec/changes/<change>/eval-results/<artifact-id>.yaml`
+
 ## Directory layout
 
 | Path | Purpose |
@@ -77,6 +100,8 @@ Each file contains an `evals:` list with all cases (round 1, round 2, …). Do *
 | `baseline/evals-registry.yaml` | Master index |
 | `baseline/agents.md` | Refined agent routing |
 | `baseline/rounds/round-N/` | Snapshot per completed loop |
+| `schemas/openspec-agile-workflow/evals/` | **Forward workflow** merged stage evals (synced from `/eval-loop`) |
+| `schemas/openspec-agile-workflow/stage-gate/` | Forward `/opsx-continue` eval gate instructions |
 | `epic-bug-analysis/SYSTEM_PROMPT.md` | Epic Bug Analysis instructions |
 | `eval-generation/SYSTEM_PROMPT.md` | Eval Generation instructions |
 | `round-state.yaml` | Current round number |

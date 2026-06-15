@@ -71,7 +71,11 @@ Paste bundle → /eval-loop → baseline updated → paste next bundle → /eval
 3. Review `evals/baseline/` (cumulative evals, changelog)
 4. Replace `evals/inputs/` and run **`/eval-loop`** again — prior evals and refined templates feed the next round
 
-Eval workflow templates are read/written at `evals/refined-templates/` (not `schemas/`). Forward `/opsx-*` workflow uses `schemas/openspec-agile-workflow/templates/`. See `evals/README.md`.
+Eval workflow templates are read/written at `evals/refined-templates/` (not `schemas/`). Forward `/opsx-*` uses `openspec/schemas/openspec-agile-workflow/templates/` and scores each artifact with stage evals in `openspec/schemas/openspec-agile-workflow/evals/` before approval. See `evals/README.md`.
+
+## Forward workflow eval gate (`/opsx-continue`)
+
+After each artifact: **generate → run schema stage evals → refine artifact → user approve** → next `/opsx-continue`. Templates are not modified.
 
 ## Inputs during a change
 

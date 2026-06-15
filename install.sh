@@ -55,23 +55,38 @@ if [[ -d "$CURSOR/skills" ]]; then
   echo "Installed .cursor/skills/"
 fi
 
-# Eval pipeline (preserves baseline/ and round-state.yaml on reinstall when already present)
+# Eval pipeline + retrospective baseline (for /eval-loop)
 EVALS_SRC="$SCRIPT_DIR/evals"
 EVALS_DEST="$TARGET/evals"
 if [[ -d "$EVALS_SRC" ]]; then
-  if [[ -d "$EVALS_DEST" ]]; then
-    echo "evals/ exists — updating skeleton (preserving baseline/ and round-state.yaml)"
-    mkdir -p "$EVALS_DEST"
-    for item in inputs epic-bug-analysis eval-generation stages outputs pipeline.yaml README.md; do
+  mkdir -p "$EVALS_DEST"
+  if [[ -d "$EVALS_DEST/baseline" ]] || [[ -f "$EVALS_DEST/round-state.yaml" ]]; then
+    echo "evals/ exists — updating workflow files (preserving round-state.yaml and baseline/rounds/ when present)"
+    for item in inputs epic-bug-analysis eval-generation stages outputs pipeline.yaml README.md refined-templates; do
       cp -a "$EVALS_SRC/$item" "$EVALS_DEST/"
     done
     [[ ! -f "$EVALS_DEST/round-state.yaml" ]] && cp "$EVALS_SRC/round-state.yaml" "$EVALS_DEST/"
-    [[ ! -d "$EVALS_DEST/baseline" ]] && cp -a "$EVALS_SRC/baseline" "$EVALS_DEST/"
   else
     cp -a "$EVALS_SRC" "$EVALS_DEST"
     echo "Installed evals/ → evals/"
   fi
+
+  # Retrospective baseline (eval-loop history) — not used by /opsx-continue forward gate
+  mkdir -p "$EVALS_DEST/baseline"
+  cp -a "$EVALS_SRC/baseline/evals" "$EVALS_DEST/baseline/"
+  cp "$EVALS_SRC/baseline/evals-registry.yaml" "$EVALS_DEST/baseline/"
+  cp "$EVALS_SRC/baseline/agents.md" "$EVALS_DEST/baseline/"
+  cp "$EVALS_SRC/baseline/README.md" "$EVALS_DEST/baseline/"
+  cp "$EVALS_SRC/baseline/refinement-changelog.md" "$EVALS_DEST/baseline/"
+  if [[ ! -d "$EVALS_DEST/baseline/rounds" ]] || [[ -z "$(find "$EVALS_DEST/baseline/rounds" -mindepth 1 -maxdepth 1 2>/dev/null)" ]]; then
+    mkdir -p "$EVALS_DEST/baseline/rounds"
+    cp -a "$EVALS_SRC/baseline/rounds/." "$EVALS_DEST/baseline/rounds/" 2>/dev/null || true
+  fi
+  echo "Installed eval-loop baseline → evals/baseline/"
 fi
+
+STAGE_EVAL_COUNT="$(find "$SCHEMA_DEST/evals" -maxdepth 1 -name '*_eval.yaml' 2>/dev/null | wc -l | tr -d ' ')"
+echo "Stage evals ship with schema → openspec/schemas/openspec-agile-workflow/evals/ (${STAGE_EVAL_COUNT} files)"
 
 echo "Validating schema ..."
 (cd "$TARGET" && openspec schema validate openspec-agile-workflow)
@@ -80,7 +95,7 @@ echo ""
 echo "Installation complete."
 echo "  1. Restart Cursor"
 echo "  2. Start a change: /opsx-new CM-XXX"
-echo "  3. Continue: /opsx-continue → /opsx-apply → /opsx-archive"
+echo "  3. Continue: /opsx-continue (eval gate per artifact) → /opsx-apply → /opsx-archive"
 echo "  4. Eval loop: paste feature bundle into evals/inputs/ → /eval-loop"
 echo ""
 echo "Note: running 'openspec update' overwrites .cursor/ with stock commands."

@@ -23,6 +23,7 @@ User runs `/eval-loop` after pasting a feature bundle into `evals/inputs/`.
    - Templates: read/write **`evals/refined-templates/` only** (not `schemas/`)
    - Identify gaps → patch refined-templates
    - Merge evals into **`evals/baseline/evals/<stage>/<stage>_eval.yaml`** (one file per stage)
+   - Sync flat copies to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** (`template: templates/...`)
    - Update baseline registry
 6. Increment round in `evals/round-state.yaml`
 
