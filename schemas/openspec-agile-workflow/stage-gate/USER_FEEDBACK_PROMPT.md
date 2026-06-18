@@ -14,6 +14,8 @@ Present artifact → Ask approval →
 
 Repeat until the user approves or explicitly stops.
 
+**Exception — `specs.md`:** Rejection **exits the workflow** (schema `user_approval_feedback_gate.exit_on_reject.specs`). Do **not** regenerate specs or continue to repo-assessment. See [Specs rejection — exit workflow](#specs-rejection--exit-workflow) below.
+
 ## Step 1 — Capture feedback
 
 1. Record user feedback verbatim in `openspec/changes/<change>/feedback/<artifact-id>.yaml` (append a round).
@@ -82,3 +84,15 @@ task** before advancing to the next (including across phase boundaries). On reje
 append feedback to `implementation/design-bundle.md` **REVISION FEEDBACK** and
 re-run OAPE commands for the **current task only** — do not regenerate approved
 OpenSpec artifacts, do not mark the task complete, and do not start the next task.
+
+## Specs rejection — exit workflow
+
+When the user **rejects** `specs.md` at the approval gate:
+
+1. **Do NOT** run Steps 1–5 of this document (no regeneration loop).
+2. Optionally record the user's reason in `feedback/specs.yaml` (one entry).
+3. Present schema `exit_on_reject.specs.exit_message`.
+4. **STOP** — do not create repo-assessment, constitution, plan, tasks, or implementation artifacts.
+5. Do not mark specs as `done`. Downstream artifacts remain blocked.
+
+The user must revise Jira/inputs and start fresh (`/opsx-new`) or remove specs and re-run `/opsx-continue` when ready to try again.

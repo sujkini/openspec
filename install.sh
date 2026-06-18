@@ -7,6 +7,7 @@
 #   openspec/changes/                        (created if missing)
 #   .cursor/commands/                        (all files from tooling/cursor/commands/)
 #   .cursor/skills/                          (all files from tooling/cursor/skills/)
+#   .cursor/e2e-test-generator/              (OAPE e2e fixtures for /oape:e2e-generate)
 #   evals/                                   (optional /eval-loop retrospective pipeline)
 #
 # Usage:
@@ -93,6 +94,12 @@ else
   echo "Warning: tooling/cursor/skills not found — skipping skills"
 fi
 
+if [[ -d "$CURSOR/e2e-test-generator" ]]; then
+  mkdir -p "$TARGET/.cursor/e2e-test-generator"
+  cp -a "$CURSOR/e2e-test-generator/." "$TARGET/.cursor/e2e-test-generator/"
+  echo "Installed .cursor/e2e-test-generator/ (OAPE e2e fixtures for /oape:e2e-generate)"
+fi
+
 # Eval pipeline + retrospective baseline (for /eval-loop — not required for /opsx-continue)
 EVALS_SRC="$SCRIPT_DIR/evals"
 EVALS_DEST="$TARGET/evals"
@@ -138,7 +145,8 @@ echo "  openspec/changes/"
 echo ""
 echo "Cursor:"
 echo "  .cursor/commands/  — opsx-new, opsx-continue, opsx-apply, opsx-archive, OAPE commands, eval-loop"
-echo "  .cursor/skills/"
+echo "  .cursor/skills/    — openspec-* skills + OAPE effective-go, e2e-test-generator"
+echo "  .cursor/e2e-test-generator/  — e2e fixtures for /oape:e2e-generate"
 echo ""
 echo "Next steps:"
 echo "  1. Restart Cursor"

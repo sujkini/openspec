@@ -68,8 +68,11 @@ All eval cases for a stage live in a **single YAML file**:
 | plan | `evals/baseline/evals/plan/plan_eval.yaml` |
 | tasks | `evals/baseline/evals/tasks/tasks_eval.yaml` |
 | implementation | `evals/baseline/evals/implementation/implementation_eval.yaml` |
+| code-generation | `evals/baseline/evals/code-generation/code-generation_eval.yaml` |
 
 Each file contains an `evals:` list with all cases (round 1, round 2, …). Do **not** scatter per-case `eval-r*.yaml` files.
+
+**code-generation** cases are tagged with `oape_command` and run during **`/opsx-apply`** per task (not during `/opsx-continue`).
 
 ## Forward workflow (`/opsx-continue`) — artifact eval gate
 
@@ -87,6 +90,21 @@ generate v1 → run stage evals → refine artifact → user approval → next /
 
 Instructions: `{schema_root}/stage-gate/SYSTEM_PROMPT.md`, `{schema_root}/stage-gate/artifact-eval-map.yaml`  
 Results: `openspec/changes/<change>/eval-results/<artifact-id>.yaml`
+
+## Forward workflow (`/opsx-apply`) — code generation eval gate
+
+After each task's OAPE command (or manual work) and verification:
+
+```
+execute → verify → run code-generation evals → refine code until pass → user approves code → task report → next task
+```
+
+| Score with | Refine | Record |
+|------------|--------|--------|
+| `openspec/schemas/.../evals/code-generation_eval.yaml` (by `oape_command`) | Code in fork only | `implementation/task-reports/<task-id>.md` per approved task |
+
+Instructions: `{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`  
+Eval results: `openspec/changes/<change>/eval-results/code-generation-<task-id>.yaml`
 
 ## Directory layout
 
@@ -108,6 +126,8 @@ Results: `openspec/changes/<change>/eval-results/<artifact-id>.yaml`
 
 ## Eval Generation stages
 
-Evals are created/updated for: **repo-assessment → constitution → plan → tasks → implementation**.
+Evals are created/updated for: **repo-assessment → constitution → plan → tasks → implementation → code-generation**.
+
+**code-generation** evals score fork code per OAPE task during `/opsx-apply` (not markdown artifacts).
 
 **validation.md** is refined in `evals/refined-templates/` (spec-stage eval) — not duplicated under `baseline/evals/`.

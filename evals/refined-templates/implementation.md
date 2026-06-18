@@ -6,14 +6,26 @@
 **Branch**: [FEATURE_BRANCH]
 **Started**: [DATE]
 
-Append one section per approved phase during `/opsx:apply`. Code changes go to the fork working copy — not this file.
+Append one section per **approved task**. Each task also gets
+`implementation/task-reports/[TASK_ID].md`. Code changes go to the fork — not this file.
 
 ---
 
-## Phase: [PHASE_NAME]
+## Task: [TASK_ID] — [TASK_TITLE]
 
-**Status**: [Approved | In Progress | Rejected]
-**Tasks**: [T1_1, T1_2, …]
+**Phase**: [PHASE_NAME]
+**Status**: Approved
+**Agent**: [ASSIGNED_AGENT]
+**OAPE Command**: [command or manual]
+**Task report**: [implementation/task-reports/TASK_ID.md]
+
+### Code Generation Eval
+
+| Metric | Value |
+|--------|-------|
+| Overall score | [N]% |
+| Cases pass | [N]/[M] |
+| Refinement rounds | [0–2] |
 
 ### Files Touched
 
@@ -23,11 +35,11 @@ Append one section per approved phase during `/opsx:apply`. Code changes go to t
 
 | Test | Result | Notes |
 |------|--------|-------|
-| [test name] | PASSED / FAILED / SKIPPED | [brief detail] |
+| make test | PASSED | |
 
 ### Deviations
 
-- **Task ID**: [description and rationale — omit section when none]
+- [Task ID + rationale — omit when none]
 
 ---
 
@@ -51,6 +63,5 @@ When implementing controller-runtime reconcilers (addons, user-defined NetworkPo
 
 ## Phase Log Notes
 
-- Phases execute in dependency order from tasks.md §1–§2.
-- Each phase requires user approval before advancing.
-- On reject: re-generate FILE OPERATIONS, re-apply, repeat until approved.
+- Per-task flow: OAPE → verify → code evals → refine code → user code approval → task report.
+- On reject: REVISION FEEDBACK in design bundle; re-run current task only.

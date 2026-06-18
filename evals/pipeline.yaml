@@ -91,18 +91,40 @@ phases:
           evals/baseline/evals/<stage>/<stage>_eval.yaml
           (e.g. constitution_eval.yaml). Do not scatter per-case files.
           Then sync flat copies to schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
-          with template: templates/<name>.md for forward /opsx-continue.
+          with template: templates/<name>.md for forward /opsx-continue (artifact stages).
+          For code-generation: sync to schemas/.../evals/code-generation_eval.yaml
+          (no template — scores fork code during /opsx-apply per task).
         writes:
           - evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
           - evals/baseline/evals/constitution/constitution_eval.yaml
           - evals/baseline/evals/plan/plan_eval.yaml
           - evals/baseline/evals/tasks/tasks_eval.yaml
           - evals/baseline/evals/implementation/implementation_eval.yaml
+          - evals/baseline/evals/code-generation/code-generation_eval.yaml
           - schemas/openspec-agile-workflow/evals/repo-assessment_eval.yaml
           - schemas/openspec-agile-workflow/evals/constitution_eval.yaml
           - schemas/openspec-agile-workflow/evals/plan_eval.yaml
           - schemas/openspec-agile-workflow/evals/tasks_eval.yaml
           - schemas/openspec-agile-workflow/evals/implementation_eval.yaml
+          - schemas/openspec-agile-workflow/evals/code-generation_eval.yaml
+      - id: create-code-generation-evals
+        name: Code Generation Eval Authoring
+        rule: >-
+          After artifact eval cases (create-eval-cases), derive code-generation
+          evals from PR diffs (05-repo-prs.md), bug postmortems, and
+          issue-taxonomy.json code-related patterns. Tag each case with
+          oape_command (api-generate, api-generate-tests, api-implement,
+          e2e-generate, manual, or any). Minimum 2 cases per oape_command
+          represented in the feature bundle when evidence exists; document
+          why fewer in template-gaps.md. Rubric: evals/stages/code-generation/eval-spec.yaml.
+        reads:
+          - evals/outputs/epic-bug-analysis/issue-taxonomy.json
+          - evals/inputs/05-repo-prs.md
+          - evals/inputs/bugs/*.md
+          - evals/stages/code-generation/eval-spec.yaml
+        writes:
+          - evals/baseline/evals/code-generation/code-generation_eval.yaml
+          - schemas/openspec-agile-workflow/evals/code-generation_eval.yaml
       - id: update-registry
         writes:
           - evals/baseline/evals-registry.yaml
@@ -127,6 +149,23 @@ eval_stages:
   - plan
   - tasks
   - implementation
+  - code-generation
+
+code_generation_eval:
+  description: >-
+    Per-task code evals for /opsx-apply. Not an /opsx-continue artifact stage.
+    Cases filtered by oape_command at runtime.
+  baseline: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  forward: schemas/openspec-agile-workflow/evals/code-generation_eval.yaml
+  eval_spec: evals/stages/code-generation/eval-spec.yaml
+  gate_prompt: schemas/openspec-agile-workflow/stage-gate/CODE_GENERATION_EVAL_PROMPT.md
+  oape_commands:
+    - api-generate
+    - api-generate-tests
+    - api-implement
+    - e2e-generate
+    - manual
+    - any
 
 stage_eval_files:
   retrospective: evals/baseline/evals/<stage>/<stage>_eval.yaml
@@ -139,6 +178,7 @@ stage_eval_files_baseline:
   plan: evals/baseline/evals/plan/plan_eval.yaml
   tasks: evals/baseline/evals/tasks/tasks_eval.yaml
   implementation: evals/baseline/evals/implementation/implementation_eval.yaml
+  code-generation: evals/baseline/evals/code-generation/code-generation_eval.yaml
 
 refine_in_place:
   dir: evals/refined-templates/
@@ -159,6 +199,7 @@ feedback_loop:
     become inputs to the next /eval-loop.
   cumulative:
     - evals/baseline/evals/<stage>/<stage>_eval.yaml
+    - evals/baseline/evals/code-generation/code-generation_eval.yaml
     - evals/baseline/evals-registry.yaml
   in_place:
     - evals/refined-templates/

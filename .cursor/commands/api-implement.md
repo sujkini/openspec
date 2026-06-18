@@ -40,6 +40,10 @@ This command generates **production-ready code with zero TODOs** by:
 
 **You MUST follow ALL conventions strictly. If any precheck fails, you MUST stop immediately and report the failure.**
 
+## Skills
+
+Read and follow **effective-go** (`.cursor/skills/effective-go/SKILL.md`) for all generated Go controller code.
+
 ---
 
 ## Implementation

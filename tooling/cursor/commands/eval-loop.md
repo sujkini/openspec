@@ -19,8 +19,9 @@ One command. One feature bundle. When done, paste the next bundle into `evals/in
    a. Identify template gaps           → evals/outputs/eval-generation/template-gaps.md
    b. Apply patchable gaps              → refine templates in evals/refined-templates/
    c. Merge eval cases per stage        → evals/baseline/evals/<stage>/<stage>_eval.yaml
-   d. Sync flat stage evals             → schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
-   e. Update registry + round snapshot
+   d. Create code-generation evals       → evals/baseline/evals/code-generation/code-generation_eval.yaml
+   e. Sync flat stage evals              → schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+   f. Update registry + round snapshot
 5. Update round-state                  → increment round, snapshot under baseline/rounds/
 ```
 
@@ -66,8 +67,9 @@ One YAML per stage — all cases in `evals:` list:
 - `evals/baseline/evals/plan/plan_eval.yaml`
 - `evals/baseline/evals/tasks/tasks_eval.yaml`
 - `evals/baseline/evals/implementation/implementation_eval.yaml`
+- `evals/baseline/evals/code-generation/code-generation_eval.yaml`
 
-Also sync each merged file to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** with `template: templates/<name>.md` (forward `/opsx-continue` reads from installed `openspec/schemas/.../evals/`).
+Also sync each merged file to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** with `template: templates/<name>.md` (forward `/opsx-continue` reads from installed `openspec/schemas/.../evals/`). **code-generation** has no template — sync `code-generation_eval.yaml` for `/opsx-apply` per-task gate.
 
 Do **not** write scattered `eval-r001-*.yaml` per-case files.
 

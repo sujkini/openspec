@@ -136,6 +136,68 @@ stage_eval_gate:
     - user_rejection_feedback
 
 # ---------------------------------------------------------------------------
+# code_generation_eval_gate — per-task code evals during /opsx-apply
+# ---------------------------------------------------------------------------
+code_generation_eval_gate:
+  description: >-
+    After each task's OAPE command (or manual agent work) and verification,
+    score generated code in the fork against code-generation evals before user
+    task approval. Cases are authored retrospectively by /eval-loop from EPs,
+    PRs, and bug postmortems.
+  runs_during: implementation
+  runs_after:
+    - oape_command_or_manual_work
+    - task_verification
+  runs_before:
+    - task_summary
+    - task_approval_gate
+  schema_root:
+    installed: openspec/schemas/openspec-agile-workflow
+    distribution: schemas/openspec-agile-workflow
+  stage_eval_file: evals/code-generation_eval.yaml
+  eval_spec: evals/stages/code-generation/eval-spec.yaml
+  system_prompt: stage-gate/CODE_GENERATION_EVAL_PROMPT.md
+  eval_results: openspec/changes/<change>/eval-results/code-generation-<task-id>.yaml
+  filter_by: oape_command
+  oape_command_map:
+    api-generate: api-generate
+    api-generate-tests: api-generate-tests
+    api-implement: api-implement
+    e2e-generate: e2e-generate
+    manual: manual
+  also_run_cases_with_oape_command: any
+  mandatory_before_user_approval: true
+  max_refinement_passes: 2
+  task_report:
+    path: openspec/changes/<change>/implementation/task-reports/<task-id>.md
+    template: templates/implementation-task-report.md
+    write_on: task_approve
+  phase_log: openspec/changes/<change>/implementation-phase-log.md
+  flow: >-
+    execute_oape_or_manual → verify_task_criteria → run_code_generation_evals →
+    refine_code_until_pass_or_max_passes → present_task_summary_with_scorecard →
+    user_code_approval → write_task_report → append_phase_log → next_task
+  task_approval_prompt: >-
+    Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Approve the code changes for task {task_id} ({task_title}) and proceed to the
+    next task? (Approve / Reject with feedback)
+  skip_when:
+    - stage_eval_file missing
+    - evals list empty
+    - no cases match resolved oape_command
+  refinement_context:
+    - fork_git_diff
+    - current_task_payload
+    - design_bundle
+    - failed_eval_cases
+    - constitution_md
+    - test_output
+  do_not_modify:
+    - evals/code-generation_eval.yaml
+    - openspec/changes/<change>/tasks.md
+    - approved_upstream_artifacts
+
+# ---------------------------------------------------------------------------
 # user_approval_feedback_gate — revision loop when user rejects at approval
 # ---------------------------------------------------------------------------
 user_approval_feedback_gate:
@@ -272,6 +334,9 @@ user_approval_feedback_gate:
       - plan
       - tasks
       - implementation
+    precedence: >-
+      exit_on_reject (specs) overrides the feedback loop for listed artifacts.
+      specs rejection does not use on_reject steps above.
   per_task_implementation_variant:
     description: >-
       Implementation runs OAPE commands task-by-task. User approval is required
@@ -283,10 +348,31 @@ user_approval_feedback_gate:
       Append user feedback to REVISION FEEDBACK in design-bundle.md; re-run OAPE
       commands for the current task only; do not mark the task complete, do not
       advance to the next task, and do not edit approved upstream artifacts.
-
-# ---------------------------------------------------------------------------
-# fork_repo — user's fork for implementation and draft PR
-# ---------------------------------------------------------------------------
+  exit_on_reject:
+    description: >-
+      For listed artifacts, user rejection at the approval gate **ends the change
+      workflow**. Do not run the feedback refinement loop, do not regenerate
+      the artifact, and do not unlock downstream stages.
+    artifacts:
+      specs:
+        generates: specs.md
+        workflow_stage: spec-understanding
+        on_reject:
+          - >-
+            Optionally record user reason in feedback/specs.yaml (single entry;
+            no refinement rounds).
+          - Do NOT regenerate specs.md
+          - Do NOT unlock repo-assessment, constitution, plan, tasks, or implementation
+          - STOP — exit the workflow for this change
+        exit_message: >-
+          specs.md was not approved. The openspec-agile-workflow stops at Spec
+          Understanding. No further artifacts will be created for this change.
+          To proceed: revise the Jira spec or inputs/jira-spec.md, then start a
+          new change (/opsx-new) or delete specs.md and re-run /opsx-continue when
+          the user is ready to regenerate specs.
+        approval_prompt: >-
+          Approve specs.md and proceed to Repo Understanding (repo-assessment +
+          constitution)? (Approve / Reject — rejection exits the workflow)
 fork_repo:
   description: >-
     User's forked GitHub repository where implementation code is written, committed,
@@ -408,12 +494,12 @@ oape_routing:
     order_by: tasks.md §2 Linear Execution Order; respect §1 DAG — do not start a task until Depends On are complete
     phase_grouping: tasks.md §3 Phase column (group T<n>_* by numeric prefix)
     task_approval_gate: >-
-      After each task is implemented and verified, present a task summary and
-      request user approval. Do not start the next task until the current task
-      is approved. On approval, mark the task `- [x]` in tasks.md and append
-      to implementation-phase-log.md. When the approved task is the last in a
-      phase, the next task (first in the following phase) starts only after
-      that approval — no separate phase-level gate.
+      After OAPE/manual work, verification, and code_generation_eval_gate
+      (eval → refine code → re-score), present the task summary and code eval
+      scorecard. Request user approval of the **code changes** for this task.
+      Do not start the next task until the user approves. On approve: write
+      implementation/task-reports/<task-id>.md, append implementation-phase-log.md,
+      mark the task `- [x]` in tasks.md.
     skip: tasks already marked `- [x]` in tasks.md
     cwd: fork working copy (see fork_repo.working_copy)
   task_loop:
@@ -425,14 +511,18 @@ oape_routing:
         - Invoke that command in fork cwd (read .cursor/commands/<command_file>)
         - Execute manual-agent work when Assigned Agent is manual (no OAPE command)
         - Verify per task Acceptance criteria; record pass/fail
-        - Present task summary (see implementation artifact TASK SUMMARY format)
-        - Request user approval (task_approval_gate)
+        - Run code_generation_eval_gate — score fork code; refine code until evals
+          pass or max_refinement_passes (2); do NOT ask user approval before this completes
+        - Present task summary with code eval scorecard
+        - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt)
         - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
-        - On approve: mark task `- [x]` in tasks.md; append implementation-phase-log.md
+        - On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
+          append implementation-phase-log.md
         - Advance to next pending task in §2 order
   task_approval_prompt: >-
-    Approve task {task_id} ({task_title}) and proceed to the next task?
-    (Approve / Reject with feedback)
+    Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Approve the code changes for task {task_id} ({task_title}) and proceed to the
+    next task? (Approve / Reject with feedback)
   command_order:
     - id: api-generate
       command: /oape:api-generate
@@ -650,15 +740,17 @@ artifacts:
       ## APPROVAL GATE
       After writing specs.md:
       1. SUMMARIZE: stories, requirements, success criteria, assumptions.
-      2. ASK: see schema user_approval_feedback_gate.approval_prompt
-      3. ON REJECT: Run user_approval_feedback_gate (see schema) — update generation
-         prompt with feedback; regenerate specs.md only; do not modify validation.json
-         or any prior approved artifact. Re-ask approval.
+      2. ASK: see schema user_approval_feedback_gate.exit_on_reject.specs.approval_prompt
+      3. ON REJECT: **Exit workflow** (see schema user_approval_feedback_gate.exit_on_reject.specs).
+         Do NOT run user_approval_feedback_gate. Do NOT regenerate specs.md.
+         Optionally log rejection reason to feedback/specs.yaml. STOP.
+         Do not unlock Repo Understanding or any downstream stage.
       4. ON APPROVE: Lock specs.md as immutable; unlock Repo Understanding Stage.
     gate:
       type: approval
       evaluated_by: user
-      feedback_gate: user_approval_feedback_gate
+      on_reject: exit_workflow
+      exit_on_reject_ref: user_approval_feedback_gate.exit_on_reject.specs
     requires:
       - validation
 
@@ -968,6 +1060,7 @@ artifacts:
       - code changes in user's fork
       - draft pull request on fork_repo_url
       - implementation/design-bundle.md (per task, regenerated)
+      - implementation/task-reports/<task-id>.md (per approved task)
       - implementation-report.md
       - implementation-checklist.md
       - adrs.md (conditional)
@@ -990,7 +1083,8 @@ artifacts:
       Execute approved tasks.md **task-by-task** in §2 Linear Execution Order. For
       each task, compose a design bundle scoped to that Task ID, invoke applicable
       OAPE cursor commands (see schema oape_routing and oape-ai-e2e/AGENTS.md),
-      verify, and **request user approval before advancing to the next task**.
+      verify, run **code-generation evals**, refine code until evals pass, then
+      **request user approval of the code** before advancing to the next task.
       Work in the user's fork working copy. Push and open draft PR when all tasks
       are approved and complete.
 
@@ -1043,13 +1137,21 @@ artifacts:
          RBACSecurity_Agent, WebhookTLS_Agent, Docs_Agent — implement this task's
          payload directly in fork with minimal scoped edits; log deviations.
       7. **Verify**: Run Acceptance criteria for this task; record pass/fail.
-      8. **Present** task summary (format below).
-      9. **ASK**: schema oape_routing.task_approval_prompt (substitute task_id, task_title).
-      10. **ON REJECT**: Run user_approval_feedback_gate per_task_implementation_variant —
-          append feedback to design-bundle.md REVISION FEEDBACK; re-run **this task
-          only**; do not advance. Repeat from step 1 for this task.
-      11. **ON APPROVE**: mark this task `- [x]` in tasks.md; append
-          implementation-phase-log.md; advance to next task in §2 order.
+      8. **Code eval gate** (see schema code_generation_eval_gate and
+         stage-gate/CODE_GENERATION_EVAL_PROMPT.md): load evals/code-generation_eval.yaml;
+         filter by resolved oape_command; score fork working copy; write
+         eval-results/code-generation-<task-id>.yaml; **refine code in fork until
+         all applicable cases pass or 2 refinement passes** — do NOT ask user
+         approval before this loop completes.
+      9. **Present** task summary including code eval scorecard and files touched.
+      10. **ASK**: code_generation_eval_gate.task_approval_prompt (include eval score).
+      11. **ON REJECT**: append feedback to design-bundle.md REVISION FEEDBACK; re-run
+          **this task only** from step 1.
+      12. **ON APPROVE**:
+          - Write `implementation/task-reports/<task-id>.md` (template: implementation-task-report.md)
+          - Mark task `- [x]` in tasks.md
+          - Append `implementation-phase-log.md` (link to task report)
+          - Advance to next task in §2 order
 
       Allowed OAPE commands (one per task):
       - **e2e task** → `/oape:e2e-generate <fork-default-branch>`
@@ -1071,6 +1173,13 @@ artifacts:
       ### ## TEST RESULTS
       | Test | Result | Notes |
 
+      ### ## CODE GENERATION EVAL SCORECARD
+      Overall score, cases pass/fail, refinement rounds, eval-driven fixes applied.
+      Omit section when no applicable eval cases.
+
+      ### ## APPROVAL
+      Ask user to approve **code changes** for this task (not just the plan).
+
       ### ## DEVIATIONS (optional)
       `- **Task ID**: <description>` — omit when none.
 
@@ -1083,7 +1192,8 @@ artifacts:
         review, or any command outside allowed_commands.
 
       ## Post-loop (all tasks approved)
-      1. Write implementation-report.md and implementation-checklist.md.
+      1. Write implementation-report.md — aggregate all `implementation/task-reports/*.md`
+      2. Write implementation-checklist.md
       2. Write adrs.md ONLY if any phase logged DEVIATIONS.
       3. Push and draft PR (see schema fork_repo.draft_pr).
       4. Final summary: phases, tasks, files, tests, deviations, draft PR URL.
@@ -1118,11 +1228,16 @@ artifacts:
 
       ## Sections (required)
       - **Summary** — one paragraph overview
-      - **Phases Completed** — table: Phase | Tasks | OAPE Commands | Files Changed | Tests | Deviations
-      - **All Files Changed** — grouped by phase
+      - **Per-Task Reports** — table linking each approved task to
+        `implementation/task-reports/<task-id>.md` with eval score and test status
+      - **Phases Completed** — table: Phase | Tasks | OAPE Commands | Files Changed | Code Eval | Tests | Deviations
+      - **All Files Changed** — grouped by phase (from task reports)
+      - **Code Generation Eval Summary** — aggregate pass/fail across all tasks
       - **Test Results Summary**
       - **Deviations / ADRs** — if any (otherwise state "None")
       - **Draft Pull Request** — fork_repo_url, branch name, and PR URL
+
+      Source: read every file under `implementation/task-reports/` written at task approval.
 
       Source data from the phase log: phase name, tasks executed in order, touched
       files, test outcome, and DEVIATIONS text from each approved phase. Include
@@ -1220,10 +1335,14 @@ apply:
          api-generate, api-generate-tests, api-implement, e2e-generate if e2e task).
       3. Execute manual-agent work for this task when assigned (no OAPE command).
       4. Verify per task Acceptance criteria.
-      5. Present task summary; ask user approval (oape_routing.task_approval_prompt).
-      6. On approve: mark task `- [x]`, append implementation-phase-log.md, next task.
-      7. On reject: REVISION FEEDBACK in design bundle; re-run current task only.
+      5. Run code_generation_eval_gate (CODE_GENERATION_EVAL_PROMPT.md): score fork code;
+         refine until evals pass or max 2 passes — do NOT ask user approval before this.
+      6. Present task summary with code eval scorecard; ask user to approve CODE
+         (code_generation_eval_gate.task_approval_prompt).
+      7. On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
+         append implementation-phase-log.md; next task.
+      8. On reject: REVISION FEEDBACK in design bundle; re-run current task only.
 
-    Do not skip tasks or task approval gates. Invoke exactly one allowed OAPE command
+    After all tasks: write implementation-report.md aggregating all task-reports/.
     per task. Do not use predict-regressions, review, or any other OAPE command.
-    Do not advance to the next task until the current task is approved.
+    Do not advance to the next task until the user approves the code for the current task.

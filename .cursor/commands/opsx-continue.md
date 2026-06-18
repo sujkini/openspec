@@ -47,7 +47,8 @@ Continue working on a change by creating the **next** artifact (one per invocati
    > Eval score: **X%** (N/M cases pass). Approve this artifact? **(Approve / Reject with feedback)**
 
    - **Approve** → artifact gate satisfied; next `/opsx-continue` may create the next ready artifact
-   - **Reject** → refine artifact again with user feedback in context; re-ask approval (same invocation)
+   - **Reject** → if artifact is **`specs`**: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate specs; STOP
+   - **Reject** (other artifacts) → refine artifact with user feedback; re-ask approval (same invocation)
 
 ## Artifact order (openspec-agile-workflow)
 

@@ -25,6 +25,10 @@ test runner (Ginkgo + controller-runtime envtest).
 
 **This command should be run AFTER API types and CRD manifests have been generated.**
 
+## Skills
+
+Read and follow **effective-go** (`.cursor/skills/effective-go/SKILL.md`) when generating or reviewing test-related artifacts.
+
 ## Implementation
 
 ### Phase 0: Prechecks

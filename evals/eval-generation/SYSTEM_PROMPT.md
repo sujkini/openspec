@@ -93,8 +93,11 @@ Save diff in `evals/outputs/eval-generation/refinement-patches/validation.md.pat
 | plan | `evals/baseline/evals/plan/plan_eval.yaml` |
 | tasks | `evals/baseline/evals/tasks/tasks_eval.yaml` |
 | implementation | `evals/baseline/evals/implementation/implementation_eval.yaml` |
+| code-generation | `evals/baseline/evals/code-generation/code-generation_eval.yaml` |
 
 **Do NOT** write scattered per-case files (`eval-r001-repo-001.yaml`, etc.). All cases for a stage live in that stage's `*_eval.yaml`.
+
+**code-generation** is different from artifact stages: it scores **fork code** during `/opsx-apply`, not markdown artifacts. Each case **must** include `oape_command`. See `evals/stages/code-generation/eval-spec.yaml`.
 
 #### Consolidated file schema
 
@@ -153,6 +156,40 @@ Rules for schema copies:
 
 Installed projects read these from `openspec/schemas/openspec-agile-workflow/evals/`.
 
+#### 5c. Create code-generation evals (mandatory each round)
+
+After merging artifact stage evals, author **code-generation** eval cases from:
+
+| Source | Derive |
+|--------|--------|
+| `evals/inputs/05-repo-prs.md` | PR diff patterns, missed tests, API/controller mistakes |
+| `evals/inputs/bugs/*.md` | Regressions that code review or tests should catch |
+| `issue-taxonomy.json` | Code-related patterns (PAT-* tagged implementation/code) |
+| Prior `implementation_eval.yaml` cases | Reframe as concrete code assertions when applicable |
+
+Output: `evals/baseline/evals/code-generation/code-generation_eval.yaml`
+
+Rules:
+
+- **Every case** must set `oape_command` to one of: `api-generate`, `api-generate-tests`, `api-implement`, `e2e-generate`, `manual`, or `any`
+- **Eval ID format:** `eval-r<NNN>-codegen-<seq>`
+- Tag `patterns` from issue taxonomy when applicable
+- Minimum **2 code-generation cases per round** when the feature bundle includes PR or bug evidence; document in `template-gaps.md` if fewer
+- Assertions use rubric in `evals/stages/code-generation/eval-spec.yaml` (e.g. `must_use_pattern`, `must_not_use`, `must_pass_make_targets`)
+- Merge with existing baseline file; update `eval_count`
+
+Sync to forward workflow:
+
+`schemas/openspec-agile-workflow/evals/code-generation_eval.yaml`
+
+Schema copy rules:
+
+- Same `evals:` list and `eval_count` as baseline
+- No `template:` field (not an artifact template stage)
+- Include top-level `oape_commands:` list
+
+Document code-generation gaps in `template-gaps.md` under a **Code generation evals** section (eval-only gaps are OK here).
+
 ### 6. Update agents.md
 
 Append or revise `evals/baseline/agents.md` when agent routing gaps were found.
@@ -192,7 +229,7 @@ Update `evals/round-state.yaml`: increment `round`, bump `baseline_version`, app
 
 - Templates refined in `evals/refined-templates/` (not `schemas/`)
 - Every `patchable` gap has `Fixed: Yes` + `refinement-changelog.md` entry
-- All five `<stage>_eval.yaml` files updated with merged eval cases
+- All six `<stage>_eval.yaml` files updated with merged eval cases (including code-generation)
 - `evals-registry.yaml` and `round-state.yaml` updated
 
 Report to user:

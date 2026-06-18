@@ -35,6 +35,8 @@ generate v1 → run stage evals → refine artifact → user approve → next st
 
 If you **reject** with feedback, only the **current** artifact is regenerated. Previously approved artifacts stay **immutable**.
 
+**Exception:** Rejecting **`specs.md`** **exits the workflow** — no regeneration, no repo-assessment or later stages until you start fresh or re-run specs.
+
 During **implementation**, approval happens **after every task** (not per phase).
 
 ---
@@ -108,9 +110,10 @@ Or install into the current directory:
 5. **Copies `agents.md`** from this repo root into `openspec/schemas/openspec-agile-workflow/agents.md` (cert-manager-operator roster for testing — see below).
 6. **Copies `config.yaml.example`** → `openspec/config.yaml` (selects this schema and artifact rules).
 7. **Copies all Cursor commands** from `tooling/cursor/commands/` → `.cursor/commands/` (15 files: opsx-new, opsx-continue, opsx-apply, OAPE commands, eval-loop, etc.).
-8. **Copies all Cursor skills** from `tooling/cursor/skills/` → `.cursor/skills/`.
-9. **Copies `evals/`** → project `evals/` (optional retrospective pipeline for `/eval-loop`; preserves existing baseline if re-run).
-10. **Validates** the schema with `openspec schema validate openspec-agile-workflow`.
+8. **Copies all Cursor skills** from `tooling/cursor/skills/` → `.cursor/skills/` (openspec workflow skills plus OAPE `effective-go` and `e2e-test-generator`).
+9. **Copies OAPE e2e fixtures** from `tooling/cursor/e2e-test-generator/` → `.cursor/e2e-test-generator/` (used by `/oape:e2e-generate`).
+10. **Copies `evals/`** → project `evals/` (optional retrospective pipeline for `/eval-loop`; preserves existing baseline if re-run).
+11. **Validates** the schema with `openspec schema validate openspec-agile-workflow`.
 
 ### Install map
 
@@ -120,7 +123,8 @@ Or install into the current directory:
 | `agents.md` | `openspec/schemas/openspec-agile-workflow/agents.md` |
 | `config.yaml.example` | `openspec/config.yaml` |
 | `tooling/cursor/commands/` | `.cursor/commands/` (all command files) |
-| `tooling/cursor/skills/` | `.cursor/skills/` |
+| `tooling/cursor/skills/` | `.cursor/skills/` (openspec-* + OAPE `effective-go`, `e2e-test-generator`) |
+| `tooling/cursor/e2e-test-generator/` | `.cursor/e2e-test-generator/` (e2e fixtures for `/oape:e2e-generate`) |
 | `evals/` | `evals/` (optional — `/eval-loop` only) |
 
 ### Re-installing
@@ -181,6 +185,13 @@ Only these OAPE commands are invoked during implementation (one per task):
 
 Other OAPE commands (`review`, `predict-regressions`, etc.) are **not** used during `/opsx-apply`.
 
+**OAPE skills** (installed to `.cursor/skills/`):
+
+| Skill | Used by |
+|-------|---------|
+| `effective-go` | `/oape:api-generate`, `/oape:api-generate-tests`, `/oape:api-implement` |
+| `e2e-test-generator` | `/oape:e2e-generate` (fixtures in `.cursor/e2e-test-generator/fixtures/`) |
+
 ### Retrospective eval loop (optional)
 
 | Command | Purpose |
@@ -224,11 +235,12 @@ For **each pending task**:
 2. Resolve **exactly one** allowed OAPE command (or manual work for non-OAPE agents)
 3. Run the command in your **fork** working copy
 4. Verify against the task's acceptance criteria
-5. Present a task summary and ask for **user approval**
-6. On approve: mark task `- [x]`, log progress, move to next task
-7. On reject: add revision feedback, re-run **current task only**
+5. Run **code-generation evals** → refine code in fork until evals pass (max 2 passes)
+6. Present task summary + code eval scorecard; ask for **user approval of the code**
+7. On approve: write **`implementation/task-reports/<task-id>.md`**, mark task `- [x]`, log progress, next task
+8. On reject: add revision feedback, re-run **current task only**
 
-When all tasks are done: commit, push feature branch, open a **draft PR** on your fork.
+When all tasks are done: write **`implementation-report.md`** (aggregates all task reports), commit, push feature branch, open a **draft PR** on your fork.
 
 Typical task chain for a full feature:
 
@@ -241,7 +253,7 @@ T4  e2e-generate        → end-to-end tests (when applicable)
 
 ---
 
-## Two different eval systems
+## Three eval systems
 
 Do not confuse these — they serve different purposes.
 
@@ -259,7 +271,23 @@ generate artifact → score against stage evals → refine artifact → user app
 
 Templates under `openspec/schemas/.../templates/` are **not** modified. Only the change artifact is refined.
 
-### 2. Retrospective eval loop (`/eval-loop`)
+### 2. Code generation eval gate (`/opsx-apply`)
+
+**When:** After each task's OAPE command (or manual work) during implementation.
+
+**Where:** `openspec/schemas/openspec-agile-workflow/evals/code-generation_eval.yaml`
+
+**What happens:**
+
+```
+OAPE command → verify task → score fork code (filtered by oape_command) → refine code until evals pass → user approves code → task report → next task
+```
+
+Each approved task writes **`implementation/task-reports/<task-id>.md`**. The final **`implementation-report.md`** aggregates all task reports.
+
+Cases are **authored by `/eval-loop`** from PR diffs and bugs, tagged with `oape_command` (`api-generate`, `api-implement`, etc.).
+
+### 3. Retrospective eval loop (`/eval-loop`)
 
 **When:** After a feature is **fully completed** (EP, epic, stories, PRs, bugs). Used to improve the workflow itself over time.
 
@@ -276,7 +304,7 @@ One command runs the full loop:
 1. Validate `evals/inputs/` (no placeholder files)
 2. Load prior baseline and refined templates (round 2+)
 3. **Epic Bug Analysis** → `evals/outputs/epic-bug-analysis/`
-4. **Eval Generation** → merge eval cases, refine templates, sync stage evals
+4. **Eval Generation** → merge artifact eval cases, **author code-generation evals**, refine templates, sync stage evals
 5. Update `evals/baseline/` and round state
 
 | Step | You do |
@@ -320,7 +348,9 @@ evals/                             # retrospective eval loop (/eval-loop)
 └── eval-generation/
 tooling/cursor/
 ├── commands/                      # opsx-new, opsx-continue, opsx-apply, OAPE, eval-loop
-└── skills/
+├── skills/                        # openspec-* + OAPE effective-go, e2e-test-generator
+└── e2e-test-generator/            # fixtures + docs for /oape:e2e-generate
+oape-ai-e2e/                       # upstream OAPE plugin (source for OAPE skills/commands)
 ```
 
 ---
@@ -331,7 +361,7 @@ tooling/cursor/
 - **`openspec update`** overwrites `.cursor/` — re-run `install.sh` afterward.
 - Bundled **`agents.md`** is for **testing** cert-manager-operator; production repos should provide their own `AGENTS.md`.
 - Implementation edits go to your **fork**, not the upstream target repo.
-- Rejecting an artifact regenerates **only that artifact**; approved artifacts are never modified.
+- Rejecting an artifact regenerates **only that artifact** (except **specs.md** — rejection exits the workflow); approved artifacts are never modified.
 
 ---
 

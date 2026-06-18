@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires openspec CLI.
 metadata:
   author: openspec
-  version: "1.1"
+  version: "1.2"
   generatedBy: "1.3.1"
 ---
 
@@ -95,8 +95,9 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
    - **User approval** — present eval scorecard (if run) + summary. Ask:
      > Approve this artifact? **(Approve / Reject with feedback)**
-     - On Reject: refine with feedback, re-ask
-     - On Approve: STOP (one artifact per invocation)
+     - **Reject on `specs`**: **exit workflow** — do NOT regenerate specs.md (see schema `user_approval_feedback_gate.exit_on_reject.specs` and `USER_FEEDBACK_PROMPT.md`). STOP.
+     - **Reject on other artifacts**: run feedback gate, refine, re-ask
+     - **Approve**: STOP (one artifact per invocation)
 
    - Show what was created and what's now unlocked
    - STOP after ONE artifact (including eval gate + approval)

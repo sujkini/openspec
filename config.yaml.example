@@ -22,6 +22,7 @@ rules:
     - Derive from the same Jira ticket referenced in inputs/jira.yaml
     - No implementation details; max 3 [NEEDS CLARIFICATION] markers
     - User stories with Given/When/Then; FR-xxx and SC-xxx identifiers
+    - If user rejects specs.md at approval, exit the workflow (no refinement loop; see schema exit_on_reject.specs)
   repo-assessment:
     - Before creating repo-assessment.md, ensure target_repo is set in inputs/jira.yaml (ask user once if empty; see schema target_repo)
     - Fact-based inventory only; cite repo evidence for every target file

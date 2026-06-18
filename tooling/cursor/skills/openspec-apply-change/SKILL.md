@@ -5,14 +5,21 @@ license: MIT
 compatibility: Requires openspec CLI and OAPE commands in .cursor/commands/.
 metadata:
   author: openspec
-  version: "2.3"
+  version: "2.5"
 ---
 
-Implement an OpenSpec change using OAPE command orchestration (see `/opsx:apply` and schema `oape_routing`).
+Implement an OpenSpec change using OAPE command orchestration (see `/opsx:apply` and schema `oape_routing`, `code_generation_eval_gate`).
 
-**Reference:** `.cursor/commands/opsx-apply.md`
+**Reference:** `.cursor/commands/opsx-apply.md`, `{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`
 
-**Allowed OAPE commands (one per task):** `api-generate`, `api-generate-tests`, `api-implement`, `e2e-generate` (e2e tasks only). Do not use any other OAPE command.
+**Allowed OAPE commands (one per task):** `api-generate`, `api-generate-tests`, `api-implement`, `e2e-generate` (e2e tasks only).
+
+**Per-task mandatory sequence:**
+
+```
+OAPE (or manual) → verify → code-generation evals → refine code until pass (max 2 passes)
+→ present scorecard → user approves CODE → write task report → next task
+```
 
 **Input**: Optionally specify a change name. If omitted, infer from context or prompt.
 
@@ -25,35 +32,29 @@ Implement an OpenSpec change using OAPE command orchestration (see `/opsx:apply`
    openspec status --change "<name>" --json
    openspec instructions apply --change "<name>" --json
    ```
-   - `blocked` → suggest openspec-continue-change
-   - `all_done` → suggest archive
 
-3. **Prerequisites** — OAPE files: api-generate.md, api-generate-tests.md, api-implement.md, e2e-generate.md; gh/go/git/make; artifacts approved.
+3. **Prerequisites** — OAPE command files; gh/go/git/make; artifacts approved; `implementation/task-reports/` dir.
 
-4. **Fork setup** — fork_repo_url from jira.yaml; clone; feature branch; cwd = fork root.
+4. **Fork setup** — fork_repo_url; clone; feature branch; cwd = fork root.
 
 5. **Read contextFiles** from apply instructions.
 
 6. **Parse tasks** from tasks.md §2 order; skip completed tasks.
 
-7. **Task loop** (each pending task):
-   - Compose `implementation/design-bundle.md` scoped to **current Task ID only**
-   - Resolve **one** OAPE command:
-     - IF e2e task → `e2e-generate`
-     - ELIF API_Agent verification-only → `api-generate-tests`
-     - ELIF API_Agent → `api-generate`
-     - ELIF OperatorController_Agent → `api-implement`
-     - ELIF manual agent → scoped edits (no OAPE)
-   - Verify per task Acceptance criteria
-   - **Gate:** "Approve task {id} ({title}) and proceed to the next task? (Approve / Reject with feedback)"
-   - On approve: mark task `- [x]`, append phase log, advance
-   - On reject: REVISION FEEDBACK; re-run current task only
+7. **Task loop** (each pending task — **no user approval before eval gate completes**):
+   - Compose `implementation/design-bundle.md` for **current Task ID only**
+   - Run **one** OAPE command (or manual agent work)
+   - Verify task Acceptance criteria
+   - **Code eval gate:** score fork code; refine until evals pass or 2 passes; write `eval-results/code-generation-<task-id>.yaml`
+   - Present summary + code eval scorecard
+   - **User approves code** for this task
+   - **On approve:** write `implementation/task-reports/<task-id>.md`; mark `- [x]`; append phase log
+   - **On reject:** REVISION FEEDBACK; re-run current task only
 
-8. **Post-loop** — report, checklist, adrs (if deviations), push, draft PR.
+8. **Post-loop** — `implementation-report.md` aggregates all task reports; checklist; adrs; push; draft PR.
 
 **Guardrails**
-- Exactly **one** allowed OAPE command per task
-- **Approval after every task** before advancing
-- Never predict-regressions, review, or other OAPE commands
-- OAPE commands in fork cwd only
-- On reject: re-run current task only
+- Never ask user approval before code eval refinement loop completes (when cases exist)
+- One OAPE command per task; approval after every task
+- One task report per approved task
+- OAPE in fork cwd only

@@ -6,22 +6,33 @@
 **Branch**: [FEATURE_BRANCH]
 **Started**: [DATE]
 
-Append one section per **approved task** during `/opsx:apply`. OAPE commands run
-task-by-task; code changes go to the fork working copy.
+Append one section per **approved task** during `/opsx:apply`. Each approved task
+also gets a full report at `implementation/task-reports/[TASK_ID].md`.
 
 ---
 
 ## Task: [TASK_ID] — [TASK_TITLE]
 
 **Phase**: [PHASE_NAME]
-**Status**: [Approved | In Progress | Rejected]
+**Status**: Approved
 **Agent**: [ASSIGNED_AGENT]
+**OAPE Command**: [api-generate | api-generate-tests | api-implement | e2e-generate | manual]
+**Task report**: [implementation/task-reports/TASK_ID.md]
 
 ### OAPE Commands Executed
 
 | Command | Args | Outcome |
 |---------|------|---------|
-| /oape:api-generate | --design-doc …/design-bundle.md | Success |
+| /oape:… | … | Success |
+
+### Code Generation Eval
+
+| Metric | Value |
+|--------|-------|
+| Overall score | [N]% |
+| Cases pass | [N]/[M] |
+| Refinement rounds | [0–2] |
+| Eval results | eval-results/code-generation-[TASK_ID].yaml |
 
 ### Files Touched
 
@@ -35,13 +46,12 @@ task-by-task; code changes go to the fork working copy.
 
 ### Deviations
 
-- [description and rationale — omit section when none]
+- [description — omit section when none]
 
 ---
 
 ## Phase Log Notes
 
-- Tasks execute in §2 Linear Execution Order; respect §1 DAG.
+- Per-task flow: OAPE → verify → code evals → refine code → **user code approval** → task report.
 - Design bundle: `implementation/design-bundle.md` (regenerated per task, scoped to one Task ID).
-- **User approval after every task** before advancing to the next.
-- On reject: update REVISION FEEDBACK in design bundle; re-run the current task only.
+- On reject: REVISION FEEDBACK in design bundle; re-run the current task only.

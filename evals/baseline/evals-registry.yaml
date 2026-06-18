@@ -307,3 +307,7 @@ stage_eval_files:
   implementation:
     path: evals/baseline/evals/implementation/implementation_eval.yaml
     template: evals/refined-templates/implementation.md
+  code-generation:
+    path: evals/baseline/evals/code-generation/code-generation_eval.yaml
+    template: null
+    note: Per-task code evals for /opsx-apply; cases tagged oape_command

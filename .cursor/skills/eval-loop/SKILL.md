@@ -23,7 +23,8 @@ User runs `/eval-loop` after pasting a feature bundle into `evals/inputs/`.
    - Templates: read/write **`evals/refined-templates/` only** (not `schemas/`)
    - Identify gaps → patch refined-templates
    - Merge evals into **`evals/baseline/evals/<stage>/<stage>_eval.yaml`** (one file per stage)
-   - Sync flat copies to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** (`template: templates/...`)
+   - Author **code-generation** evals → `evals/baseline/evals/code-generation/code-generation_eval.yaml`
+   - Sync flat copies to **`schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** (`template: templates/...`; code-generation has no template)
    - Update baseline registry
 6. Increment round in `evals/round-state.yaml`
 
@@ -42,6 +43,7 @@ User runs `/eval-loop` after pasting a feature bundle into `evals/inputs/`.
 | plan | `evals/baseline/evals/plan/plan_eval.yaml` |
 | tasks | `evals/baseline/evals/tasks/tasks_eval.yaml` |
 | implementation | `evals/baseline/evals/implementation/implementation_eval.yaml` |
+| code-generation | `evals/baseline/evals/code-generation/code-generation_eval.yaml` |
 
 ## Feedback loop
 

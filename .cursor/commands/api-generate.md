@@ -34,6 +34,10 @@ It refreshes its knowledge of API conventions from the authoritative sources on 
 
 **You MUST follow ALL conventions strictly. If any precheck fails, you MUST stop immediately and report the failure.**
 
+## Skills
+
+Read and follow **effective-go** (`.cursor/skills/effective-go/SKILL.md`) for all generated Go code.
+
 ## Implementation
 
 ### Phase 0: Prechecks

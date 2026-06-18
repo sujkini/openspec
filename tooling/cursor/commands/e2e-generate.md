@@ -29,6 +29,11 @@ All files are written into **one output directory**: `<output-dir>/e2e_<repo-nam
 - **Discovery-based**: All operator structure (API types, CRDs, namespaces, install mechanism, e2e patterns) is discovered from the repo. Nothing is hardcoded.
 - **Diff-driven**: Tests are focused on what changed between the base branch and HEAD.
 
+## Skills
+
+Read and follow **e2e-test-generator** (`.cursor/skills/e2e-test-generator/SKILL.md`).
+Fixture templates live under `.cursor/e2e-test-generator/fixtures/` (linked as `../e2e-test-generator/fixtures/` from this command file).
+
 ## Implementation
 
 ### Phase 0: Prechecks

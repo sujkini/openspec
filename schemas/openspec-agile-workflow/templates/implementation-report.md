@@ -6,23 +6,31 @@
 
 ## Summary
 
-[One paragraph overview of what was implemented, test outcomes, and PR status.]
+[One paragraph overview of what was implemented, aggregate code eval results, test outcomes, and PR status.]
+
+## Per-Task Reports
+
+| Task ID | Title | Phase | OAPE Command | Code Eval | Tests | Report |
+|---------|-------|-------|--------------|-----------|-------|--------|
+| T1_1 | … | Phase 1 | api-generate | 100% (3/3) | PASSED | [task-reports/T1_1.md](implementation/task-reports/T1_1.md) |
 
 ## Phases Completed
 
-| Phase | Files Changed | Tests | Deviations |
-|-------|---------------|-------|------------|
-| [Phase 1] | [count or list] | PASSED / FAILED | None / [brief] |
+| Phase | Tasks | OAPE Commands | Files Changed | Code Eval (avg) | Tests | Deviations |
+|-------|-------|---------------|---------------|-----------------|-------|------------|
+| [Phase 1] | T1_1, T1_2 | api-generate, api-implement | [count] | [N]% | PASSED | None |
 
 ## All Files Changed
 
 ### [Phase 1]
 
-- `relative/path/to/file` — [brief purpose]
+- `relative/path/to/file` — [task T1_1 — brief purpose]
 
-### [Phase 2]
+## Code Generation Eval Summary
 
-- `relative/path/to/file` — [brief purpose]
+| Task | Score | Cases pass | Refinement rounds |
+|------|-------|------------|-------------------|
+| T1_1 | 100% | 3/3 | 0 |
 
 ## Test Results Summary
 
