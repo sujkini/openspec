@@ -5,7 +5,8 @@ description: >-
   Task Creation → Implementation. Produces validation.json, specs.md,
   repo-assessment.md, constitution.md, plan.md, tasks.md, and (during
   implementation) implementation-report.md, implementation-checklist.md, and
-  optional adrs.md. Templates from templates/.
+  optional adrs.md. Implementation uses OAPE command orchestration (/opsx:apply).
+  Templates from templates/.
 
 templates_dir: templates
 
@@ -17,6 +18,17 @@ agents_md:
     SME-defined execution agent roster and routing rules from the target repository.
     Used for AgentRoutingMode (constitution), phase capability mapping (plan), and
     Assigned Agent values (tasks). Not used during Spec Understanding.
+  canonical_file:
+    path: agents.md
+    path_relative_to_schema: agents.md
+    description: >-
+      Cert Manager Operator agent roster and execution routing. Shipped inside the
+      schema package at openspec/schemas/openspec-agile-workflow/agents.md
+      (installed by install.sh from distribution repo root agents.md).
+    use_when: >-
+      target_repo URL contains cert-manager-operator (or fork thereof) and the
+      upstream repo has no AGENTS.md/agents.md; also when change inputs do not
+      override with a local copy.
   used_in_stages:
     - id: repo-understanding
       required: false
@@ -38,25 +50,28 @@ agents_md:
         otherwise use provisional agent IDs from constitution/tasks template.
     - id: implementation
       required: false
-      when: phase-by-phase code generation
+      when: task-by-task OAPE command orchestration within each phase
       effect: >-
-        Respect Assigned Agent routing and per-task payloads from tasks.md §4;
-        follow constitution.md conventions for every file mutation.
+        Route Assigned Agent values from tasks.md §3 to OAPE commands per
+        schema oape_routing — one task at a time. Compose design-bundle.md per
+        task. Manual agents use task payloads directly. User approval after every
+        task before advancing. See oape-ai-e2e/AGENTS.md for command flow.
   not_used_in_stages:
     - spec-understanding
   lookup_order:
+    - "openspec/changes/<change>/inputs/AGENTS.md"
+    - "openspec/changes/<change>/inputs/agents.md"
     - "{target_repo}/AGENTS.md"
     - "{target_repo}/agents.md"
-    - "openspec/changes/<change>/inputs/AGENTS.md"
+    - "{schema_root}/agents.md"
   when_missing: >-
-    Before starting repo-assessment, plan, or tasks — check the target repository
-    (from inputs/jira.yaml target_repo) for AGENTS.md or agents.md. If neither
-    exists and the user has not already supplied one under
-    openspec/changes/<change>/inputs/AGENTS.md, ask the user once to provide
-    AGENTS.md (paste content, repo path, or file in the change inputs folder).
-    Do not invent agent IDs. If the user declines or defers, proceed with
-    AgentRoutingMode PROVISIONAL and document that in constitution.md, plan.md,
-    and tasks.md.
+    Before starting repo-assessment, plan, or tasks — resolve agents.md using
+    lookup_order. The schema package ships agents.md at {schema_root}/agents.md
+    (installed by install.sh). Persist a copy to openspec/changes/<change>/inputs/AGENTS.md
+    when first resolved so downstream artifacts reference a stable path. If still
+    absent, ask the user once to provide AGENTS.md. Do not invent agent IDs. If
+    the user declines, proceed with AgentRoutingMode PROVISIONAL and document in
+    constitution.md, plan.md, and tasks.md.
 
 # ---------------------------------------------------------------------------
 # target_repo — upstream GitHub repo for assessment and planning
@@ -79,8 +94,8 @@ target_repo:
     Verify the repository is accessible (clone, fetch, or GitHub MCP) before
     writing repo-assessment.md.
   usage: >-
-    Reference only for planning and assessment. Implementation FILE OPERATIONS
-    apply to fork_repo_url (/opsx:apply), not target_repo, unless the user
+    Reference only for planning and assessment. Implementation OAPE commands and
+    edits apply to fork_repo_url (/opsx:apply), not target_repo, unless the user
     explicitly directs otherwise.
 
 # ---------------------------------------------------------------------------
@@ -106,7 +121,9 @@ stage_eval_gate:
   artifact_map: stage-gate/artifact-eval-map.yaml
   generation_templates: templates/
   eval_results: openspec/changes/<change>/eval-results/<artifact-id>.yaml
-  flow: generate_v1 → run_stage_evals → refine_artifact → user_approval
+  flow: >-
+    generate_v1 → run_stage_evals → refine_artifact → user_approval
+    → (reject → user_approval_feedback_gate → re_eval → user_approval)
   do_not_modify:
     - templates/
     - evals/refined-templates/
@@ -117,6 +134,155 @@ stage_eval_gate:
     - dependency_artifacts
     - change_inputs_jira_yaml
     - user_rejection_feedback
+
+# ---------------------------------------------------------------------------
+# user_approval_feedback_gate — revision loop when user rejects at approval
+# ---------------------------------------------------------------------------
+user_approval_feedback_gate:
+  description: >-
+    Feedback stage during user approval. When the user rejects an artifact with
+    feedback, capture the generation prompt that produced it, all prior approved
+    artifacts, and the user's feedback; update the prompt; regenerate and present
+    only the current artifact. On approve, mark done and unlock the next stage.
+    User feedback MUST NOT modify any previously approved artifact.
+  runs_after:
+    - stage_eval_gate
+  runs_during: user_approval
+  system_prompt: stage-gate/USER_FEEDBACK_PROMPT.md
+  prompt_snapshot: openspec/changes/<change>/prompts/<artifact-id>.yaml
+  feedback_log: openspec/changes/<change>/feedback/<artifact-id>.yaml
+  flow: >-
+    present_artifact → ask_approval →
+    (approve → lock_artifact → unlock_next → stop) |
+    (reject_with_feedback → feedback_stage → regenerate_current_artifact
+     → re_run_stage_eval_gate → ask_approval)
+  approval_prompt: >-
+    Approve this artifact and proceed to the next stage?
+    (Approve / Reject with feedback)
+  on_first_generation:
+    description: >-
+      After writing artifact v1 (before eval gate), snapshot the effective
+      generation prompt to prompts/<artifact-id>.yaml.
+    capture_from: openspec instructions --json
+    fields:
+      - artifact_id
+      - outputPath
+      - instruction
+      - template
+      - rules
+      - context
+      - dependencies
+      - generation_round: 1
+      - generated_at
+  on_reject:
+    steps:
+      - >-
+        Record user feedback verbatim in feedback/<artifact-id>.yaml
+        (append round: feedback_text, timestamp, artifact_version).
+      - >-
+        Load prompt snapshot from prompts/<artifact-id>.yaml. If missing,
+        reconstruct from openspec instructions --json for the artifact id.
+      - >-
+        Load dependency artifacts listed in instructions dependencies and schema
+        requires — these are READ-ONLY (see immutable_artifacts).
+      - >-
+        Load current artifact draft at outputPath (latest version, including any
+        eval-gate refinements).
+      - >-
+        Build a revision prompt (see prompt_update) that merges original prompt,
+        dependencies, current draft, eval results (if any), and user feedback.
+      - >-
+        Regenerate ONLY the current artifact at outputPath. For joint gates
+        (repo-assessment + constitution), regenerate both co-generated artifacts
+        in one feedback round — never upstream approved artifacts.
+      - >-
+        Append updated prompt snapshot to prompts/<artifact-id>.yaml
+        (increment generation_round; include feedback_applied summary).
+      - Re-run stage_eval_gate when the artifact has stage evals.
+      - Present refined artifact(s) and return to approval_prompt.
+    do_not:
+      - Modify, overwrite, or delete any previously approved artifact file
+      - Edit schema templates/ or evals/refined-templates/
+      - Create the next artifact in the workflow sequence
+      - Advance workflow stage until user approves
+  prompt_update:
+    description: >-
+      The revision prompt used to regenerate the current artifact after user
+      rejection. Extends the original generation prompt — does not replace schema
+      instructions.
+    context_bundle:
+      - original_generation_prompt
+      - current_artifact_draft
+      - dependency_artifacts_read_only
+      - eval_results_and_failed_assertions
+      - user_feedback_verbatim
+      - prior_feedback_rounds
+      - change_inputs_jira_yaml
+    append_sections:
+      - name: USER FEEDBACK
+        content: Verbatim rejection feedback from this round
+      - name: REVISION DIRECTIVES
+        content: >-
+          Address every point in USER FEEDBACK. Revise only the current artifact
+          (or co-generated pair). Preserve content that already satisfies eval
+          cases and does not conflict with feedback.
+      - name: IMMUTABLE INPUTS
+        content: >-
+          List every dependency artifact path with status done. These files are
+          frozen — read for context only; do not rewrite or contradict unless the
+          user explicitly requests reopening an earlier stage.
+    rules:
+      - Address every point in user feedback in the revised artifact
+      - Do not modify any artifact with status done in openspec status
+      - >-
+        If feedback requires changing an approved upstream artifact, stop and
+        tell the user which artifact must be reopened — do not silently edit it
+      - Overwrite only the current artifact outputPath (or joint co-generated paths)
+      - Do not invent facts not supported by immutable inputs or change inputs
+      - Re-run eval gate after regeneration when applicable
+  on_approve:
+    steps:
+      - Mark artifact status done per schema gate
+      - Lock artifact as immutable for all downstream generation and feedback
+      - Unlock next artifact(s) per requires dependency graph
+      - Stop — one artifact per /opsx-continue unless rejecting in same invocation
+  immutable_artifacts:
+    description: >-
+      All artifacts marked done before the current approval gate are frozen.
+      Feedback revision treats them as read-only context only.
+    resolution: >-
+      openspec status --change "<name>" --json → every artifact with
+      status "done". During feedback on artifact X, never write to those paths.
+    never_modify_during_feedback:
+      - Any artifact with status done except the artifact(s) currently under approval
+    joint_gate_exception: >-
+      repo-assessment and constitution are co-generated and share one approval gate.
+      Both may be revised together during feedback, but specs.md and all earlier
+      artifacts remain immutable.
+  applies_to:
+    gate_types:
+      - approval
+      - threshold
+      - per_task_approval
+    artifacts:
+      - validation
+      - specs
+      - repo-assessment
+      - constitution
+      - plan
+      - tasks
+      - implementation
+  per_task_implementation_variant:
+    description: >-
+      Implementation runs OAPE commands task-by-task. User approval is required
+      after every task before advancing to the next. On reject, append feedback
+      to design-bundle.md and re-run the current task only — upstream approved
+      artifacts and already-approved tasks remain immutable.
+    feedback_target: implementation/design-bundle.md
+    on_reject: >-
+      Append user feedback to REVISION FEEDBACK in design-bundle.md; re-run OAPE
+      commands for the current task only; do not mark the task complete, do not
+      advance to the next task, and do not edit approved upstream artifacts.
 
 # ---------------------------------------------------------------------------
 # fork_repo — user's fork for implementation and draft PR
@@ -134,20 +300,20 @@ fork_repo:
     - opsx-continue
   when_missing: >-
     At the start of the Implementation Stage (/opsx:apply), BEFORE any clone
-    activity or FILE OPERATIONS, read inputs/jira.yaml for fork_repo_url. If absent,
-    ask the user once: "Provide the URL of your forked repository (e.g.
+    activity or OAPE command execution, read inputs/jira.yaml for fork_repo_url.
+    If absent, ask the user once: "Provide the URL of your forked repository (e.g.
     https://github.com/<you>/cert-manager-operator)." Persist fork_repo_url to
     inputs/jira.yaml. Do not start code generation until the URL is recorded and
     the fork is cloned or verified accessible.
   working_copy: >-
-    Clone or reuse a local checkout of fork_repo_url. All FILE OPERATIONS apply
-    to this working copy. target_repo in inputs/jira.yaml remains the upstream
-    reference from repo-assessment; implementation writes only to the fork unless
-    the user explicitly directs otherwise.
+    Clone or reuse a local checkout of fork_repo_url. All OAPE commands and
+    implementation edits apply to this working copy. target_repo in inputs/jira.yaml
+    remains the upstream reference from repo-assessment; implementation writes only
+    to the fork unless the user explicitly directs otherwise.
   feature_branch:
     when: >-
       Immediately after fork_repo_url is recorded and the fork is cloned or
-      verified — BEFORE any FILE OPERATIONS or implementation commits.
+      verified — BEFORE any OAPE command or implementation commits.
     steps:
       - Checkout the fork's default branch (master or main) and pull latest
       - Create a feature branch from that default branch
@@ -163,7 +329,7 @@ fork_repo:
         to the user instead of inventing a second base branch
   draft_pr:
     when: >-
-      After Task Creation is complete, all implementation phases are user-approved,
+      After Task Creation is complete, all implementation tasks are user-approved,
       and closing artifacts (implementation-report.md, implementation-checklist.md)
       are written.
     steps:
@@ -177,6 +343,156 @@ fork_repo:
       Do not open PRs against upstream target_repo unless the user explicitly
       requests it. Use GitHub CLI (`gh pr create --draft`) or GitHub MCP.
       Include the PR URL in the final summary and implementation-report.md.
+
+# ---------------------------------------------------------------------------
+# oape_routing — OAPE command orchestration for /opsx:apply
+# ---------------------------------------------------------------------------
+oape_routing:
+  description: >-
+    Maps tasks.md Assigned Agent values to OAPE cursor commands. Implementation
+    runs task-by-task: compose a design bundle scoped to one task, invoke exactly
+    one allowed OAPE command for that task (see command_resolution), verify,
+    then request user approval before advancing.
+  reference: oape-ai-e2e/AGENTS.md
+  commands_dir: .cursor/commands
+  allowed_commands:
+    - api-generate
+    - api-generate-tests
+    - api-implement
+    - e2e-generate
+  do_not_invoke_during_implementation:
+    - predict-regressions
+    - review
+    - implement-review-fixes
+    - analyze-rfe
+    - init
+  command_resolution: >-
+    Resolve exactly ONE OAPE command per task — no other OAPE commands.
+    IF the task is an e2e task (see e2e_task): use e2e-generate.
+    ELIF Assigned Agent is API_Agent and task is verification-only: use api-generate-tests.
+    ELIF Assigned Agent is API_Agent: use api-generate.
+    ELIF Assigned Agent is OperatorController_Agent: use api-implement.
+    ELIF Assigned Agent is manual (ManifestsBindata, WebhookTLS, RBACSecurity,
+    OLMRelease, Docs): no OAPE command — implement task payload directly.
+    ELSE: halt and ask user which allowed command applies.
+  e2e_task:
+    description: >-
+      When any condition is true, the task is an e2e task and MUST use e2e-generate
+      (and no other OAPE command).
+    when_any:
+      - Assigned Agent (tasks.md §3) is Testing_Agent
+      - tasks.md §4 Acceptance criteria references make test-e2e or test-e2e-wait-for-stable-state
+      - tasks.md §4 Target file(s) under test/ (e2e, ginkgo, or *_test.go integration/e2e paths)
+      - Task Title or §4 Objective contains "e2e" or "end-to-end" (case-insensitive)
+    command: e2e-generate
+    args: "<fork-default-branch>"
+  design_bundle:
+    path: openspec/changes/<change>/implementation/design-bundle.md
+    template: templates/design-bundle.md
+    composed_from:
+      - constitution.md
+      - specs.md
+      - plan.md
+      - repo-assessment.md
+      - tasks.md
+    scope: >-
+      Include full upstream artifacts plus tasks.md §4 payload ONLY for the
+      current Task ID (not the whole phase). Add REVISION FEEDBACK when
+      re-running after task rejection.
+    invoke_as: >-
+      Pass as --design-doc <absolute-path-to-design-bundle.md> to
+      oape:api-generate and oape:api-implement (local file supported).
+  task_execution:
+    unit: task
+    derive_from: tasks.md §3 Task Execution Manifest (Task ID, Assigned Agent, Phase, Depends On)
+    order_by: tasks.md §2 Linear Execution Order; respect §1 DAG — do not start a task until Depends On are complete
+    phase_grouping: tasks.md §3 Phase column (group T<n>_* by numeric prefix)
+    task_approval_gate: >-
+      After each task is implemented and verified, present a task summary and
+      request user approval. Do not start the next task until the current task
+      is approved. On approval, mark the task `- [x]` in tasks.md and append
+      to implementation-phase-log.md. When the approved task is the last in a
+      phase, the next task (first in the following phase) starts only after
+      that approval — no separate phase-level gate.
+    skip: tasks already marked `- [x]` in tasks.md
+    cwd: fork working copy (see fork_repo.working_copy)
+  task_loop:
+    for_each_pending_task:
+      order_by: tasks.md §2 Linear Execution Order; respect §1 DAG and phase grouping
+      steps:
+        - Compose design-bundle.md scoped to current Task ID only
+        - Resolve ONE OAPE command per command_resolution (allowed_commands only)
+        - Invoke that command in fork cwd (read .cursor/commands/<command_file>)
+        - Execute manual-agent work when Assigned Agent is manual (no OAPE command)
+        - Verify per task Acceptance criteria; record pass/fail
+        - Present task summary (see implementation artifact TASK SUMMARY format)
+        - Request user approval (task_approval_gate)
+        - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
+        - On approve: mark task `- [x]` in tasks.md; append implementation-phase-log.md
+        - Advance to next pending task in §2 order
+  task_approval_prompt: >-
+    Approve task {task_id} ({task_title}) and proceed to the next task?
+    (Approve / Reject with feedback)
+  command_order:
+    - id: api-generate
+      command: /oape:api-generate
+      command_file: api-generate.md
+      when: >-
+        NOT an e2e task AND current task Assigned Agent is API_Agent AND task is
+        NOT verification-only
+      args: "--design-doc <design-bundle-path>"
+      follow_up: make update && make verify
+    - id: api-generate-tests
+      command: /oape:api-generate-tests
+      command_file: api-generate-tests.md
+      when: >-
+        NOT an e2e task AND current task Assigned Agent is API_Agent AND task is
+        verification-only
+      args: "<api-path-from-task-target-files>"
+      path_resolution: >-
+        Derive from tasks.md §4 Target file(s) for the current task — use api/
+        directory or *_types.go parent directory. Fall back to repo-assessment.md
+        API paths.
+    - id: api-implement
+      command: /oape:api-implement
+      command_file: api-implement.md
+      when: >-
+        NOT an e2e task AND current task Assigned Agent is OperatorController_Agent
+      args: "--design-doc <design-bundle-path>"
+      follow_up: make generate && make manifests && make build && make test
+    - id: e2e-generate
+      command: /oape:e2e-generate
+      command_file: e2e-generate.md
+      when: current task is an e2e task (see e2e_task)
+      args: "<fork-default-branch>"
+  agent_routing:
+    API_Agent:
+      verification_only: api-generate-tests
+      implementation: api-generate
+    OperatorController_Agent: api-implement
+    Testing_Agent: e2e-generate
+    e2e_task: e2e-generate
+    ManifestsBindata_Agent: manual
+    WebhookTLS_Agent: manual
+    RBACSecurity_Agent: manual
+    OLMRelease_Agent: manual
+    Docs_Agent: manual
+  manual_agents: >-
+    Agents marked manual have no OAPE command. For each manual task, execute the
+    task payload from the design bundle with minimal scoped edits in the fork
+    working copy. Follow constitution.md and repo-assessment patterns. Log deviations.
+  verification: >-
+    After each task's OAPE commands or manual implementation, run Makefile targets
+    named in that task's Acceptance criteria and plan.md verification hooks when
+    applicable. Record pass/fail in the task summary and phase log.
+  prerequisites:
+    - gh (authenticated)
+    - go
+    - git
+    - make
+    - >-
+      OAPE command files in .cursor/commands/ — api-generate.md, api-generate-tests.md,
+      api-implement.md, e2e-generate.md only
 
 # ---------------------------------------------------------------------------
 # Workflow stages (source of truth)
@@ -193,6 +509,7 @@ workflow:
       - validation.json
       - specs.md
     gate: user_approval
+    feedback_gate: user_approval_feedback_gate
 
   - id: repo-understanding
     name: Repo Understanding Stage
@@ -209,6 +526,7 @@ workflow:
       - repo-assessment.md
       - constitution.md
     gate: user_approval
+    feedback_gate: user_approval_feedback_gate
 
   - id: planning
     name: Planning Stage
@@ -224,6 +542,7 @@ workflow:
     outputs:
       - plan.md
     gate: user_approval
+    feedback_gate: user_approval_feedback_gate
 
   - id: task-creation
     name: Task Creation Stage
@@ -240,18 +559,19 @@ workflow:
     outputs:
       - tasks.md
     gate: user_approval
+    feedback_gate: user_approval_feedback_gate
 
   - id: implementation
     name: Implementation Stage
     description: >-
       Final pipeline stage. Begins after Task Creation (tasks.md) is approved.
       The agent asks the user for their forked repository URL, clones it, and
-      drives incremental code generation into that fork using tasks.md payloads.
-      Structured FILE OPERATIONS (CREATE / EDIT / DELETE) are applied phase-by-phase
-      with verification tests and user approval after each phase. When all phases
-      are complete, changes are committed, pushed to the fork, and opened as a
-      draft PR on the fork. Closes with implementation-report.md,
-      implementation-checklist.md, and optional adrs.md.
+      drives OAPE command orchestration task-by-task using a composed design
+      bundle (tasks.md + upstream artifacts) scoped to one task at a time. User
+      approval is required after every task before advancing to the next. When all
+      tasks are complete, changes are committed, pushed to the fork, and opened as
+      a draft PR. Closes with implementation-report.md, implementation-checklist.md,
+      and optional adrs.md.
     inputs:
       - tasks.md (required — Task Creation complete)
       - constitution.md (required)
@@ -266,7 +586,8 @@ workflow:
       - implementation-report.md
       - implementation-checklist.md
       - adrs.md (optional — only when deviations are logged)
-    gate: user_approval_per_phase
+    gate: user_approval_per_task
+    feedback_gate: user_approval_feedback_gate
 
 # ---------------------------------------------------------------------------
 # Artifacts (ordered by workflow)
@@ -329,12 +650,15 @@ artifacts:
       ## APPROVAL GATE
       After writing specs.md:
       1. SUMMARIZE: stories, requirements, success criteria, assumptions.
-      2. ASK: "Do you approve? (Approve / Reject with feedback)"
-      3. ON REJECT: Revise every point raised. Rewrite. Ask again.
-      4. ON APPROVE: Unlock Repo Understanding Stage.
+      2. ASK: see schema user_approval_feedback_gate.approval_prompt
+      3. ON REJECT: Run user_approval_feedback_gate (see schema) — update generation
+         prompt with feedback; regenerate specs.md only; do not modify validation.json
+         or any prior approved artifact. Re-ask approval.
+      4. ON APPROVE: Lock specs.md as immutable; unlock Repo Understanding Stage.
     gate:
       type: approval
       evaluated_by: user
+      feedback_gate: user_approval_feedback_gate
     requires:
       - validation
 
@@ -374,12 +698,15 @@ artifacts:
          evals/repo-assessment_eval.yaml; refine artifact
          if needed; write eval-results/repo-assessment.yaml.
       1. SUMMARIZE: target files, reusable assets, guardrails, top risks, eval score.
-      2. ASK: "Do you approve repo-assessment.md and constitution.md?"
-      3. ON REJECT: Revise both artifacts. Ask again.
-      4. ON APPROVE: Unlock Planning Stage.
+      2. ASK: see schema user_approval_feedback_gate.approval_prompt (joint with constitution).
+      3. ON REJECT: Run user_approval_feedback_gate — update prompt with feedback;
+         regenerate repo-assessment.md and constitution.md only; specs.md and all
+         earlier artifacts remain immutable. Re-run eval gate for both; re-ask approval.
+      4. ON APPROVE: Lock both artifacts as immutable; unlock Planning Stage.
     gate:
       type: approval
       evaluated_by: user
+      feedback_gate: user_approval_feedback_gate
       joint_with:
         - constitution
     requires:
@@ -416,6 +743,7 @@ artifacts:
     gate:
       type: approval
       evaluated_by: user
+      feedback_gate: user_approval_feedback_gate
       joint_with:
         - repo-assessment
     requires:
@@ -462,12 +790,15 @@ artifacts:
          evals/plan_eval.yaml; refine artifact if cases fail;
          write eval-results/plan.yaml. Do not edit schema templates.
       1. SUMMARIZE: phase count (### Phase headings), top risks, open questions, eval score.
-      2. ASK: "Do you approve plan.md? (Approve / Reject with feedback)"
-      3. ON REJECT: Inject revision_feedback and regenerate full plan.md. Ask again.
-      4. ON APPROVE: Unlock Task Creation Stage.
+      2. ASK: see schema user_approval_feedback_gate.approval_prompt
+      3. ON REJECT: Run user_approval_feedback_gate — update generation prompt with
+         feedback; regenerate plan.md only; approved upstream artifacts are immutable.
+         Re-run eval gate; re-ask approval.
+      4. ON APPROVE: Lock plan.md as immutable; unlock Task Creation Stage.
     gate:
       type: approval
       evaluated_by: user
+      feedback_gate: user_approval_feedback_gate
     requires:
       - specs
       - repo-assessment
@@ -572,12 +903,16 @@ artifacts:
          agent distribution, manifest preview (first 5 rows), eval score.
       2. Optional per-phase gates when phase_feedback is enabled (review each phase's
          manifest rows and payload preview before continuing).
-      3. ASK: "Do you approve tasks.md? (Approve / Reject with feedback)"
-      4. ON REJECT: Regenerate (full multipass restart or phase-level revision per impact).
-      5. ON APPROVE: Unlock Implementation Stage.
+      3. ASK: see schema user_approval_feedback_gate.approval_prompt
+      4. ON REJECT: Run user_approval_feedback_gate — update generation prompt with
+         feedback; regenerate tasks.md only (multipass or phase-level per impact
+         assessment); approved upstream artifacts remain immutable. Re-run eval gate;
+         re-ask approval.
+      5. ON APPROVE: Lock tasks.md as immutable; unlock Implementation Stage.
     gate:
       type: approval
       evaluated_by: user
+      feedback_gate: user_approval_feedback_gate
     generation:
       mode: multipass
       modes_supported:
@@ -626,11 +961,13 @@ artifacts:
     generates: implementation-phase-log.md
     template: implementation.md
     description: >-
-      Code Generation — phase-by-phase execution into target repository using
-      approved tasks.md payloads and upstream artifacts.
+      OAPE orchestration — task-by-task execution into the fork using composed
+      design-bundle.md (tasks.md + upstream artifacts) and /oape:* cursor commands.
+      User approval after every task before advancing.
     outputs:
       - code changes in user's fork
       - draft pull request on fork_repo_url
+      - implementation/design-bundle.md (per task, regenerated)
       - implementation-report.md
       - implementation-checklist.md
       - adrs.md (conditional)
@@ -647,208 +984,122 @@ artifacts:
         - AGENTS.md
         - agents.md
     instruction: |
-      You are the Code Generation Agent (Robotic Engineer Role).
+      You are the OAPE Implementation Orchestrator.
 
       ## Mission
-      Consume approved task payloads and generate machine-executable code into
-      the user's forked repository incrementally, one plan phase at a time.
-      After all phases are approved, push the changes and open a draft PR on
-      the fork. This stage produces code — it is the final pipeline stage.
+      Execute approved tasks.md **task-by-task** in §2 Linear Execution Order. For
+      each task, compose a design bundle scoped to that Task ID, invoke applicable
+      OAPE cursor commands (see schema oape_routing and oape-ai-e2e/AGENTS.md),
+      verify, and **request user approval before advancing to the next task**.
+      Work in the user's fork working copy. Push and open draft PR when all tasks
+      are approved and complete.
 
       ## Prerequisites
-      Before starting, confirm ALL of the following exist in
-      openspec/changes/<change>/:
-      - tasks.md (approved — Task Creation complete)
-      - constitution.md (approved)
-      - specs.md (approved)
-      - plan.md (approved)
+      Confirm in openspec/changes/<change>/:
+      - tasks.md, constitution.md, specs.md, plan.md (approved)
+      - OAPE commands in .cursor/commands/ (api-generate.md, api-implement.md, etc.)
+      - gh, go, git, make available; gh authenticated
 
-      ## Fork setup (REQUIRED — before any FILE OPERATIONS)
+      ## Fork setup (REQUIRED — before any OAPE command)
       1. Read inputs/jira.yaml for fork_repo_url (see schema fork_repo).
-      2. If fork_repo_url is absent, ASK the user once:
-         "Provide the URL of your forked repository (e.g.
-         https://github.com/<you>/cert-manager-operator)."
-      3. Persist fork_repo_url to inputs/jira.yaml. Do not proceed without it.
-      4. Clone fork_repo_url locally if not already present, or verify the
-         existing checkout points at the user's fork and is on a clean base.
-      5. Record jira_key from inputs/jira.yaml for branch naming and commit messages.
-      6. target_repo in inputs/jira.yaml is the upstream reference from
-         repo-assessment — use it for context only. All FILE OPERATIONS apply
-         to the fork working copy.
-      7. Create the feature branch on the fork working copy (see schema
-         fork_repo.feature_branch). Remain on this branch for all implementation
-         work. Do not commit to master/main on the fork.
+      2. If fork_repo_url is absent, ASK once for the fork URL; persist to jira.yaml.
+      3. Clone or verify fork checkout; record jira_key for branch naming.
+      4. Create feature branch (see fork_repo.feature_branch). All work on this branch.
+      5. Set cwd to fork root for every OAPE command.
 
-      repo-assessment.md is optional but strongly recommended for target-file
-      accuracy. Respect AgentRoutingMode and Assigned Agent values from
-      tasks.md §3 (see schema agents_md).
+      ## Task and phase parsing
+      From tasks.md:
+      1. Group tasks by §3 Phase column (T<n>_* by numeric prefix).
+      2. Within each phase, order tasks by §2 Linear Execution Order.
+      3. Respect §1 DAG Depends On — do not start a task until dependencies complete.
+      4. Skip tasks already marked `- [x]`.
+      5. Skip phases whose tasks are all complete.
+      6. If §4 absent, treat backlog as single "All Tasks" phase.
 
-      ## Input precedence (conflicts)
-      1. constitution.md (non-negotiable guardrails)
-      2. specs.md (requirements and acceptance criteria)
-      3. plan.md (architectural context and verification hooks)
-      4. repo-assessment.md (target files and evidence)
-      5. tasks.md §4 payloads for the current phase
-      6. tasks.md §5 orchestration notes (retry boundaries, merge hotspots)
+      ## Design bundle (each task)
+      1. Create openspec/changes/<change>/implementation/ if missing.
+      2. Write implementation/design-bundle.md using templates/design-bundle.md.
+      3. Include constitution, specs, plan, repo-assessment excerpts + §4 payload
+         for ONLY the **current Task ID** (not the whole phase).
+      4. Derive API specification and Reconciliation workflow sections for OAPE
+         from the current task payload when applicable.
+      5. On task rejection, add REVISION FEEDBACK and regenerate bundle when
+         re-running the current task.
 
-      ## Phase parsing
-      Derive implementation phases from tasks.md:
-      1. Read phase names from §3 Task Execution Manifest (Phase column on rows
-         like T1_1, T2_1, …).
-      2. Read task payloads from §4 (### Task T<n>_<m>: … blocks).
-      3. Group §4 payloads by task ID phase prefix: T1_* → Phase 1, T2_* → Phase 2, etc.
-      4. Order phases by numeric prefix. Respect §1 DAG and §2 Linear Execution
-         Order — do not start a phase until all Depends On phases are complete
-         and user-approved.
-      5. If §4 is absent, treat the backlog as a single "All Tasks" phase.
+      ## Task execution loop
+      FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
 
-      When the user requests a single phase only, filter to phases whose name
-      partially matches the request (e.g. "Phase 2", "Controller").
+      1. **Compose** design-bundle.md scoped to this Task ID.
+      2. **Resolve command** — exactly ONE from oape_routing.command_resolution /
+         allowed_commands. IF e2e task → e2e-generate. ELIF API_Agent verification-only
+         → api-generate-tests. ELIF API_Agent → api-generate. ELIF OperatorController_Agent
+         → api-implement. Do not invoke predict-regressions, review, or any other OAPE command.
+      3. **Announce**: Phase, Task ID, Task Title, command.
+      4. **Invoke**: Read .cursor/commands/<command_file> and execute its workflow
+         in the fork cwd. Pass --design-doc with absolute path to design-bundle.md
+         for api-generate and api-implement only.
+      5. **Follow-up**: Run follow_up make targets when defined (make update, etc.).
+      6. **Manual agents**: For ManifestsBindata_Agent, OLMRelease_Agent,
+         RBACSecurity_Agent, WebhookTLS_Agent, Docs_Agent — implement this task's
+         payload directly in fork with minimal scoped edits; log deviations.
+      7. **Verify**: Run Acceptance criteria for this task; record pass/fail.
+      8. **Present** task summary (format below).
+      9. **ASK**: schema oape_routing.task_approval_prompt (substitute task_id, task_title).
+      10. **ON REJECT**: Run user_approval_feedback_gate per_task_implementation_variant —
+          append feedback to design-bundle.md REVISION FEEDBACK; re-run **this task
+          only**; do not advance. Repeat from step 1 for this task.
+      11. **ON APPROVE**: mark this task `- [x]` in tasks.md; append
+          implementation-phase-log.md; advance to next task in §2 order.
 
-      ## Per-phase prompt composition
-      For each phase, load into context:
-      - constitution.md (non-negotiable rules)
-      - specs.md (requirements — trace acceptance criteria)
-      - plan.md (architectural context)
-      - repo-assessment.md when available (target files and evidence)
-      - PHASE name and all §4 payloads for tasks in that phase
-      - REVISION FEEDBACK block when re-generating after user rejection
+      Allowed OAPE commands (one per task):
+      - **e2e task** → `/oape:e2e-generate <fork-default-branch>`
+      - **API_Agent** (implementation) → `/oape:api-generate --design-doc <bundle>`
+      - **API_Agent** (verification-only) → `/oape:api-generate-tests <api-path>`
+      - **OperatorController_Agent** → `/oape:api-implement --design-doc <bundle>`
 
-      ## Required response format (each phase)
-      Structure every phase response with these sections IN ORDER:
+      api-generate-tests path: derive from current task §4 Target file(s) or repo-assessment.
+      Base branch for e2e-generate: fork default (main/master).
 
-      ### ## PHASE SUMMARY
-      Brief description of what this phase implements.
+      ## Task response format (presented after each task, before approval)
+      ### ## TASK SUMMARY
+      Task ID, title, phase, Assigned Agent, OAPE commands run, files touched.
 
-      ### ## FILE OPERATIONS
-      Express every file mutation using one of these formats — do NOT output raw
-      code outside these blocks:
+      ### ## OAPE COMMANDS EXECUTED
+      | Command | Args | Outcome |
+      |---------|------|---------|
 
-      **CREATE** — new file (creates parent directories as needed):
-      ```
-      ### CREATE: relative/path/to/file
-      ```<language>
-      <full file content>
-      ```
-      ```
-
-      **EDIT** — locate exact existing text and replace (first occurrence):
-      ```
-      ### EDIT: relative/path/to/file
-      #### FIND
-      ```<language>
-      <exact existing code to locate>
-      ```
-      #### REPLACE
-      ```<language>
-      <replacement code>
-      ```
-      ```
-      Multiple EDIT blocks may target the same file.
-
-      **DELETE** — remove a file:
-      ```
-      ### DELETE: relative/path/to/file
-      ```
+      ### ## TEST RESULTS
+      | Test | Result | Notes |
 
       ### ## DEVIATIONS (optional)
-      Log blockers that prevent strict adherence to plan.md or task payloads.
-      Format: `- **Task ID**: <description and rationale>`
-      Omit this section entirely when there are no deviations.
-
-      ## Applying FILE OPERATIONS to the fork working copy
-      - CREATE: write the file; create parent directories as needed.
-      - EDIT: replace the first exact FIND match. If FIND is not found, report
-        the skip — do not silently ignore.
-      - DELETE: remove the file if it exists.
-      - Paths are relative to the fork working copy root.
-
-      ## Core rules
-      1. **Tool usage**: Every mutation MUST use the FILE OPERATIONS format above.
-      2. **No scope creep**: Do not invent requirements. Missing utilities → DEVIATIONS.
-      3. **Validation**: Generated code MUST satisfy each task's Acceptance Criteria.
-      4. **TDD compliance**: When a payload says "write test before implementation",
-         emit the test CREATE before the implementation CREATE.
-      5. **Strict constraints**: Follow constitution.md exactly. Match existing repo
-         patterns from repo-assessment.md. Respect per-task Non-goals and forbidden edits.
-      6. **Orchestration**: Consult tasks.md §5 for retry boundaries and merge conflict
-         hotspots before editing generated or shared files.
-      7. **Dependencies**: Never start a task whose Depends On tasks are incomplete.
-         Respect Parallel OK from §3 — parallelize only when file sets are disjoint
-         AND Parallel OK is Yes.
-
-      ## Verification (each phase)
-      After applying FILE OPERATIONS for a phase:
-      - Run tests named in that phase's task Acceptance Criteria.
-      - Run test suites referenced in constitution.md or plan.md verification hooks
-        when applicable to the files touched.
-      - Include pass/fail results in the phase summary.
-
-      ## Phase loop
-      FOR EACH PHASE (in dependency order):
-
-      1. **Generate**: Produce PHASE SUMMARY + FILE OPERATIONS + optional DEVIATIONS.
-      2. **Validate format**: If no FILE OPERATIONS are present, retry up to 3 times
-         with explicit format correction guidance. After 3 failures, halt the phase
-         and report the error — do not advance.
-      3. **Apply**: Execute all FILE OPERATIONS against the fork working copy.
-      4. **Verify**: Run applicable tests; capture results.
-      5. **Summarize** for the approval gate:
-         - Phase name
-         - Files touched (list paths)
-         - Test results (PASSED / FAILED / SKIPPED with brief detail)
-         - Deviations logged (if any)
-      6. **Gate**: ASK — "Approve this phase? (Approve / Reject with feedback)"
-      7. **ON REJECT**: Incorporate feedback into REVISION FEEDBACK; re-generate the
-         full FILE OPERATIONS for this phase; re-apply. Repeat until approved.
-         There is no iteration limit on rejection cycles.
-      8. **ON APPROVE**:
-         - Mark completed task checkboxes in tasks.md (`- [ ]` → `- [x]`) when present.
-         - Append phase to the phase log (name, touched files, test outcome, deviations).
-         - Advance to the next phase.
+      `- **Task ID**: <description>` — omit when none.
 
       ## Error handling
-      - **fork_repo_url missing**: Halt; ask user for fork URL (see Fork setup).
-      - **fork not cloneable**: Halt; ask user to verify URL and GitHub access.
-      - **EDIT FIND not found**: Report which file and block failed; offer to revise
-        the FIND block or skip with user confirmation.
-      - **Task failure / blocker**: Halt, report context, suggest a fix, wait for
-        user input before continuing.
-      - Never silently skip a phase or gate.
+      - fork_repo_url missing → halt, ask user.
+      - OAPE precheck failure → report, suggest fix, wait for user.
+      - Test failure on a task → report; do not advance to next task without user decision.
+      - Never skip task approval gate.
+      - Invoke exactly one allowed OAPE command per task; never predict-regressions,
+        review, or any command outside allowed_commands.
 
-      ## Post-loop (all phases approved)
-      1. Write implementation-report.md and implementation-checklist.md to the change
-         directory (see co-generated artifact instructions below).
-      2. Write adrs.md ONLY if any phase logged a DEVIATIONS section.
-      3. **Push and draft PR** (see schema fork_repo.draft_pr):
-         a. Confirm all commits are on the feature branch created at fork setup
-            (see fork_repo.feature_branch). If not, move commits onto that branch
-            before pushing — do not create ad-hoc baseline branches.
-         b. Stage and commit all changes with message referencing jira_key
-            (e.g. "CM-830: implement trust-manager operator integration")
-         c. Push the feature branch to fork_repo_url
-         d. Open a **draft** pull request on fork_repo_url
-            (head = feature branch, base = fork default branch)
-            using `gh pr create --draft` or GitHub MCP
-         e. Record the draft PR URL for the final summary and report
-      4. Present final summary to the user:
-         - Phases completed vs planned
-         - Total files changed (cross-reference Target file(s) from §4 payloads)
-         - Test results summary
-         - Deviation count and adrs.md path (if written)
-         - Report artifact paths
-         - **Draft PR URL** on the user's fork
-         - Overall workflow quality assessment
+      ## Post-loop (all tasks approved)
+      1. Write implementation-report.md and implementation-checklist.md.
+      2. Write adrs.md ONLY if any phase logged DEVIATIONS.
+      3. Push and draft PR (see schema fork_repo.draft_pr).
+      4. Final summary: phases, tasks, files, tests, deviations, draft PR URL.
     gate:
-      type: per_phase_approval
+      type: per_task_approval
       evaluated_by: user
-      prompt: "Approve this phase? (Approve / Reject with feedback)"
+      feedback_gate: user_approval_feedback_gate
+      prompt: see schema oape_routing.task_approval_prompt
       on_reject: >-
-        Re-generate the full FILE OPERATIONS for the current phase incorporating
-        user feedback; re-apply to the fork working copy. Repeat until approved.
-      on_invalid_format: >-
-        Retry up to 3 times when FILE OPERATIONS are missing or malformed; then
-        halt the phase and report the error.
+        Run user_approval_feedback_gate per_task_implementation_variant: append
+        user feedback to design-bundle.md REVISION FEEDBACK; re-run OAPE commands
+        for the current task only; do not mark the task complete, do not advance
+        to the next task, and do not modify approved upstream artifacts.
+      on_command_failure: >-
+        Report OAPE precheck or execution failure; do not advance until resolved
+        or user directs otherwise.
     requires:
       - tasks
 
@@ -861,21 +1112,21 @@ artifacts:
     format: markdown
     description: >-
       Post-execution summary written at the end of the Implementation Stage after
-      all phases are user-approved.
+      all tasks are user-approved.
     instruction: |
-      Co-generate at the end of the Implementation Stage (after all phases approved).
+      Co-generate at the end of the Implementation Stage (after all tasks approved).
 
       ## Sections (required)
       - **Summary** — one paragraph overview
-      - **Phases Completed** — table: Phase | Files Changed | Tests | Deviations
+      - **Phases Completed** — table: Phase | Tasks | OAPE Commands | Files Changed | Tests | Deviations
       - **All Files Changed** — grouped by phase
       - **Test Results Summary**
       - **Deviations / ADRs** — if any (otherwise state "None")
       - **Draft Pull Request** — fork_repo_url, branch name, and PR URL
 
-      Source data from the phase log: phase name, touched files, test outcome,
-      and DEVIATIONS text from each approved phase. Include draft PR details
-      from the post-loop push step.
+      Source data from the phase log: phase name, tasks executed in order, touched
+      files, test outcome, and DEVIATIONS text from each approved phase. Include
+      draft PR details from the post-loop push step.
     gate:
       type: informational
       evaluated_by: agent
@@ -953,18 +1204,26 @@ apply:
   fork_repo: "{fork_repo_url from inputs/jira.yaml — ask user at stage start if missing}"
   upstream_repo: "{target_repo from inputs/jira.yaml — reference only}"
   tracks: tasks.md
+  oape_routing: true
   instruction: |
-    Execute the Implementation Stage. Follow the `implementation` artifact
-    instruction in this schema exactly — it is the authoritative workflow.
+    Execute the Implementation Stage via OAPE orchestration. Follow the
+    `implementation` artifact instruction and schema `oape_routing` exactly.
 
-    Entry: /opsx:apply on a change where tasks.md (Task Creation) and all
-    upstream artifacts are approved.
+    Entry: /opsx:apply on a change where tasks.md and upstream artifacts are approved.
 
-    FIRST STEP: Ask for fork_repo_url if not in inputs/jira.yaml (see schema
-    fork_repo). Clone the fork, create a feature branch immediately (see
-    fork_repo.feature_branch), implement on that branch only; after all phases
-    are approved, push and open a draft PR from the feature branch to the fork's
-    default branch (master or main).
+    FIRST STEP: Ask for fork_repo_url if not in inputs/jira.yaml. Clone fork,
+    create feature branch, set cwd to fork root.
 
-    Do not skip phases, gates, fork setup, or format validation. Do not advance
-    past a rejected phase without user-approved revision.
+    FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
+      1. Compose implementation/design-bundle.md scoped to current Task ID only.
+      2. Resolve ONE OAPE command per oape_routing.command_resolution (allowed only:
+         api-generate, api-generate-tests, api-implement, e2e-generate if e2e task).
+      3. Execute manual-agent work for this task when assigned (no OAPE command).
+      4. Verify per task Acceptance criteria.
+      5. Present task summary; ask user approval (oape_routing.task_approval_prompt).
+      6. On approve: mark task `- [x]`, append implementation-phase-log.md, next task.
+      7. On reject: REVISION FEEDBACK in design bundle; re-run current task only.
+
+    Do not skip tasks or task approval gates. Invoke exactly one allowed OAPE command
+    per task. Do not use predict-regressions, review, or any other OAPE command.
+    Do not advance to the next task until the current task is approved.

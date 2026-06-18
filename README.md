@@ -53,10 +53,11 @@ Restart Cursor after install.
 | Source (this repo) | Target (your project) |
 |--------------------|------------------------|
 | `schemas/openspec-agile-workflow/` | `openspec/schemas/openspec-agile-workflow/` |
+| `agents.md` | `openspec/schemas/openspec-agile-workflow/agents.md` |
 | `config.yaml.example` | `openspec/config.yaml` |
-| `tooling/cursor/commands/` | `.cursor/commands/` |
+| `tooling/cursor/commands/` | `.cursor/commands/` (all command files) |
 | `tooling/cursor/skills/` | `.cursor/skills/` |
-| `evals/` | `evals/` |
+| `evals/` | `evals/` (optional `/eval-loop`) |
 
 ## Eval pipeline (`/eval-loop`)
 

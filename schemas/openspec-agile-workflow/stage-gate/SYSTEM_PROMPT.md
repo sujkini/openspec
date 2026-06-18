@@ -131,7 +131,7 @@ Present to user:
 > **(Approve / Reject with feedback)**
 
 - **Approve** → mark artifact done per schema gate; STOP (one artifact per `/opsx-continue`)
-- **Reject with feedback** → run Step 3 again with user feedback in context bundle; re-present Step 4; do not advance
+- **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): update generation prompt with feedback, regenerate **current artifact only**, re-run eval gate if applicable, re-present this step; do not advance; do not modify previously approved artifacts
 
 Do **not** create the next artifact in the same invocation.
 

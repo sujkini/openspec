@@ -6,14 +6,22 @@
 **Branch**: [FEATURE_BRANCH]
 **Started**: [DATE]
 
-Append one section per approved phase during `/opsx:apply`. Code changes go to the fork working copy — not this file.
+Append one section per **approved task** during `/opsx:apply`. OAPE commands run
+task-by-task; code changes go to the fork working copy.
 
 ---
 
-## Phase: [PHASE_NAME]
+## Task: [TASK_ID] — [TASK_TITLE]
 
+**Phase**: [PHASE_NAME]
 **Status**: [Approved | In Progress | Rejected]
-**Tasks**: [T1_1, T1_2, …]
+**Agent**: [ASSIGNED_AGENT]
+
+### OAPE Commands Executed
+
+| Command | Args | Outcome |
+|---------|------|---------|
+| /oape:api-generate | --design-doc …/design-bundle.md | Success |
 
 ### Files Touched
 
@@ -23,16 +31,17 @@ Append one section per approved phase during `/opsx:apply`. Code changes go to t
 
 | Test | Result | Notes |
 |------|--------|-------|
-| [test name] | PASSED / FAILED / SKIPPED | [brief detail] |
+| make test | PASSED | |
 
 ### Deviations
 
-- **Task ID**: [description and rationale — omit section when none]
+- [description and rationale — omit section when none]
 
 ---
 
 ## Phase Log Notes
 
-- Phases execute in dependency order from tasks.md §1–§2.
-- Each phase requires user approval before advancing.
-- On reject: re-generate FILE OPERATIONS, re-apply, repeat until approved.
+- Tasks execute in §2 Linear Execution Order; respect §1 DAG.
+- Design bundle: `implementation/design-bundle.md` (regenerated per task, scoped to one Task ID).
+- **User approval after every task** before advancing to the next.
+- On reject: update REVISION FEEDBACK in design bundle; re-run the current task only.
