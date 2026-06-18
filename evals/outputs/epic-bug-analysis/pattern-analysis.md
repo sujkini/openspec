@@ -1,66 +1,75 @@
-# Pattern Analysis — Network Policy hardening (CM-802 / CM-525)
+# Pattern Analysis — Istio CSR integration (CM-463 / OCPSTRAT-1974)
 
-**Round:** 2 | **Feature:** Network Policy hardening | **Baseline:** Round 1 (Istio CSR)
+**Round:** 3 | **Feature:** Istio CSR integration | **Baseline:** Rounds 1–2 (Istio CSR + Network Policy)
 
-## Baseline cross-check (round 1 evals)
+## Baseline cross-check (round 1 evals — same feature, round 1)
 
-| Round 1 eval | Would catch NP bugs? |
-|--------------|---------------------|
-| eval-r001-impl-001 (unified manager) | Partial — NP uses library-go static controller + separate runtime controller |
-| eval-r001-tasks-001 (verify pairing) | **Yes** — if extended to NP tamper/delete scenarios |
-| eval-r001-plan-002 (OLM upgrade) | No |
-| eval-r001-const-002 (unified manager) | No — different controller split |
+| Round 1 eval | Would catch bug? | Bug |
+|--------------|------------------|-----|
+| eval-r001-const-002, eval-r001-impl-001 (unified manager) | **Yes** | CM-735 |
+| eval-r001-tasks-001, eval-r001-impl-002 (Ready + e2e) | **Yes** | CM-546 |
+| eval-r001-plan-002 (OLM upgrade) | **Yes** | CM-770 |
+| eval-r001-plan-003 (version skew matrix) | **Yes** | CM-521 |
+| eval-r001-tasks-003 (docs placeholders) | **Yes** | OCPBUGS-57841 |
 
-**Conclusion:** Round 1 evals insufficient for network policy reconcile/watch patterns → **new_pattern** for PAT-009 through PAT-012.
+**Conclusion:** Round 1 artifact evals cover all five bugs at the workflow level. Round 3 gap is **code-generation evals** (empty after rounds 1–2) — retrospective patterns were not enforced at `/opsx-apply` per-task gate.
 
 ## 1. Requirement → ARD layout
 
-EP ([cert-manager-network-policies.md](https://github.com/openshift/enhancements/blob/master/enhancements/cert-manager/cert-manager-network-policies.md)):
+EP ([istio-csr-controller.md](https://github.com/openshift/enhancements/blob/master/enhancements/cert-manager/istio-csr-controller.md)):
 
 | Section | Content |
 |---------|---------|
-| Summary | Operator OLM NPs + operand NPs via CertManager CR |
-| Motivation | Product Security mandate, least privilege |
-| Goals | opt-in `defaultNetworkPolicy`, deny-all + allows, user `networkPolicies[]`, istio-csr auto-managed |
-| Non-goals | No AdminNetworkPolicy; no istio-csr user NP config |
-| Proposal | Dual path: OLM for operator NS, operator for operand NS |
-| Implementation | Traffic matrix per component; YAML examples |
+| Summary | cert-manager-operator manages istio-csr via dedicated controller + IstioCSR CR |
+| Motivation | Customer CA via cert-manager for OSSM mTLS |
+| Goals | Extend operator; new `istiocsrs.operator.openshift.io` CR |
+| Non-goals | Limited CR delete teardown; no auto ConfigMap cleanup; version skew bounds |
+| Proposal | Static manifests, labels, singleton CR, status subresource, GA API fields |
+| Risks | ConfigMap conflicts, OLM upgrade, operand version skew, status completeness |
 
-**ARD strength:** Clear traffic flows, opt-in default, separation operator vs operand.
+**ARD strength:** Detailed API types, CEL immutability, manifest examples, operational commands, version skew table.
 
-**ARD gaps:** Two-controller architecture (static library-go vs user-defined runtime) not explicit; watch/reconcile semantics for NP drift not specified; no SLA for recreate-after-delete latency.
+**ARD gaps:** No explicit requirement for unified manager cache; OLM upgrade test plan implicit; Ready condition lifecycle not spelled out in test plan.
 
 ## 2. Epic → Stories carving
 
 ```
-OCPSTRAT-819 (platform mandate)
-    ├── CM-802 (operator epic)
-    └── CM-525 (operand epic)
-            ├── CM-577 / PR #320 — core NP implementation
-            ├── CM-525 / PR #348 — CoreController scope
-            └── Bug fixes: CM-758, CM-763, CM-764
+OCPSTRAT-1974 (GA strategy)
+    └── CM-463 (TP epic)
+            ├── CM-418/419 — CRD + controller
+            ├── CM-423 — E2E + gRPC
+            ├── CM-521/675/826 — operand version bumps
+            ├── CM-679/680/681/706 — GA API fields
+            ├── CM-639 — metrics
+            └── CM-1043 — Service Mesh smoke tests
 ```
 
 | Carving pattern | Observation |
 |-----------------|-------------|
-| Operator vs operand split | CM-802 vs CM-525 mirrors EP OLM vs operator-managed |
-| Static vs user-defined | EP describes both; **no separate story** for watch semantics per controller type |
-| Verification | Bugs found in QA — tamper, loop, delete latency not in initial AC |
+| TP → GA strat | Same AC text; GA adds API revisit stories |
+| Verification | E2E stories added after controller (CM-423) — Ready assertion gap found in QA (CM-546) |
+| Packaging | OLM/CRD stories implicit in controller epic — upgrade break found post-release (CM-770) |
 
 ## 3. Gaps: EP → stories
 
-- No story for **static NP spec drift reconciliation** (CM-758)
-- No story for **idempotent user-defined NP updates** (CM-763)
-- No story for **immediate recreate on user-defined NP delete** (CM-764)
-- Deployment scenario table in Jira epic left empty (Hypershift, SNO, etc.)
+- No story for **OLM N-1→N upgrade** when adding `istiocsrs` CRD (CM-770)
+- No story for **controller cache wiring** in setup_manager (CM-735)
+- Operand version story (CM-521) came from **OSSM integration feedback**, not EP verification matrix
+- Docs placeholder consistency not in story AC (OCPBUGS-57841)
 
-## 4. New patterns (round 2)
+## 4. Pattern recurrence (round 3)
+
+All Istio CSR patterns from round 1 are **recurring** — same feature bundle re-run with code-generation eval gap as primary new work.
 
 | ID | Pattern | Recurrence |
 |----|---------|------------|
-| PAT-009 | Dual NP controller architecture (static library-go vs user-defined runtime) | new |
-| PAT-010 | Static-managed NP must reconcile spec drift (tamper correction) | new |
-| PAT-011 | User-defined NP reconciler must skip no-op updates (avoid hot loop) | new |
-| PAT-012 | User-defined NP controller must watch NP delete events for prompt recreate | new |
-| PAT-013 | Opt-in `defaultNetworkPolicy` backward compatibility | new |
-| PAT-014 | Traffic matrix per component (webhook, metrics, DNS, API server) | new |
+| PAT-001 | Namespaced singleton `default` CR | recurring (round 1) |
+| PAT-002 | Limited teardown on CR delete | recurring |
+| PAT-003 | Unified ctrl.Manager cache for addons | recurring |
+| PAT-004 | Ready condition when operand healthy | recurring |
+| PAT-005 | OLM upgrade for new owned CRD | recurring |
+| PAT-006 | Operand version skew vs OSSM/Istio | recurring |
+| PAT-007 | Docs placeholder naming consistency | recurring |
+| PAT-008 | GA API fields (selector, CA cert, clusterID) | recurring |
+
+**New pattern (round 3):** PAT-015 — Code-generation eval gate missing for addon controller tasks (retrospective evals did not flow to `/opsx-apply`).

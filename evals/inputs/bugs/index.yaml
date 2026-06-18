@@ -1,7 +1,11 @@
 bugs:
-  - key: CM-758
-    file: bugs/CM-758.md
-  - key: CM-763
-    file: bugs/CM-763.md
-  - key: CM-764
-    file: bugs/CM-764.md
+  - key: CM-770
+    file: bugs/CM-770.md
+  - key: CM-521
+    file: bugs/CM-521.md
+  - key: CM-546
+    file: bugs/CM-546.md
+  - key: OCPBUGS-57841
+    file: bugs/OCPBUGS-57841.md
+  - key: CM-735
+    file: bugs/CM-735.md

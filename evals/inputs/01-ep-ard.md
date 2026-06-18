@@ -1,34 +1,41 @@
-# Input: EP / ARD — cert-manager Network Policies
+# Input: EP / ARD — Istio CSR integration
 
-**Link:** https://github.com/openshift/enhancements/blob/master/enhancements/cert-manager/cert-manager-network-policies.md
+**Link:** https://github.com/openshift/enhancements/blob/master/enhancements/cert-manager/istio-csr-controller.md
 
-**Tracking:** CM-624 | **Authors:** @manpilla | **Last updated:** 2025-09-25
+**Tracking:** CM-234 | **Authors:** @bhb | **Last updated:** 2025-09-24
 
 ## Summary
 
-Implement fine-grained Kubernetes NetworkPolicy objects for cert-manager operator (OLM bundle) and operands (operator-managed). Opt-in via `defaultNetworkPolicy` on CertManager CR for backward compatibility.
+Extend cert-manager-operator to deploy and manage the `istio-csr` agent via a dedicated controller. New CR `istiocsrs.operator.openshift.io` (namespaced singleton `default`) configures the operand. cert-manager signs Istio workload and control-plane CSRs; istio-csr bridges OSSM to cert-manager.
 
 ## Key design points
 
-- **Operator NP:** Managed by OLM bundle (not operator reconcile loop)
-- **Operand NP:** Operator creates deny-all + baseline allow rules when `defaultNetworkPolicy: "true"`
-- **User-configurable:** `networkPolicies[]` on CertManager spec for additional cert-manager egress rules
-- **istio-csr NP:** Automatically managed by operator; no user configuration
-- **Non-goals:** No AdminNetworkPolicy; no generic cluster-wide policy solution; no user config for istio-csr NP
-- **Components:** cert-manager, webhook, cainjector, istio-csr — traffic matrix in EP (API server 6443, DNS, metrics 9402, webhook 10250, istio gRPC)
+- **New controller:** `istio-csr-controller` in cert-manager-operator manages static manifests (Certificate, Issuer, RBAC, Deployment, Service, ServiceMonitor, etc.)
+- **Singleton CR:** namespaced `IstioCSR` named `default` with CEL enforcement
+- **Immutable fields:** issuerRef, privateKeySize, certificateKeySize, signatureAlgorithm, istio.revisions, istio.namespace (CEL)
+- **Limited delete:** CR delete stops reconciliation only — manual cleanup (GA non-goal for full auto-uninstall)
+- **GA API additions:** `istioDataPlaneNamespaceSelector`, `certManager.istioCACertificate`, `server.clusterID`
+- **Labels:** `app.kubernetes.io/managed-by: cert-manager-operator`, part-of cert-manager-operator
+- **Version skew:** OSSM 2.4+, Istio v1.10+, cert-manager Operator v1.3+
+- **Downstream fork:** openshift/cert-manager-istio-csr (bindata in operator)
 
-## API fields
+## Non-goals (selected)
 
-- `defaultNetworkPolicy` (default false) — opt-in
-- `networkPolicies[]` — user-defined rules per componentName
+- istio-csr only with supported OSSM versions
+- CR delete does not remove deployment (re-evaluate post-GA)
+- Automatic cleanup of `istio-ca-root-cert` ConfigMaps in deselected namespaces
+- Namespace validation against service mesh config
+- Hardened RBAC restricting ConfigMap creation to selected namespaces only
 
-## Controllers (implementation)
+## Risks
 
-- Static/default policies via static-resources-controller (library-go)
-- User-defined policies via dedicated user-defined network policy controller
+- ConfigMap `istio-ca-root-cert` conflict when multiple Istio instances — mitigate via `istioDataPlaneNamespaceSelector`
+- OLM upgrade when adding new owned CRD
+- Operand version skew with OSSM v3 / Istio v1.24+
+- Status conditions must reflect deployment readiness for operability
 
-## Risks / constraints
+## Test plan (EP)
 
-- Breaking cert issuance if egress too restrictive without user-defined rules
-- Monitoring must still scrape metrics
-- Webhook must remain reachable from API server
+- Default and permuted IstioCSR configurations
+- Upgrade/downgrade scenarios
+- QE feedback window

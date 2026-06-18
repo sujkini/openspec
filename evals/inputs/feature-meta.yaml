@@ -1,6 +1,6 @@
-feature_name: Network Policy hardening
-epic_key: CM-802
-operand_epic_key: CM-525
-ocpstrat_key: OCPSTRAT-819
+feature_name: Istio CSR integration
+epic_key: CM-463
+tp_epic_key: CM-463
+ga_strat_key: OCPSTRAT-1974
 target_repo: https://github.com/openshift/cert-manager-operator
-round_label: round-2-network-policy-cm802
+round_label: round-3-istio-csr-cm463

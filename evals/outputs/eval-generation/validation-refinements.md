@@ -1,24 +1,18 @@
-# Validation Template Refinements — Round 2
+# Validation refinements — Round 3 Istio CSR
 
-## Rationale
+## Changes
 
-Network Policy bugs (CM-758, CM-763, CM-764) exposed gaps not covered by round 1 addon-operator supplements.
+Added **Code-generation eval bridge** section to `evals/refined-templates/validation.md` under Completeness rubric.
 
-## Change applied
+## Driver
 
-**File:** `schemas/openspec-agile-workflow/templates/validation.md`
+PAT-015 — retrospective artifact evals (round 1) did not enforce patterns at `/opsx-apply` because
+`code-generation_eval.yaml` was empty. Validation must flag specs whose tasks would not map to per-task
+code-generation gates.
 
-**Section added:** `### Network policy supplements` under Completeness rubric
+## Patterns addressed
 
-**New checks:**
-- Dual controller paths (static library-go vs user-defined)
-- Opt-in `defaultNetworkPolicy` backward compatibility
-- Per-component traffic matrix
-- Drift reconciliation test for static NPs
-- Idempotent reconcile for user-defined NPs
-- Delete/recreate watch requirements
-- Operator OLM vs operand CR-driven NPs
-
-## Round 1 interaction
-
-Round 1 addon supplements remain; round 2 adds NP-specific layer when spec touches NetworkPolicy fields.
+- PAT-003 (unified manager) → codegen eval must forbid separate cache
+- PAT-004 (Ready condition) → codegen eval + e2e assertion
+- PAT-005 (OLM upgrade) → manual bundle codegen eval
+- PAT-006 (bindata version) → manual manifest codegen eval

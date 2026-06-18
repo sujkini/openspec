@@ -43,3 +43,14 @@
 ### Backward compatibility
 
 - `defaultNetworkPolicy` defaults **false** — opt-in only.
+
+## Round 3 — Code-generation eval bridge (CM-463 re-run / PAT-015)
+
+Round 1 artifact evals covered Istio CSR bugs at workflow stage level but **code-generation evals were empty**.
+Round 3 closes the gap:
+
+- Every task payload must tag **`OAPE Command`** (`api-generate`, `api-implement`, `e2e-generate`, `manual`, etc.)
+- `/opsx-apply` filters `code-generation_eval.yaml` by `oape_command` per task
+- **13 codegen cases** derived from CM-735, CM-546, CM-770, CM-521, OCPBUGS-57841, CM-769, CM-1043
+- Implementation phase log must record Code Generation Eval scores per task
+

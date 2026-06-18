@@ -1,29 +1,39 @@
-# Input: User stories — Network Policy (CM-802 / CM-525)
+# Input: User stories — Istio CSR (CM-463 / OCPSTRAT-1974)
 
-**Strategy:** OCPSTRAT-819
+**Strategy:** OCPSTRAT-1974 | **TP Epic:** CM-463
 
-## EP user stories
+## EP user stories (selected)
 
-- Administrator: cert-manager components cannot talk to unrelated workloads
-- Security engineer: default-deny with explicit allows only
-- SRE: Prometheus can still scrape metrics
-- cert-manager user: issuance/webhook still work after policies applied
+- Administrator: deploy istio-csr as day-2 operation
+- Administrator: configure istio-csr features selectively
+- Administrator: uninstall without disrupting cert-manager (limited teardown)
+- Security engineer: identify all artefacts via labels
+- SRE: status conditions and messages for failure diagnosis
+- Service mesh admin: use istio-csr endpoint with pre-installed mesh
+- SRE: collect istio-csr metrics
+- Security engineer: restrict ConfigMap provisioning via namespace selector
+- Administrator: configure cluster ID for CSR verification
 
-## Implementation stories (from PR traceability)
+## Implementation stories (from GA strat / PR traceability)
 
 | Key / PR | Story theme |
 |----------|-------------|
-| CM-577 / PR #320, #335 | Core NetworkPolicy implementation for operands |
-| CM-525 / PR #348 | NP support scoped to CoreController component |
-| CM-802 | Operator-side / OLM bundle policies (epic umbrella) |
-| CM-758 / PR #338, #340 | library-go bump — static NP reconcile on spec drift |
-| CM-763 / PR #339 | Fix unconditional update loop in user-defined NP controller |
-| CM-764 / PR #342, #343 | Add NetworkPolicy informer for user-defined NP delete/recreate |
+| CM-418, CM-419 / PR #220, #245 | IstioCSR CRD + controller lifecycle |
+| CM-423 / PR #226, #248, #250 | E2E istio-csr + gRPC certificate flow |
+| CM-521 / PR #252, #254, #304 | Operand version bump for OSSM compatibility |
+| CM-639 / PR #317, #322 | Metrics Service for istio-csr |
+| CM-679 / PR #312, #332 | `istioCACertificate` ConfigMap support |
+| CM-680 / PR #303 | `server.clusterID` configuration |
+| CM-681 / PR #305, #323 | `istioDataPlaneNamespaceSelector` |
+| CM-706 / PR #310, #319 | GA API revisit |
+| CM-1043 / PR #427 | IstioCSR e2e + Service Mesh smoke tests |
 
 ## EP → story gaps (from bugs)
 
 | Gap | Bug |
 |-----|-----|
-| Watch/reconcile when static NP spec tampered | CM-758 |
-| No-op update detection for user-defined NP | CM-763 |
-| Immediate recreate on user-defined NP delete | CM-764 |
+| Unified manager cache for addon controller | CM-735 |
+| Ready condition when deployment healthy | CM-546 |
+| OLM upgrade path for new CRD | CM-770 |
+| Operand bindata version vs OSSM minimum | CM-521 |
+| Docs placeholder consistency | OCPBUGS-57841 |

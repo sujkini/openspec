@@ -61,7 +61,15 @@ Penalize if absent or untestable; add to `missing_elements` and `cert_manager_ec
 - **Delete/recreate SLA:** user-defined NP delete must trigger prompt recreate (watch/informer)
 - **Operator vs operand:** OLM bundle NP for operator namespace vs CR-driven operand NPs
 
-## Rubric — B) QUALITY (Clarity & Actionability; INVEST-style)
+### Code-generation eval bridge (retrospective → /opsx-apply)
+When spec describes addon controllers or operand reconciliation, flag if tasks would not map to
+`code-generation_eval.yaml` cases at `/opsx-apply`:
+- **Per-task gates:** each `api-implement` / `e2e-generate` / `manual` task must have a matching codegen eval
+- **Unified manager (PAT-003):** codegen eval must forbid separate Manager/cache
+- **Ready condition (PAT-004):** codegen eval must require `HandleReconcileResult` + e2e Ready assertion
+- **OLM CRD immutability (PAT-005):** manual bundle tasks need codegen eval for CRD shortname/ownership stability
+- **Bindata version (PAT-006):** manual manifest tasks need codegen eval for operand version pin vs EP matrix
+
 Flag with quotes + concrete rewrite guidance:
 - Ambiguity (unquantified "fast/scalable/secure" etc.)
 - Testability (cannot map to automated tests; missing Given/When/Then where user-visible)

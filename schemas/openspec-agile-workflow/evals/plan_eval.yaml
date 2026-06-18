@@ -2,7 +2,7 @@ stage: plan
 template: templates/plan.md
 artifact: plan.md
 version: 1
-eval_count: 6
+eval_count: 9
 evals:
 - id: eval-r001-plan-001
   round: 1
@@ -130,6 +130,67 @@ evals:
     - tamper
     - delete
     - reconcile
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r003-plan-001
+  round: 3
+  stage: plan
+  source_issue_ids: []
+  patterns:
+  - PAT-006
+  input_refs:
+  - evals/inputs/05-repo-prs.md
+  prompt: 'Plan must include Service Mesh smoke test phase (CM-1043 / PR #427).
+
+    '
+  assertions:
+    must_include_verification_matrix: true
+    must_mention:
+    - Service Mesh
+    - smoke test
+    - istioCSRGRPCEndpoint
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-plan-002
+  round: 3
+  stage: plan
+  source_issue_ids: []
+  patterns:
+  - PAT-015
+  input_refs:
+  - evals/refined-templates/tasks.md
+  prompt: 'Plan must map implementation phases to oape_command values for code-generation eval filtering.
+
+    '
+  assertions:
+    must_mention:
+    - api-implement
+    - e2e-generate
+    - manual
+    must_include_verification_matrix: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r003-plan-003
+  round: 3
+  stage: plan
+  source_issue_ids:
+  - ISSUE-003
+  patterns:
+  - PAT-005
+  input_refs:
+  - evals/inputs/bugs/CM-770.md
+  prompt: 'Plan CRD/bundle phase must pair CEL validation work with OLM N-1 upgrade verification.
+
+    '
+  assertions:
+    must_include_verification_matrix: true
+    must_mention:
+    - OLM
+    - upgrade
+    - CEL
   scoring:
     method: weighted_checklist
     pass_threshold: 85

@@ -104,3 +104,32 @@ Unified manager wiring, status conditions, limited teardown, static drift revert
 OLM upgrade, documentation, and Watches tasks in completeness rules and self-check.
 
 **Driver patterns:** PAT-001–PAT-014 | **Driver bugs:** all 8 input bugs across both bundles
+
+## Round 3 — Istio CSR re-run / code-generation (CM-463) — 2026-06-18
+
+### validation.md
+
+Added `### Code-generation eval bridge` section — flag specs whose tasks would not map to
+`code-generation_eval.yaml` per-task gates at `/opsx-apply`.
+
+**Driver:** PAT-015 — empty codegen evals after rounds 1–2
+
+### tasks.md
+
+Added `### OAPE command tagging` section — every task payload must include OAPE Command for
+code-generation eval filtering.
+
+**Driver:** PAT-015
+
+### baseline/evals/code-generation/code-generation_eval.yaml
+
+Populated **13 code-generation cases** (was empty): api-implement (3), api-generate (2),
+api-generate-tests (2), manual (3), e2e-generate (2), any (1).
+
+**Driver bugs:** CM-735, CM-546, CM-770, CM-521, OCPBUGS-57841
+
+### baseline/agents.md
+
+Added Round 3 code-generation eval bridge routing notes.
+
+**Eval cases added:** 28 (15 artifact bridge + 13 code-generation)

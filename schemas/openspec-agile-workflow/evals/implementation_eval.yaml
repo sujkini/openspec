@@ -2,7 +2,7 @@ stage: implementation
 template: templates/implementation.md
 artifact: code + phase FILE OPS
 version: 1
-eval_count: 6
+eval_count: 9
 evals:
 - id: eval-r001-impl-001
   round: 1
@@ -127,3 +127,60 @@ evals:
   scoring:
     method: weighted_checklist
     pass_threshold: 85
+- id: eval-r003-impl-001
+  round: 3
+  stage: implementation
+  source_issue_ids: []
+  patterns:
+  - PAT-015
+  input_refs:
+  - evals/refined-templates/implementation.md
+  prompt: 'Implementation phase log must record Code Generation Eval scores per approved task.
+
+    '
+  assertions:
+    must_mention:
+    - Code Generation Eval
+    - Overall score
+    must_follow_constitution: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-impl-002
+  round: 3
+  stage: implementation
+  source_issue_ids:
+  - ISSUE-001
+  patterns:
+  - PAT-003
+  input_refs:
+  - evals/inputs/bugs/CM-735.md
+  prompt: 'IstioCSR resource reconciliation must use SSA Apply — not client.Create or client.Update.
+
+    '
+  assertions:
+    must_use_ssa_not_create_or_update: true
+    must_follow_constitution: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 90
+- id: eval-r003-impl-003
+  round: 3
+  stage: implementation
+  source_issue_ids:
+  - ISSUE-002
+  patterns:
+  - PAT-004
+  input_refs:
+  - evals/inputs/bugs/CM-546.md
+  prompt: 'Implementation must pass e2e asserting IstioCSR Ready condition before declaring task complete.
+
+    '
+  assertions:
+    must_include_tests: true
+    must_mention:
+    - Ready
+    - istio_csr_test
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 90

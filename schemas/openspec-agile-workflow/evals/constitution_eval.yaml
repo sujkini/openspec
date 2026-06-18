@@ -2,7 +2,7 @@ stage: constitution
 template: templates/constitution.md
 artifact: constitution.md
 version: 1
-eval_count: 6
+eval_count: 9
 evals:
 - id: eval-r001-const-001
   round: 1
@@ -124,6 +124,64 @@ evals:
     - defaultNetworkPolicy
     - opt-in
     - backward compatibility
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-const-001
+  round: 3
+  stage: constitution
+  source_issue_ids: []
+  patterns:
+  - PAT-015
+  input_refs:
+  - evals/baseline/agents.md
+  prompt: 'Constitution must require code-generation eval gate per api-implement task at /opsx-apply.
+
+    '
+  assertions:
+    must_mention:
+    - code-generation
+    - oape_command
+    - /opsx-apply
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r003-const-002
+  round: 3
+  stage: constitution
+  source_issue_ids: []
+  patterns:
+  - PAT-008
+  input_refs:
+  - evals/inputs/05-repo-prs.md
+  prompt: 'Constitution must note CEL validations avoid format library for IstioCSR types (CM-769).
+
+    '
+  assertions:
+    must_mention:
+    - CEL
+    - XValidation
+    must_not_claim:
+    - format.dns1123 required
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-const-003
+  round: 3
+  stage: constitution
+  source_issue_ids: []
+  patterns:
+  - PAT-006
+  input_refs:
+  - evals/inputs/04-user-stories.md
+  prompt: 'Constitution must require Service Mesh integration smoke tests for istio-csr GA features.
+
+    '
+  assertions:
+    must_mention:
+    - Service Mesh
+    - smoke test
+    - OSSM
   scoring:
     method: weighted_checklist
     pass_threshold: 80

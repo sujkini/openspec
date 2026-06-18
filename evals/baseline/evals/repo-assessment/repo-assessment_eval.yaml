@@ -2,7 +2,7 @@ stage: repo-assessment
 template: evals/refined-templates/repo-assessment.md
 artifact: repo-assessment.md
 version: 1
-eval_count: 6
+eval_count: 9
 evals:
 - id: eval-r001-repo-001
   round: 1
@@ -131,6 +131,65 @@ evals:
     must_mention:
     - NetworkPolicy informer
     - Watches
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-repo-001
+  round: 3
+  stage: repo-assessment
+  source_issue_ids: []
+  patterns:
+  - PAT-015
+  input_refs:
+  - evals/inputs/03-original-repo.md
+  prompt: 'Repo assessment must inventory test/e2e paths for IstioCSR and map to code-generation e2e evals.
+
+    '
+  assertions:
+    must_mention:
+    - test/e2e
+    - istio_csr_test.go
+    - code-generation
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-repo-002
+  round: 3
+  stage: repo-assessment
+  source_issue_ids:
+  - ISSUE-003
+  patterns:
+  - PAT-005
+  input_refs:
+  - evals/inputs/bugs/CM-770.md
+  prompt: 'Assessment must inventory OLM bundle CRD manifest paths for istiocsrs.operator.openshift.io.
+
+    '
+  assertions:
+    must_mention:
+    - bundle/manifests
+    - istiocsrs.operator.openshift.io
+    - OLM upgrade
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 80
+- id: eval-r003-repo-003
+  round: 3
+  stage: repo-assessment
+  source_issue_ids:
+  - ISSUE-004
+  patterns:
+  - PAT-006
+  input_refs:
+  - evals/inputs/05-repo-prs.md
+  prompt: 'Assessment must document hack/update-istio-csr-manifests.sh as bindata codegen entry point.
+
+    '
+  assertions:
+    must_mention:
+    - hack/update-istio-csr-manifests
+    - bindata/istio-csr
+    must_document_risk: operand version skew
   scoring:
     method: weighted_checklist
     pass_threshold: 80

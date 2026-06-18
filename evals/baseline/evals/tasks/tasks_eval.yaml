@@ -2,7 +2,7 @@ stage: tasks
 template: evals/refined-templates/tasks.md
 artifact: tasks.md
 version: 1
-eval_count: 6
+eval_count: 9
 evals:
 - id: eval-r001-tasks-001
   round: 1
@@ -130,6 +130,68 @@ evals:
     - unconditional update
     - semantic equality
     - soak
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r003-tasks-001
+  round: 3
+  stage: tasks
+  source_issue_ids: []
+  patterns:
+  - PAT-015
+  input_refs:
+  - evals/refined-templates/tasks.md
+  prompt: 'Every task payload must include OAPE Command field for code-generation eval routing.
+
+    '
+  assertions:
+    must_mention:
+    - OAPE Command
+    - api-implement
+    - manual
+    must_include_payload_sections: true
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 85
+- id: eval-r003-tasks-002
+  round: 3
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-002
+  patterns:
+  - PAT-004
+  input_refs:
+  - evals/inputs/bugs/CM-546.md
+  prompt: 'api-implement IstioCSR controller task must pair with e2e-generate Ready condition test task.
+
+    '
+  assertions:
+    must_pair_verification_tasks: true
+    must_mention:
+    - e2e-generate
+    - Ready
+    - api-implement
+  scoring:
+    method: weighted_checklist
+    pass_threshold: 90
+- id: eval-r003-tasks-003
+  round: 3
+  stage: tasks
+  source_issue_ids:
+  - ISSUE-004
+  patterns:
+  - PAT-006
+  input_refs:
+  - evals/inputs/bugs/CM-521.md
+  prompt: 'manual bindata bump task must pair with platform compatibility verification task.
+
+    '
+  assertions:
+    must_pair_verification_tasks: true
+    must_mention:
+    - bindata
+    - OSSM
+    - manual
   scoring:
     method: weighted_checklist
     pass_threshold: 85

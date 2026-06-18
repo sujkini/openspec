@@ -1,9 +1,9 @@
-round: 2
-baseline_version: "1.1.0"
+round: 3
+baseline_version: "1.2.0"
 
-last_feature_name: Network Policy hardening
-last_epic_key: CM-802
-last_completed_at: "2026-06-10T14:00:00Z"
+last_feature_name: Istio CSR integration
+last_epic_key: CM-463
+last_completed_at: "2026-06-18T12:00:00Z"
 
 history:
   - round: 1
@@ -20,3 +20,11 @@ history:
     evals_added: 15
     evals_updated: 1
     bugs_analyzed: 3
+  - round: 3
+    feature_name: Istio CSR integration
+    epic_key: CM-463
+    completed_at: "2026-06-18T12:00:00Z"
+    evals_added: 28
+    evals_updated: 0
+    bugs_analyzed: 5
+    note: Re-run with code-generation eval gap filled (13 codegen + 15 artifact bridge cases)

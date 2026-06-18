@@ -106,6 +106,21 @@ Document paired Task IDs in §0 input coverage checklist.
 - Route to `Docs_Agent` (or agents.md equivalent) with acceptance criteria for **placeholder naming
   consistency** across examples (e.g. single canonical `<istio_project_name>` — driver: OCPBUGS-57841).
 
+### OAPE command tagging (code-generation eval routing)
+
+Each task payload MUST include **`OAPE Command:`** (or `manual` when no OAPE command applies):
+
+| Command | Typical tasks |
+|---------|---------------|
+| `api-generate` | CRD types, CEL validations, API scaffolding |
+| `api-generate-tests` | `.testsuite.yaml`, API integration tests |
+| `api-implement` | Controller reconcilers, status conditions |
+| `e2e-generate` | E2E test artifacts (`test/e2e/`) |
+| `manual` | Bindata, OLM bundle, RBAC manifests, docs |
+
+Tagging enables `/opsx-apply` to filter `code-generation_eval.yaml` cases per task. Pair substantive
+`api-implement` tasks with matching `e2e-generate` verification tasks (driver: CM-546, PAT-015).
+
 ### Controller watches (user-defined managed resources)
 
 - When tasks add runtime reconcilers for user-defined resources (e.g. `networkPolicies[]`), include

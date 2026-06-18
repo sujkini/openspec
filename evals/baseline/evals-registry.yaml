@@ -76,6 +76,45 @@ rounds:
   - PAT-012
   - PAT-013
   - PAT-014
+- round: 3
+  feature_name: Istio CSR integration
+  epic_key: CM-463
+  ga_strat_key: OCPSTRAT-1974
+  added_evals:
+  - eval-r003-repo-001
+  - eval-r003-repo-002
+  - eval-r003-repo-003
+  - eval-r003-const-001
+  - eval-r003-const-002
+  - eval-r003-const-003
+  - eval-r003-plan-001
+  - eval-r003-plan-002
+  - eval-r003-plan-003
+  - eval-r003-tasks-001
+  - eval-r003-tasks-002
+  - eval-r003-tasks-003
+  - eval-r003-impl-001
+  - eval-r003-impl-002
+  - eval-r003-impl-003
+  - eval-r003-codegen-001
+  - eval-r003-codegen-002
+  - eval-r003-codegen-003
+  - eval-r003-codegen-004
+  - eval-r003-codegen-005
+  - eval-r003-codegen-006
+  - eval-r003-codegen-007
+  - eval-r003-codegen-008
+  - eval-r003-codegen-009
+  - eval-r003-codegen-010
+  - eval-r003-codegen-011
+  - eval-r003-codegen-012
+  - eval-r003-codegen-013
+  updated_evals: []
+  templates_changed:
+  - validation.md
+  - tasks.md
+  patterns_introduced:
+  - PAT-015
 evals:
   eval-r001-repo-001:
     stage: repo-assessment
@@ -291,6 +330,217 @@ evals:
     patterns:
     - PAT-012
     stage_eval_file: evals/baseline/evals/implementation/implementation_eval.yaml
+  eval-r003-repo-001:
+    stage: repo-assessment
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-015
+    stage_eval_file: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
+  eval-r003-repo-002:
+    stage: repo-assessment
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-005
+    stage_eval_file: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
+  eval-r003-repo-003:
+    stage: repo-assessment
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    stage_eval_file: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
+  eval-r003-const-001:
+    stage: constitution
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-015
+    stage_eval_file: evals/baseline/evals/constitution/constitution_eval.yaml
+  eval-r003-const-002:
+    stage: constitution
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-008
+    stage_eval_file: evals/baseline/evals/constitution/constitution_eval.yaml
+  eval-r003-const-003:
+    stage: constitution
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    stage_eval_file: evals/baseline/evals/constitution/constitution_eval.yaml
+  eval-r003-plan-001:
+    stage: plan
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    stage_eval_file: evals/baseline/evals/plan/plan_eval.yaml
+  eval-r003-plan-002:
+    stage: plan
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-015
+    stage_eval_file: evals/baseline/evals/plan/plan_eval.yaml
+  eval-r003-plan-003:
+    stage: plan
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-005
+    stage_eval_file: evals/baseline/evals/plan/plan_eval.yaml
+  eval-r003-tasks-001:
+    stage: tasks
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-015
+    stage_eval_file: evals/baseline/evals/tasks/tasks_eval.yaml
+  eval-r003-tasks-002:
+    stage: tasks
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-004
+    stage_eval_file: evals/baseline/evals/tasks/tasks_eval.yaml
+  eval-r003-tasks-003:
+    stage: tasks
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    stage_eval_file: evals/baseline/evals/tasks/tasks_eval.yaml
+  eval-r003-impl-001:
+    stage: implementation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-015
+    stage_eval_file: evals/baseline/evals/implementation/implementation_eval.yaml
+  eval-r003-impl-002:
+    stage: implementation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-003
+    stage_eval_file: evals/baseline/evals/implementation/implementation_eval.yaml
+  eval-r003-impl-003:
+    stage: implementation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-004
+    stage_eval_file: evals/baseline/evals/implementation/implementation_eval.yaml
+  eval-r003-codegen-001:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-003
+    - PAT-015
+    oape_command: api-implement
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-002:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-004
+    - PAT-015
+    oape_command: api-implement
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-003:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-008
+    oape_command: api-implement
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-004:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-001
+    oape_command: api-generate
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-005:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-008
+    oape_command: api-generate
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-006:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-001
+    oape_command: api-generate-tests
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-007:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-008
+    oape_command: api-generate-tests
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-008:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    oape_command: manual
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-009:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-005
+    oape_command: manual
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-010:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-007
+    oape_command: manual
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-011:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-004
+    oape_command: e2e-generate
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-012:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-006
+    oape_command: e2e-generate
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
+  eval-r003-codegen-013:
+    stage: code-generation
+    introduced_round: 3
+    last_updated_round: 3
+    patterns:
+    - PAT-003
+    oape_command: any
+    stage_eval_file: evals/baseline/evals/code-generation/code-generation_eval.yaml
 stage_eval_files:
   repo-assessment:
     path: evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml
