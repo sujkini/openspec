@@ -516,7 +516,8 @@ oape_routing:
         - Present task summary with code eval scorecard
         - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt)
         - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
-        - On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
+        - >-
+          On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
           append implementation-phase-log.md
         - Advance to next pending task in §2 order
   task_approval_prompt: >-
