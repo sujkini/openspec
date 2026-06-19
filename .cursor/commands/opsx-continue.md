@@ -23,8 +23,11 @@ Continue working on a change by creating the **next** artifact (one per invocati
 1. Select change (`openspec list --json` if name not given).
 2. `openspec status --change "<name>" --json`
 3. Read `openspec/changes/<name>/inputs/jira.yaml` (required).
-4. **Resolve `target_repo` before repo-assessment** (see schema `target_repo`):
-   - If the next ready artifact is `repo-assessment` (or `constitution`) and
+4. **Resolve repo target before repo-assessment** (see schema `target_repo` and `working_folder_repo`):
+   - **Working-folder mode:** If the user directs using the working folder as the repo,
+     set `use_working_folder_as_repo: true` in `inputs/jira.yaml`, record
+     `working_folder_path`, analyze cwd — do not ask for GitHub URL or clone separately.
+   - **Default mode:** If the next ready artifact is `repo-assessment` (or `constitution`) and
      `target_repo` is absent or empty in `jira.yaml`:
      - Ask the user once: "Provide the URL of the target GitHub repository
        (e.g. https://github.com/org/repo)."

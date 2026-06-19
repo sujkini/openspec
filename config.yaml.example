@@ -4,9 +4,12 @@ context: |
   GS Spec Kit agile workflow — gated spec-driven development.
   Stages: validation → specs → repo-assessment + constitution → plan → tasks → implementation.
   Primary input at /opsx:new: Jira ticket key ONLY (stored in inputs/jira.yaml).
-  Target GitHub repository: NOT required at /opsx:new — required before repo-assessment artifact.
+  Target GitHub repository: NOT required at /opsx:new — required before repo-assessment
+  artifact (unless working-folder mode — see schema working_folder_repo).
   Optional anytime: AGENTS.md from the target repo.
-  Fork URL: NOT required until Implementation (/opsx:apply) — stored as
+  Working-folder mode: when the user directs using the current checkout as the repo,
+  set use_working_folder_as_repo: true in inputs/jira.yaml — skip fork URL and draft PR.
+  Fork URL: NOT required until Implementation (/opsx:apply) in default mode — stored as
   fork_repo_url in inputs/jira.yaml.
   Approve each artifact before proceeding to the next stage. Implementation uses
   task-by-task execution with per-task user approval (/opsx-apply), then pushes a
@@ -24,7 +27,7 @@ rules:
     - User stories with Given/When/Then; FR-xxx and SC-xxx identifiers
     - If user rejects specs.md at approval, exit the workflow (no refinement loop; see schema exit_on_reject.specs)
   repo-assessment:
-    - Before creating repo-assessment.md, ensure target_repo is set in inputs/jira.yaml (ask user once if empty; see schema target_repo)
+    - Before creating repo-assessment.md, ensure target_repo is set OR working-folder mode is active (see schema working_folder_repo and target_repo)
     - Fact-based inventory only; cite repo evidence for every target file
   constitution:
     - Every principle must cite observable repo evidence
@@ -35,7 +38,8 @@ rules:
     - Task IDs: T<n>_<m>; pair implementation tasks with verification when constitution requires
   implementation:
     - Follow the `implementation` artifact instruction in schema.yaml exactly
-    - Ask user for fork_repo_url at stage start; persist to inputs/jira.yaml
+    - **Working-folder mode:** use project cwd; no fork, no draft PR (schema working_folder_repo)
+    - **Default mode:** Ask user for fork_repo_url at stage start; persist to inputs/jira.yaml
     - Clone fork, create feature branch, apply FILE OPERATIONS to fork working copy (not upstream)
     - Task-by-task execution with per-task user approval gate (one OAPE command per task)
     - After all phases: commit, push feature branch, open draft PR on fork (head = feature branch, base = master/main)

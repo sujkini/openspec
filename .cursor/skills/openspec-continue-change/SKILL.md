@@ -65,11 +65,14 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
      - `dependencies`: Completed artifacts to read for context
    - **Create the artifact file (v1)**:
      - Read any completed dependency files for context
-     - **openspec-agile-workflow — target_repo gate**: Before creating
-       `repo-assessment` or `constitution`, read `inputs/jira.yaml`. If
-       `target_repo` is absent or empty, ask the user once for the target GitHub
-       repository URL, persist to `jira.yaml`, and verify access. Do not proceed
-       until recorded (see schema `target_repo`).
+     - **openspec-agile-workflow — repo target gate**: Before creating
+       `repo-assessment` or `constitution`, read `inputs/jira.yaml`.
+       - **Working-folder mode** (schema `working_folder_repo`): if the user directs
+         using the working folder as the repo, set `use_working_folder_as_repo: true`,
+         record `working_folder_path`, use cwd for assessment — no fork, no draft PR.
+       - **Default mode**: If `target_repo` is absent or empty, ask the user once for
+         the target GitHub repository URL, persist to `jira.yaml`, and verify access.
+         Do not proceed until recorded (see schema `target_repo`).
      - Use `template` as the structure - fill in its sections
      - Apply `context` and `rules` as constraints when writing - but do NOT copy them into the file
      - Write to the output path specified in instructions
