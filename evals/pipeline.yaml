@@ -33,7 +33,7 @@ phases:
       - evals/round-state.yaml
       - evals/baseline/evals-registry.yaml
       - evals/baseline/evals/<stage>/<stage>_eval.yaml
-      - evals/baseline/agents.md
+      - evals/baseline/routing-learnings.md
       - evals/baseline/refinement-changelog.md
       - evals/refined-templates/
     when: round >= 1
@@ -60,7 +60,7 @@ phases:
       - evals/refined-templates/
       - evals/eval-generation/stage-samples/
       - evals/baseline/evals/<stage>/<stage>_eval.yaml
-      - evals/baseline/agents.md
+      - evals/baseline/routing-learnings.md
       - evals/baseline/refinement-changelog.md
     steps:
       - id: seed-refined-templates
@@ -128,7 +128,7 @@ phases:
       - id: update-registry
         writes:
           - evals/baseline/evals-registry.yaml
-          - evals/baseline/agents.md
+          - evals/baseline/routing-learnings.md
           - evals/baseline/rounds/round-<N>/
           - evals/round-state.yaml
     writes:
@@ -138,7 +138,7 @@ phases:
       - evals/baseline/evals/<stage>/<stage>_eval.yaml
       - schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
       - evals/baseline/evals-registry.yaml
-      - evals/baseline/agents.md
+      - evals/baseline/routing-learnings.md
       - evals/baseline/refinement-changelog.md
       - evals/baseline/rounds/round-<N>/
       - evals/refined-templates/*.md

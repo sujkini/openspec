@@ -38,7 +38,7 @@ Read **every** template listed in `template-inventory.yaml` from `evals/refined-
 | `evals/eval-generation/stage-samples/` | Optional I/O samples per stage |
 | `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Prior eval cases per stage — merge/update |
 | `evals/baseline/evals-registry.yaml` | Master eval index |
-| `evals/baseline/agents.md` | Refined agent routing from prior rounds |
+| `evals/baseline/routing-learnings.md` | Routing learnings from prior `/eval-loop` rounds (not workflow `agents.md`) |
 | `evals/baseline/refinement-changelog.md` | Prior template change history |
 
 ## Tasks
@@ -190,9 +190,9 @@ Schema copy rules:
 
 Document code-generation gaps in `template-gaps.md` under a **Code generation evals** section (eval-only gaps are OK here).
 
-### 6. Update agents.md
+### 6. Update routing-learnings.md
 
-Append or revise `evals/baseline/agents.md` when agent routing gaps were found.
+Append or revise `evals/baseline/routing-learnings.md` when agent routing or guardrail gaps were found. Do **not** conflate with repo-root **`agents.md`** (OpenSpec workflow agent roster).
 
 ### 7. Update registry and round snapshot
 

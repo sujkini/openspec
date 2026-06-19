@@ -4,7 +4,7 @@ stage: constitution
 source_issue_ids: [ISSUE-001]
 patterns: [PAT-003]
 input_refs:
-  - evals/baseline/agents.md
+  - evals/baseline/routing-learnings.md
 prompt: |
   Constitution must mandate single unified ctrl.Manager for all addon controllers per repo conventions.
 assertions:

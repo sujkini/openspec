@@ -6,7 +6,7 @@ Updated after each `/eval-loop`. Fed as input to Epic Bug Analysis and Eval Gene
 |------|---------|
 | `evals/<stage>/<stage>_eval.yaml` | **One consolidated file per stage** — all eval cases in `evals:` list |
 | `evals-registry.yaml` | Master index (`stage_eval_files` + per-eval metadata) |
-| `agents.md` | Refined agent routing and conventions |
+| `routing-learnings.md` | Bug-derived guardrails from `/eval-loop` (not workflow `agents.md`) |
 | `refinement-changelog.md` | Append-only log of template changes |
 | `rounds/round-N/` | Snapshot per completed loop |
 

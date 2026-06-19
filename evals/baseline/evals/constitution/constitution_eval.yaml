@@ -34,7 +34,7 @@ evals:
   patterns:
   - PAT-003
   input_refs:
-  - evals/baseline/agents.md
+  - evals/baseline/routing-learnings.md
   prompt: 'Constitution must mandate single unified ctrl.Manager for all addon controllers per repo conventions.
 
     '
@@ -76,7 +76,7 @@ evals:
   patterns:
   - PAT-011
   input_refs:
-  - evals/baseline/agents.md
+  - evals/baseline/routing-learnings.md
   prompt: 'Constitution must require compare-before-update for managed resources to prevent hot reconcile loops.
 
     '
@@ -134,7 +134,7 @@ evals:
   patterns:
   - PAT-015
   input_refs:
-  - evals/baseline/agents.md
+  - evals/baseline/routing-learnings.md
   prompt: 'Constitution must require code-generation eval gate per api-implement task at /opsx-apply.
 
     '

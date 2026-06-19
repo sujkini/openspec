@@ -36,7 +36,7 @@ example:
   stage: constitution
   source_issue_ids: [ISSUE-001]
   input_refs:
-    - evals/baseline/agents.md
+    - evals/baseline/routing-learnings.md
   assertions:
     must_cite_repo_evidence: true
     must_set_agent_routing_mode: [PROVIDED, PROVISIONAL]

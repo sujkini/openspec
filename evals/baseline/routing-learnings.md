@@ -1,4 +1,8 @@
-# Baseline agents.md — refined routing notes from eval loops
+# Routing learnings — accumulated from /eval-loop
+
+Bug-derived guardrails and routing notes from retrospective eval rounds.
+**Not** the OpenSpec workflow agent roster — that lives in repo-root **`agents.md`**
+(installed to `openspec/schemas/openspec-agile-workflow/agents.md`).
 
 ## Round 1 — Istio CSR (CM-463)
 
@@ -53,4 +57,3 @@ Round 3 closes the gap:
 - `/opsx-apply` filters `code-generation_eval.yaml` by `oape_command` per task
 - **13 codegen cases** derived from CM-735, CM-546, CM-770, CM-521, OCPBUGS-57841, CM-769, CM-1043
 - Implementation phase log must record Code Generation Eval scores per task
-

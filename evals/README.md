@@ -29,11 +29,11 @@ evals/inputs/  ──────────────────►  Epic B
                                               │
 evals/refined-templates/  ───────┐          │
 baseline/evals/*_eval.yaml  ───┤          ▼
-baseline/agents.md  ───────────┴────►  Eval Generation
+baseline/routing-learnings.md  ───────────┴────►  Eval Generation
                                               │
                                               ├──► evals/baseline/evals/<stage>/<stage>_eval.yaml
                                               ├──► PATCH evals/refined-templates/
-                                              └──► evals/baseline/agents.md
+                                              └──► evals/baseline/routing-learnings.md
 ```
 
 **Round 2+:** Eval Generation reads **refined templates** and **consolidated stage eval files** from prior rounds.
@@ -116,7 +116,7 @@ Eval results: `openspec/changes/<change>/eval-results/code-generation-<task-id>.
 | `outputs/eval-generation/` | Gap analysis, patches, drafts |
 | `baseline/evals/<stage>/<stage>_eval.yaml` | Cumulative eval cases per stage |
 | `baseline/evals-registry.yaml` | Master index |
-| `baseline/agents.md` | Refined agent routing |
+| `baseline/routing-learnings.md` | Bug-derived guardrails from eval loops (not workflow `agents.md`) |
 | `baseline/rounds/round-N/` | Snapshot per completed loop |
 | `schemas/openspec-agile-workflow/evals/` | **Forward workflow** merged stage evals (synced from `/eval-loop`) |
 | `schemas/openspec-agile-workflow/stage-gate/` | Forward `/opsx-continue` eval gate instructions |

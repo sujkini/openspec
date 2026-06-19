@@ -5,8 +5,8 @@ refined_templates_dir: evals/refined-templates/
 schema_templates_dir_readonly: schemas/openspec-agile-workflow/templates/
 
 agents_md:
-  workflow_schema: agents_md block in schema.yaml
-  baseline_refined: evals/baseline/agents.md
+  workflow_roster: agents.md  # repo root → openspec/schemas/.../agents.md (OpenSpec workflow)
+  baseline_routing_learnings: evals/baseline/routing-learnings.md  # /eval-loop only
 
 spec_understanding:
   - id: validation

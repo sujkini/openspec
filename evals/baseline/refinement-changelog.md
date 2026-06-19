@@ -17,7 +17,7 @@ Added `### Addon-operator supplements` section under Completeness rubric:
 
 **Driver bugs:** CM-735, CM-770, CM-521, CM-546, OCPBUGS-57841
 
-### baseline/agents.md
+### baseline/routing-learnings.md
 
 Added Round 1 addon routing notes: unified manager, IstioCSR singleton convention, status conditions, OLM upgrade, operand versions.
 
@@ -36,7 +36,7 @@ Added `### Network policy supplements` section:
 
 **Driver bugs:** CM-758, CM-763, CM-764
 
-### baseline/agents.md
+### baseline/routing-learnings.md
 
 Added Round 2: library-go static NP vs user-defined runtime; compare-before-update; NetworkPolicy watches.
 
@@ -128,7 +128,7 @@ api-generate-tests (2), manual (3), e2e-generate (2), any (1).
 
 **Driver bugs:** CM-735, CM-546, CM-770, CM-521, OCPBUGS-57841
 
-### baseline/agents.md
+### baseline/routing-learnings.md
 
 Added Round 3 code-generation eval bridge routing notes.
 

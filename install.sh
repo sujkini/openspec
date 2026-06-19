@@ -119,7 +119,7 @@ if [[ -d "$EVALS_SRC" ]]; then
   mkdir -p "$EVALS_DEST/baseline"
   cp -a "$EVALS_SRC/baseline/evals" "$EVALS_DEST/baseline/"
   cp "$EVALS_SRC/baseline/evals-registry.yaml" "$EVALS_DEST/baseline/"
-  cp "$EVALS_SRC/baseline/agents.md" "$EVALS_DEST/baseline/"
+  cp "$EVALS_SRC/baseline/routing-learnings.md" "$EVALS_DEST/baseline/"
   cp "$EVALS_SRC/baseline/README.md" "$EVALS_DEST/baseline/"
   cp "$EVALS_SRC/baseline/refinement-changelog.md" "$EVALS_DEST/baseline/"
   if [[ ! -d "$EVALS_DEST/baseline/rounds" ]] || [[ -z "$(find "$EVALS_DEST/baseline/rounds" -mindepth 1 -maxdepth 1 2>/dev/null)" ]]; then

@@ -280,7 +280,7 @@ evals:
     patterns:
       - PAT-003
     input_refs:
-      - evals/baseline/agents.md
+      - evals/baseline/routing-learnings.md
     prompt: |
       All istiocsr managed resources must use server-side apply — not client.Create or client.Update.
     assertions:

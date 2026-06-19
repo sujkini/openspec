@@ -4,7 +4,7 @@ stage: constitution
 source_issue_ids: [ISSUE-007]
 patterns: [PAT-011]
 input_refs:
-  - evals/baseline/agents.md
+  - evals/baseline/routing-learnings.md
 prompt: |
   Constitution must require compare-before-update for managed resources to prevent hot reconcile loops.
 assertions:

@@ -80,7 +80,7 @@ Do **not** write scattered `eval-r001-*.yaml` per-case files.
 | `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Empty → populated | **Read + merge** |
 | `evals/baseline/evals-registry.yaml` | Initialized | **Read + append** |
 | `evals/refined-templates/` | Seed from schemas → refine | Read **refined** copies → refine again |
-| `evals/baseline/agents.md` | Placeholder → updated | **Read + update** |
+| `evals/baseline/routing-learnings.md` | Placeholder → updated | **Read + update** |
 
 Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `*_eval.yaml` files.
 
