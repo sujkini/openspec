@@ -96,7 +96,15 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
    - **User approval** — present eval scorecard (if run) + summary. Ask:
      > Approve this artifact? **(Approve / Reject with feedback)**
      - **Reject on `specs`**: **exit workflow** — do NOT regenerate specs.md (see schema `user_approval_feedback_gate.exit_on_reject.specs` and `USER_FEEDBACK_PROMPT.md`). STOP.
-     - **Reject on other artifacts**: run feedback gate, refine, re-ask
+     - **Reject on other artifacts**: run feedback gate per **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**:
+       1. Capture user feedback verbatim
+       2. Load prior approved artifacts (read-only), current artifact, current template, eval results, openspec instructions
+       3. Update `{schema_root}/templates/<name>.md` if feedback requires structural changes
+       4. Regenerate refined artifact at `outputPath`
+       5. Write round summary → `openspec/changes/<name>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml`
+       6. Re-run eval gate when applicable
+       7. Re-present scorecard + feedback addressed → ask approval again (loop until Approve)
+       - **Do not** use `prompts/<artifact-id>.yaml`
      - **Approve**: STOP (one artifact per invocation)
 
    - Show what was created and what's now unlocked
@@ -143,7 +151,8 @@ For **openspec-agile-workflow**, eval gate mapping:
 - Always read dependency artifacts before creating a new one
 - Never skip artifacts or create out of order
 - Never skip eval gate for gated artifacts
-- Never refine templates in forward workflow — refine change artifacts only
+- Never refine templates during **eval gate** — refine change artifacts only
+- User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - If context is unclear, ask the user before creating
 - Verify the artifact file exists after writing before marking progress
 - Use the schema's artifact sequence, don't assume specific artifact names

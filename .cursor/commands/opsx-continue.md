@@ -48,7 +48,16 @@ Continue working on a change by creating the **next** artifact (one per invocati
 
    - **Approve** → artifact gate satisfied; next `/opsx-continue` may create the next ready artifact
    - **Reject** → if artifact is **`specs`**: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate specs; STOP
-   - **Reject** (other artifacts) → refine artifact with user feedback; re-ask approval (same invocation)
+   - **Reject** (other artifacts) → run feedback loop (same invocation, repeat until Approve):
+     1. Capture user feedback verbatim
+     2. Load context: prior approved artifacts (read-only), current artifact, `{schema_root}/templates/<name>.md`, eval results, openspec instructions
+     3. Update template if feedback requires structural/guidance changes
+     4. Regenerate refined artifact at `outputPath`
+     5. Write round summary → `openspec/changes/<name>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml`
+     6. Re-run eval gate when applicable
+     7. Re-present scorecard + feedback addressed → ask approval again
+     - Read **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`** for full steps
+     - **Do not** use `prompts/<artifact-id>.yaml`
 
 ## Artifact order (openspec-agile-workflow)
 
@@ -71,6 +80,7 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 - ONE artifact per invocation (includes eval + refine + approval for that artifact)
 - Do not skip eval gate for artifacts with `gate: stage_evals`
 - Do not skip user approval
-- Do not refine **templates** — refine the **change artifact** only
+- Do not refine **templates** during eval gate — refine the **change artifact** only
+- User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the user approves the current one

@@ -1,6 +1,9 @@
 # User Approval Feedback Gate — Forward workflow (`/opsx-continue`)
 
-When the user **rejects with feedback** at artifact approval, run the feedback stage defined in schema `user_approval_feedback_gate`. **Do not** modify previously approved artifacts.
+When the user **rejects with feedback** at artifact approval, run this feedback stage.
+**Do not** modify previously approved artifacts.
+
+**No prompt snapshots:** Do **not** read or write `prompts/<artifact-id>.yaml`.
 
 ## When this runs
 
@@ -9,90 +12,180 @@ After **stage eval gate** (if applicable) and **user approval prompt**:
 ```
 Present artifact → Ask approval →
   Approve → lock artifact → unlock next → STOP
-  Reject with feedback → feedback stage → regenerate current artifact → re-eval → ask approval
+  Reject with feedback → FEEDBACK LOOP (below) until user approves
 ```
 
-Repeat until the user approves or explicitly stops.
+### Feedback loop (repeat until Approve)
 
-**Exception — `specs.md`:** Rejection **exits the workflow** (schema `user_approval_feedback_gate.exit_on_reject.specs`). Do **not** regenerate specs or continue to repo-assessment. See [Specs rejection — exit workflow](#specs-rejection--exit-workflow) below.
+```
+1. Capture user feedback
+2. Load context (prior artifacts, current artifact, current template, evals, inputs)
+3. Update template for this artifact if feedback requires it
+4. Regenerate refined artifact(s)
+5. Write round summary → feedback_stage_artifacts/
+6. Re-run eval gate (when applicable)
+7. Present scorecard + feedback addressed → Ask approval again
+```
+
+**Exception — `specs.md`:** Rejection **exits the workflow**. Do **not** run this loop.
+See [Specs rejection — exit workflow](#specs-rejection--exit-workflow).
+
+---
 
 ## Step 1 — Capture feedback
 
-1. Record user feedback verbatim in `openspec/changes/<change>/feedback/<artifact-id>.yaml` (append a round).
-2. Do **not** edit any artifact file with status `done` in `openspec status --change "<name>" --json`.
+Record the user's rejection feedback verbatim. You will include it in the round summary file (Step 5).
+
+Do **not** edit any artifact file with status `done` in `openspec status --change "<name>" --json`.
+
+---
 
 ## Step 2 — Load revision context
 
+Resolve `{schema_root}` (`openspec/schemas/openspec-agile-workflow/` installed, or `schemas/openspec-agile-workflow/` in distribution).
+
+Load mapping from `{schema_root}/stage-gate/artifact-eval-map.yaml` for the current artifact(s).
+
 | # | Context | Source |
 |---|---------|--------|
-| 1 | **Original generation prompt** | `prompts/<artifact-id>.yaml` or reconstruct from `openspec instructions <id> --json` |
+| 1 | **Prior approved artifacts** | Every dependency / `requires` artifact with status `done` — **read-only** |
 | 2 | **Current artifact draft** | Full text at `outputPath` (post eval-gate version) |
-| 3 | **Dependency artifacts** | All `dependencies` / schema `requires` — **read-only** |
-| 4 | **Eval scorecard** | `eval-results/<artifact-id>.yaml` if stage evals ran |
-| 5 | **Prior feedback rounds** | `feedback/<artifact-id>.yaml` history |
-| 6 | **Change inputs** | `inputs/jira.yaml`, `jira-spec.md` if present |
+| 3 | **Current template** | `{schema_root}/templates/<schema_template>.md` from artifact-eval-map |
+| 4 | **Openspec instructions** | `openspec instructions <artifact-id> --change "<name>" --json` (`instruction`, `rules`, `context`) |
+| 5 | **Eval scorecard** | `openspec/changes/<change>/eval-results/<artifact-id>.yaml` if stage evals ran |
+| 6 | **Prior feedback rounds** | `openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-*.yaml` |
+| 7 | **Change inputs** | `inputs/jira.yaml`, `jira-spec.md` if present |
 
-## Step 3 — Update prompt and regenerate
+For **joint gates** (`repo-assessment` + `constitution`): load both current artifacts and both templates; revise both in one round.
 
-Build a revision prompt that includes:
+---
 
-- Original `instruction`, `template`, `rules`, `context` from the generation snapshot
-- **USER FEEDBACK** — verbatim from this rejection
-- **REVISION DIRECTIVES** — address every feedback point; revise only the current artifact
-- **IMMUTABLE INPUTS** — list every dependency path with status `done`; read-only
+## Step 3 — Update template (if required)
 
-Regenerate **only** the current artifact at `outputPath`. For joint gates (`repo-assessment` + `constitution`), regenerate both co-generated files in one round — still do not touch upstream approved artifacts.
+Based on user feedback, decide whether `{schema_root}/templates/<template>.md` needs a structural or guidance update (e.g. missing section skeleton, unclear mandatory headings).
 
-Append an updated snapshot to `prompts/<artifact-id>.yaml` (`generation_round` + `feedback_applied` summary).
+| Update template? | When |
+|------------------|------|
+| **Yes** | Feedback asks for sections/structure the template does not currently require |
+| **No** | Feedback is content-only and the template already supports the requested shape |
 
-### Guardrails
+When updating:
 
-- **Never** overwrite files for artifacts already marked `done` (except the artifact currently under approval).
-- If feedback **requires** changing an approved upstream artifact, **stop** and tell the user which stage must be reopened — do not silently edit upstream files.
-- **Do not** edit `templates/` or `evals/refined-templates/`.
-- **Do not** create the next workflow artifact in the same invocation.
+1. Patch `{schema_root}/templates/<template>.md` in place
+2. Keep changes minimal — only what feedback requires
+3. Record `template_update.summary` for the round file (Step 5)
 
-## Step 4 — Re-run eval gate (when applicable)
+**Do not** edit `evals/refined-templates/` (eval-loop only).
 
-If `artifact-eval-map.yaml` maps this artifact to `gate: stage_evals`, re-score the refined artifact and update `eval-results/<artifact-id>.yaml`.
+---
 
-## Step 5 — Re-present approval
+## Step 4 — Regenerate refined artifact(s)
+
+Using:
+
+- Prior approved artifacts (read-only context)
+- Current artifact draft
+- Updated template (Step 3)
+- User feedback (verbatim)
+- Openspec instructions
+
+Regenerate **only** the current artifact at `outputPath`. For joint gates, regenerate **both** co-generated files — never upstream approved artifacts.
+
+Address every feedback point. Preserve content that already passes eval cases and does not conflict with feedback.
+
+---
+
+## Step 5 — Write feedback stage summary
+
+Append one round file:
+
+```
+openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml
+```
+
+Joint gate:
+
+```
+openspec/changes/<change>/feedback_stage_artifacts/repo-assessment+constitution/round-<N>.yaml
+```
+
+Use schema in `{schema_root}/feedback_stage_artifacts/README.md`. Include:
+
+- `user_feedback` (verbatim)
+- `template_update` (required, path, summary)
+- `artifact_regeneration` (paths, summary)
+- `feedback_addressed` (bullet list mapping feedback → change)
+
+---
+
+## Step 6 — Re-run eval gate (when applicable)
+
+If `artifact-eval-map.yaml` maps this artifact to `gate: stage_evals` or `gate: rubric_only`:
+
+- Re-score the refined artifact(s)
+- Update `openspec/changes/<change>/eval-results/<artifact-id>.yaml`
+- Record scores in the round summary
+
+---
+
+## Step 7 — Re-present approval (loop)
 
 Present:
 
-1. **Refined artifact** — path + summary of changes made for feedback
-2. **Eval scorecard** — if evals ran (updated scores)
-3. **Feedback addressed** — bullet list mapping feedback → changes
-4. **Immutable inputs** — confirm no upstream approved artifacts were modified
+1. **Refined artifact(s)** — path + summary of changes
+2. **Template update** — yes/no; what changed in `templates/<name>.md`
+3. **Eval scorecard** — if evals ran (updated scores)
+4. **Feedback addressed** — bullets mapping feedback → template + artifact changes
+5. **Round summary path** — `feedback_stage_artifacts/.../round-<N>.yaml`
+6. **Immutable inputs** — confirm no upstream approved artifacts were modified
 
-Ask (schema `user_approval_feedback_gate.approval_prompt`):
+Ask:
 
 > Approve this artifact and proceed to the next stage?  
 > **(Approve / Reject with feedback)**
 
 - **Approve** → mark artifact done; lock as immutable; STOP
-- **Reject** → return to Step 1 with new feedback
+- **Reject with feedback** → return to **Step 1** with new feedback (increment round)
+
+---
+
+## Guardrails
+
+- **Never** overwrite files for artifacts already marked `done` (except artifact(s) currently under approval)
+- If feedback **requires** changing an approved upstream artifact, **stop** and tell the user which stage must be reopened
+- **Do not** use or create `prompts/<artifact-id>.yaml`
+- **Do not** edit `evals/refined-templates/`
+- **Do not** create the next workflow artifact in the same invocation
+
+---
 
 ## Co-generated artifacts (repo-assessment + constitution)
 
-Single joint approval covers both. On reject, revise **both** artifacts using one shared feedback round. Run eval gate separately for each file. Still treat `specs.md` and all earlier artifacts as immutable.
+Single joint approval covers both. On reject:
+
+- One feedback loop revises **both** artifacts and **both** templates if needed
+- One shared round summary under `feedback_stage_artifacts/repo-assessment+constitution/`
+- Run eval gate separately for each artifact file
+- Treat `specs.md` and all earlier artifacts as immutable
+
+---
 
 ## Implementation task approval variant
 
 Implementation runs OAPE **task-by-task**. User approval is required **after every
-task** before advancing to the next (including across phase boundaries). On reject,
-append feedback to `implementation/design-bundle.md` **REVISION FEEDBACK** and
-re-run OAPE commands for the **current task only** — do not regenerate approved
-OpenSpec artifacts, do not mark the task complete, and do not start the next task.
+task** before advancing to the next. On reject, append feedback to
+`implementation/design-bundle.md` **REVISION FEEDBACK** and re-run OAPE commands for
+the **current task only** — do not use this artifact feedback loop for per-task code.
+
+---
 
 ## Specs rejection — exit workflow
 
 When the user **rejects** `specs.md` at the approval gate:
 
-1. **Do NOT** run Steps 1–5 of this document (no regeneration loop).
-2. Optionally record the user's reason in `feedback/specs.yaml` (one entry).
-3. Present schema `exit_on_reject.specs.exit_message`.
-4. **STOP** — do not create repo-assessment, constitution, plan, tasks, or implementation artifacts.
-5. Do not mark specs as `done`. Downstream artifacts remain blocked.
+1. **Do NOT** run the feedback loop above
+2. Optionally record reason in `feedback_stage_artifacts/specs/round-1.yaml`
+3. Present schema `exit_on_reject.specs.exit_message`
+4. **STOP** — do not create repo-assessment or downstream artifacts
 
-The user must revise Jira/inputs and start fresh (`/opsx-new`) or remove specs and re-run `/opsx-continue` when ready to try again.
+The user must revise inputs and start fresh (`/opsx-new`) or delete specs and re-run `/opsx-continue`.

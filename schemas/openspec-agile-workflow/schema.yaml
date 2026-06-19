@@ -203,105 +203,91 @@ code_generation_eval_gate:
 user_approval_feedback_gate:
   description: >-
     Feedback stage during user approval. When the user rejects an artifact with
-    feedback, capture the generation prompt that produced it, all prior approved
-    artifacts, and the user's feedback; update the prompt; regenerate and present
-    only the current artifact. On approve, mark done and unlock the next stage.
-    User feedback MUST NOT modify any previously approved artifact.
+    feedback, load prior approved artifacts (read-only), the current artifact,
+    and the current schema template; update the template if feedback requires it;
+    regenerate and present only the current artifact; write a round summary to
+    feedback_stage_artifacts; re-run eval gate when applicable; loop until the
+    user approves. User feedback MUST NOT modify any previously approved artifact.
   runs_after:
     - stage_eval_gate
   runs_during: user_approval
   system_prompt: stage-gate/USER_FEEDBACK_PROMPT.md
-  prompt_snapshot: openspec/changes/<change>/prompts/<artifact-id>.yaml
-  feedback_log: openspec/changes/<change>/feedback/<artifact-id>.yaml
+  feedback_stage_artifacts:
+    schema_spec: feedback_stage_artifacts/README.md
+    round_summary: >-
+      openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml
+    joint_round_summary: >-
+      openspec/changes/<change>/feedback_stage_artifacts/repo-assessment+constitution/round-<N>.yaml
   flow: >-
     present_artifact → ask_approval →
     (approve → lock_artifact → unlock_next → stop) |
-    (reject_with_feedback → feedback_stage → regenerate_current_artifact
+    (reject_with_feedback → load_context → update_template_if_required
+     → regenerate_current_artifact → write_feedback_stage_summary
      → re_run_stage_eval_gate → ask_approval)
   approval_prompt: >-
     Approve this artifact and proceed to the next stage?
     (Approve / Reject with feedback)
-  on_first_generation:
-    description: >-
-      After writing artifact v1 (before eval gate), snapshot the effective
-      generation prompt to prompts/<artifact-id>.yaml.
-    capture_from: openspec instructions --json
-    fields:
-      - artifact_id
-      - outputPath
-      - instruction
-      - template
-      - rules
-      - context
-      - dependencies
-      - generation_round: 1
-      - generated_at
   on_reject:
     steps:
+      - Capture user feedback verbatim (include in round summary).
       - >-
-        Record user feedback verbatim in feedback/<artifact-id>.yaml
-        (append round: feedback_text, timestamp, artifact_version).
+        Load revision context (see revision_context): prior approved artifacts
+        (read-only), current artifact draft at outputPath, current template from
+        artifact-eval-map, openspec instructions, eval results, prior round
+        summaries, change inputs.
       - >-
-        Load prompt snapshot from prompts/<artifact-id>.yaml. If missing,
-        reconstruct from openspec instructions --json for the artifact id.
+        If feedback requires structural or guidance changes, patch
+        {schema_root}/templates/<template>.md minimally; record template_update
+        in round summary.
       - >-
-        Load dependency artifacts listed in instructions dependencies and schema
-        requires — these are READ-ONLY (see immutable_artifacts).
+        Regenerate ONLY the current artifact at outputPath using revision context
+        and user feedback. For joint gates (repo-assessment + constitution),
+        regenerate both co-generated artifacts in one feedback round — never
+        upstream approved artifacts.
       - >-
-        Load current artifact draft at outputPath (latest version, including any
-        eval-gate refinements).
+        Write round summary to feedback_stage_artifacts/<artifact-id>/round-<N>.yaml
+        (see feedback_stage_artifacts/README.md).
+      - Re-run stage_eval_gate when the artifact has stage evals or rubric_only.
       - >-
-        Build a revision prompt (see prompt_update) that merges original prompt,
-        dependencies, current draft, eval results (if any), and user feedback.
-      - >-
-        Regenerate ONLY the current artifact at outputPath. For joint gates
-        (repo-assessment + constitution), regenerate both co-generated artifacts
-        in one feedback round — never upstream approved artifacts.
-      - >-
-        Append updated prompt snapshot to prompts/<artifact-id>.yaml
-        (increment generation_round; include feedback_applied summary).
-      - Re-run stage_eval_gate when the artifact has stage evals.
-      - Present refined artifact(s) and return to approval_prompt.
+        Present refined artifact(s), template update summary, eval scorecard,
+        feedback addressed bullets, round summary path; return to approval_prompt.
     do_not:
       - Modify, overwrite, or delete any previously approved artifact file
-      - Edit schema templates/ or evals/refined-templates/
+      - Read or write prompts/<artifact-id>.yaml
+      - Edit evals/refined-templates/
       - Create the next artifact in the workflow sequence
       - Advance workflow stage until user approves
-  prompt_update:
+  revision_context:
     description: >-
-      The revision prompt used to regenerate the current artifact after user
-      rejection. Extends the original generation prompt — does not replace schema
-      instructions.
+      Context bundle used to decide template updates and regenerate the current
+      artifact after user rejection.
     context_bundle:
-      - original_generation_prompt
+      - prior_approved_artifacts_read_only
       - current_artifact_draft
-      - dependency_artifacts_read_only
+      - current_schema_template
+      - openspec_instructions
       - eval_results_and_failed_assertions
       - user_feedback_verbatim
-      - prior_feedback_rounds
+      - prior_feedback_stage_round_summaries
       - change_inputs_jira_yaml
-    append_sections:
-      - name: USER FEEDBACK
-        content: Verbatim rejection feedback from this round
-      - name: REVISION DIRECTIVES
-        content: >-
-          Address every point in USER FEEDBACK. Revise only the current artifact
-          (or co-generated pair). Preserve content that already satisfies eval
-          cases and does not conflict with feedback.
-      - name: IMMUTABLE INPUTS
-        content: >-
-          List every dependency artifact path with status done. These files are
-          frozen — read for context only; do not rewrite or contradict unless the
-          user explicitly requests reopening an earlier stage.
-    rules:
-      - Address every point in user feedback in the revised artifact
-      - Do not modify any artifact with status done in openspec status
-      - >-
-        If feedback requires changing an approved upstream artifact, stop and
-        tell the user which artifact must be reopened — do not silently edit it
-      - Overwrite only the current artifact outputPath (or joint co-generated paths)
-      - Do not invent facts not supported by immutable inputs or change inputs
-      - Re-run eval gate after regeneration when applicable
+    template_update:
+      when: >-
+        Feedback asks for sections, headings, or structural guidance the current
+        template does not require.
+      path: '{schema_root}/templates/<template>.md'
+      rules:
+        - Minimal patch only — what feedback requires
+        - Record template_update summary in round summary file
+    artifact_regeneration:
+      rules:
+        - Address every point in user feedback in the revised artifact
+        - Do not modify any artifact with status done in openspec status
+        - >-
+          If feedback requires changing an approved upstream artifact, stop and
+          tell the user which artifact must be reopened — do not silently edit it
+        - Overwrite only the current artifact outputPath (or joint co-generated paths)
+        - Do not invent facts not supported by immutable inputs or change inputs
+        - Re-run eval gate after regeneration when applicable
   on_approve:
     steps:
       - Mark artifact status done per schema gate
@@ -359,8 +345,9 @@ user_approval_feedback_gate:
         workflow_stage: spec-understanding
         on_reject:
           - >-
-            Optionally record user reason in feedback/specs.yaml (single entry;
-            no refinement rounds).
+            Optionally record user reason in
+            feedback_stage_artifacts/specs/round-1.yaml (single entry; no refinement
+            rounds).
           - Do NOT regenerate specs.md
           - Do NOT unlock repo-assessment, constitution, plan, tasks, or implementation
           - STOP — exit the workflow for this change
@@ -792,9 +779,10 @@ artifacts:
          if needed; write eval-results/repo-assessment.yaml.
       1. SUMMARIZE: target files, reusable assets, guardrails, top risks, eval score.
       2. ASK: see schema user_approval_feedback_gate.approval_prompt (joint with constitution).
-      3. ON REJECT: Run user_approval_feedback_gate — update prompt with feedback;
-         regenerate repo-assessment.md and constitution.md only; specs.md and all
-         earlier artifacts remain immutable. Re-run eval gate for both; re-ask approval.
+      3. ON REJECT: Run user_approval_feedback_gate — update templates if required;
+         regenerate repo-assessment.md and constitution.md only; write round summary
+         to feedback_stage_artifacts; specs.md and all earlier artifacts remain
+         immutable. Re-run eval gate for both; re-ask approval.
       4. ON APPROVE: Lock both artifacts as immutable; unlock Planning Stage.
     gate:
       type: approval
@@ -884,9 +872,9 @@ artifacts:
          write eval-results/plan.yaml. Do not edit schema templates.
       1. SUMMARIZE: phase count (### Phase headings), top risks, open questions, eval score.
       2. ASK: see schema user_approval_feedback_gate.approval_prompt
-      3. ON REJECT: Run user_approval_feedback_gate — update generation prompt with
-         feedback; regenerate plan.md only; approved upstream artifacts are immutable.
-         Re-run eval gate; re-ask approval.
+      3. ON REJECT: Run user_approval_feedback_gate — update template if required;
+         regenerate plan.md only; write round summary to feedback_stage_artifacts;
+         approved upstream artifacts are immutable. Re-run eval gate; re-ask approval.
       4. ON APPROVE: Lock plan.md as immutable; unlock Task Creation Stage.
     gate:
       type: approval
@@ -997,10 +985,10 @@ artifacts:
       2. Optional per-phase gates when phase_feedback is enabled (review each phase's
          manifest rows and payload preview before continuing).
       3. ASK: see schema user_approval_feedback_gate.approval_prompt
-      4. ON REJECT: Run user_approval_feedback_gate — update generation prompt with
-         feedback; regenerate tasks.md only (multipass or phase-level per impact
-         assessment); approved upstream artifacts remain immutable. Re-run eval gate;
-         re-ask approval.
+      4. ON REJECT: Run user_approval_feedback_gate — update template if required;
+         regenerate tasks.md only (multipass or phase-level per impact assessment);
+         write round summary to feedback_stage_artifacts; approved upstream artifacts
+         remain immutable. Re-run eval gate; re-ask approval.
       5. ON APPROVE: Lock tasks.md as immutable; unlock Implementation Stage.
     gate:
       type: approval

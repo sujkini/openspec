@@ -131,7 +131,7 @@ Present to user:
 > **(Approve / Reject with feedback)**
 
 - **Approve** → mark artifact done per schema gate; STOP (one artifact per `/opsx-continue`)
-- **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): update generation prompt with feedback, regenerate **current artifact only**, re-run eval gate if applicable, re-present this step; do not advance; do not modify previously approved artifacts
+- **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): load prior artifacts + current template, update template if feedback requires it, regenerate **current artifact only**, write round summary to `feedback_stage_artifacts/`, re-run eval gate if applicable, re-present this step; loop until approve; do not modify previously approved artifacts
 
 Do **not** create the next artifact in the same invocation.
 
@@ -145,7 +145,8 @@ If both are created in one session (same invocation per schema co-generation):
 
 ## Guardrails
 
-- Forward workflow refines **artifacts only** — never templates
+- Forward workflow (eval gate) refines **artifacts only** — not templates
+- User rejection feedback loop **may** patch `{schema_root}/templates/` when feedback requires structural changes; record in `feedback_stage_artifacts/`
 - Stage evals are **read-only** during forward workflow (do not add cases mid-change unless user asks)
 - `evals/refined-templates/` is for `/eval-loop` only
 - One artifact (+ eval gate) per `/opsx-continue` invocation
