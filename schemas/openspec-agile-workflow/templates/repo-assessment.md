@@ -8,11 +8,11 @@ produce accurate, repo-grounded implementation plans for any new feature.
 Every section must answer: "What does a Planning AI Agent need to know about this to
 produce a safe, accurate, and complete implementation plan for a new feature?"
 
-Inputs you will receive in the user message:
-- Validated spec text + metadata (repo/branch/commit + optional validator summary)
-- Repository analysis (auto-collected by the stage2 Python script before your invocation):
-  directory tree (5 levels), key file contents (README, go.mod, Makefile, Dockerfile, etc.),
-  and recent git log (last 20 commits).
+Inputs you will receive in the user message or change context:
+- Validated spec text (specs.md) + metadata (repo/branch/commit + optional validator summary)
+- Repository analysis: directory tree, key file contents (README, go.mod, Makefile,
+  Dockerfile, etc.), and recent git log — collected via agent tools, working folder,
+  or target repo checkout (see schema target_repo and working_folder_repo)
 
 Rules:
 1) Only assert file paths and symbols supported by repository evidence from your tools.
@@ -47,6 +47,11 @@ Rules:
     has code that the pinned branch lacks.
 12) **No draft/meta prose:** Forbidden phrases include "I will now…", "Let me read…", "This assessment
     will cover…". Output reads as finished engineering documentation.
+
+## Output
+Output ONLY the complete repo-assessment.md markdown document.
+No preamble, no explanation, no code fences — just the document.
+Follow the output template structure exactly.
 
 ## Exemplar Reference (format only — not content to copy)
 
@@ -238,7 +243,7 @@ When the repo is a web application, adapt the same sections to cover:
 
 ---
 
-## Output Schema
+## Output Template
 
 The agent MUST output exactly this top-level structure. Do NOT skip sections.
 Do NOT reorder sections. Sections that are not applicable should say so explicitly.

@@ -508,6 +508,7 @@ oape_routing:
     runs task-by-task: compose a design bundle scoped to one task, invoke exactly
     one allowed OAPE command for that task (see command_resolution), verify,
     then request user approval before advancing.
+  code_generation_prompt: templates/code-generation.md
   reference: oape-ai-e2e/AGENTS.md
   commands_dir: .cursor/commands
   allowed_commands:
@@ -800,8 +801,8 @@ artifacts:
       Transform the Jira specification into a user-approved specs.md artifact.
 
       ## Process
-      1. Read validation.json if available; address missing_elements as assumptions.
-      2. Follow spec.md template for structure.
+      1. Read the Specification Analyst preamble and output template in spec.md — follow both.
+      2. Read validation.json if available; address missing_elements as assumptions.
       3. Produce user stories (P1/P2/P3) with Given/When/Then acceptance scenarios.
       4. Derive functional requirements (FR-001…), success criteria (SC-001…), assumptions.
       5. No implementation details (languages, frameworks, file paths).
@@ -853,7 +854,8 @@ artifacts:
       1. Resolve AGENTS.md: check target repo and change inputs/; if absent, ask the user
          once to provide AGENTS.md before continuing (or proceed PROVISIONAL if declined).
       2. Read and contextualize the repository; cross-reference with specs.md.
-      3. Follow repo-assessment.md template for all required sections.
+      3. Read the Repository Assessment Agent preamble and output template in
+         repo-assessment.md — follow both.
       4. Document target files, reusable assets, guardrails, and risks with evidence.
       5. Fact-based inventory only — no governance principles (those go in constitution.md).
 
@@ -899,7 +901,7 @@ artifacts:
       1. Resolve AGENTS.md: if not found in target repo or change inputs/, ask the user
          once to provide AGENTS.md (see schema agents_md.when_missing).
       2. Read repository analysis and specs.md.
-      3. Follow constitution.md template for structure.
+      3. Read the Constitution Agent preamble and output template in constitution.md — follow both.
       4. Every principle must cite observable repo evidence.
       5. Set AgentRoutingMode PROVIDED if AGENTS.md exists; otherwise PROVISIONAL.
       6. No file inventories or risk analysis — those belong in repo-assessment.md.
@@ -1225,8 +1227,9 @@ artifacts:
          for api-generate and api-implement only.
       5. **Follow-up**: Run follow_up make targets when defined (make update, etc.).
       6. **Manual agents**: For ManifestsBindata_Agent, OLMRelease_Agent,
-         RBACSecurity_Agent, WebhookTLS_Agent, Docs_Agent — implement this task's
-         payload directly in fork with minimal scoped edits; log deviations.
+         RBACSecurity_Agent, WebhookTLS_Agent, Docs_Agent — read
+         templates/code-generation.md for FILE OPERATIONS format; implement this
+         task's payload directly in cwd with minimal scoped edits; log deviations.
       7. **Verify**: Run Acceptance criteria for this task; record pass/fail.
       8. **Code eval gate** (see schema code_generation_eval_gate and
          stage-gate/CODE_GENERATION_EVAL_PROMPT.md): load evals/code-generation_eval.yaml;

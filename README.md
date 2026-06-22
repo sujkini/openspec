@@ -33,11 +33,19 @@ After each artifact is generated:
 generate v1 → run stage evals → refine artifact → user approve → next stage
 ```
 
-If you **reject** with feedback, only the **current** artifact is regenerated. Previously approved artifacts stay **immutable**.
+If you **reject** with feedback, the agent:
+
+1. Loads prior approved artifacts (read-only), current artifact, and the **current template**
+2. **Updates the template** if your feedback requires structural changes (minimal patch)
+3. **Regenerates** only the current artifact
+4. Writes a **round summary** to `openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml`
+5. Re-runs evals → asks for approval again (loops until you approve)
+
+Previously approved artifacts stay **immutable**. No `prompts/<artifact-id>.yaml` snapshots are used.
 
 **Exception:** Rejecting **`specs.md`** **exits the workflow** — no regeneration, no repo-assessment or later stages until you start fresh or re-run specs.
 
-During **implementation**, approval happens **after every task** (not per phase).
+During **implementation**, approval happens **after every task** (not per artifact).
 
 ---
 
@@ -50,8 +58,8 @@ During **implementation**, approval happens **after every task** (not per phase)
 | [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | `npm install -g @fission-ai/openspec` |
 | [Cursor](https://cursor.com) | Slash commands and skills install to `.cursor/` |
 | Jira access | Ticket key at `/opsx-new`; spec via MCP or paste into `inputs/jira-spec.md` |
-| Target GitHub repo | URL before **repo-assessment** (`inputs/jira.yaml` → `target_repo`) |
-| Fork GitHub repo | URL before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`) |
+| Target GitHub repo | URL before **repo-assessment** (`inputs/jira.yaml` → `target_repo`); **or** use working-folder mode |
+| Fork GitHub repo | URL before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`); **skip in working-folder mode** |
 | `AGENTS.md` in target repo | **Expected in production** — see [agents.md](#agentsmd-testing-only) below |
 
 ### Required after install (forward workflow)
@@ -62,11 +70,14 @@ These are installed by `install.sh` and are **required** for `/opsx-new` through
 openspec/
 ├── config.yaml                              # selects openspec-agile-workflow schema
 ├── changes/                                 # one folder per change
+│   └── <change>/feedback_stage_artifacts/   # round summaries (per rejection loop)
 └── schemas/openspec-agile-workflow/
     ├── schema.yaml                          # workflow definition
-    ├── templates/                           # artifact templates
+    ├── templates/                           # artifact + agent templates
+    │   └── code-generation.md              # Code Generation Agent (implementation)
     ├── evals/                               # stage evals for /opsx-continue
     ├── stage-gate/                          # eval + feedback prompts
+    ├── feedback_stage_artifacts/            # format spec (README only — data in changes/)
     └── agents.md                            # bundled roster (testing only — see below)
 
 .cursor/
@@ -219,9 +230,20 @@ Other OAPE commands (`review`, `predict-regressions`, etc.) are **not** used dur
 |-------|----------------|
 | Jira ticket key | `/opsx-new` |
 | Jira spec content | Paste into `inputs/jira-spec.md` or use Jira MCP |
-| Target repo URL | Before **repo-assessment** — agent prompts if empty (`inputs/jira.yaml` → `target_repo`) |
-| Fork repo URL | Before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`) |
+| Target repo URL | Before **repo-assessment** — agent prompts if empty (`inputs/jira.yaml` → `target_repo`); **skip if using working-folder mode** |
+| Fork repo URL | Before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`); **skip in working-folder mode** |
 | `AGENTS.md` | Before repo-assessment/plan/tasks if not in target repo — see [agents.md](#agentsmd-testing-only) |
+
+### Working-folder mode
+
+If you tell the agent to **"use the working folder as the repo"** (or similar), it activates local-checkout mode:
+
+- Sets `use_working_folder_as_repo: true` in `inputs/jira.yaml`
+- Uses your **current project checkout** for repo-assessment, constitution, plan, tasks, and implementation
+- **No fork URL** required, **no clone**, **no feature branch** (unless you ask), **no draft PR**
+- Implementation edits apply directly in your working directory
+
+This is useful when your project checkout is the same repo you want to assess and implement in.
 
 ---
 
@@ -232,15 +254,15 @@ Implementation follows **`tasks.md`** in linear execution order, respecting task
 For **each pending task**:
 
 1. Compose `implementation/design-bundle.md` scoped to **that task only**
-2. Resolve **exactly one** allowed OAPE command (or manual work for non-OAPE agents)
-3. Run the command in your **fork** working copy
+2. Resolve **exactly one** allowed OAPE command (or manual work per `templates/code-generation.md` for non-OAPE agents)
+3. Run the command in your **fork** working copy (or project cwd in working-folder mode)
 4. Verify against the task's acceptance criteria
-5. Run **code-generation evals** → refine code in fork until evals pass (max 2 passes)
+5. Run **code-generation evals** → refine code until evals pass (max 2 passes)
 6. Present task summary + code eval scorecard; ask for **user approval of the code**
 7. On approve: write **`implementation/task-reports/<task-id>.md`**, mark task `- [x]`, log progress, next task
 8. On reject: add revision feedback, re-run **current task only**
 
-When all tasks are done: write **`implementation-report.md`** (aggregates all task reports), commit, push feature branch, open a **draft PR** on your fork.
+When all tasks are done: write **`implementation-report.md`** (aggregates all task reports), commit, push feature branch, open a **draft PR** on your fork. In **working-folder mode**, no push/PR — summarize local changes instead.
 
 Typical task chain for a full feature:
 
@@ -250,6 +272,33 @@ T2  api-generate-tests  → .testsuite.yaml integration tests
 T3  api-implement       → controller / operator logic
 T4  e2e-generate        → end-to-end tests (when applicable)
 ```
+
+---
+
+## Template architecture
+
+Each artifact template in `schemas/.../templates/` follows a consistent structure:
+
+```
+Agent preamble (system prompt: role, mission, inputs, quality rules)
+---
+## Output Template
+<markdown skeleton for the artifact>
+```
+
+| Template | Agent role |
+|----------|------------|
+| `validation.md` | Specification Validator |
+| `spec.md` | Specification Analyst |
+| `repo-assessment.md` | Repository Assessment Agent |
+| `constitution.md` | Constitution Agent |
+| `plan.md` | Technical Planning Agent |
+| `tasks.md` + `tasks-modes/*.md` | Sub-Task Creation Agent (multipass) |
+| `code-generation.md` | Code Generation Agent (implementation) |
+| `design-bundle.md` | User message template for codegen |
+| `implementation-report.md` | Closing documentation agent |
+
+Templates serve as both the **system prompt** (how to generate) and the **output schema** (what to produce).
 
 ---
 
@@ -269,7 +318,7 @@ Do not confuse these — they serve different purposes.
 generate artifact → score against stage evals → refine artifact → user approve
 ```
 
-Templates under `openspec/schemas/.../templates/` are **not** modified. Only the change artifact is refined.
+Templates under `openspec/schemas/.../templates/` are **not** modified during eval-gate refinement. Only the change artifact is refined. However, during the **user rejection feedback loop**, templates **may be patched** if your feedback requires structural changes (see `stage-gate/USER_FEEDBACK_PROMPT.md`).
 
 ### 2. Code generation eval gate (`/opsx-apply`)
 
@@ -338,9 +387,12 @@ install.sh                         # install into another project
 schemas/openspec-agile-workflow/
 ├── schema.yaml                    # workflow definition
 ├── agents.md                      # synced copy for schema package
-├── templates/                     # artifact templates (forward workflow)
+├── templates/                     # artifact + agent templates (forward workflow)
+│   ├── code-generation.md        # Code Generation Agent prompt
+│   └── tasks-modes/              # multipass mode templates for tasks.md
 ├── evals/                         # stage evals (forward workflow gate)
-└── stage-gate/                    # SYSTEM_PROMPT, USER_FEEDBACK_PROMPT, artifact map
+├── stage-gate/                    # SYSTEM_PROMPT, USER_FEEDBACK_PROMPT, artifact map
+└── feedback_stage_artifacts/      # format spec for rejection round summaries
 evals/                             # retrospective eval loop (/eval-loop)
 ├── inputs/                        # paste one feature bundle at a time
 ├── baseline/                      # cumulative evals + changelog
@@ -360,8 +412,9 @@ oape-ai-e2e/                       # upstream OAPE plugin (source for OAPE skill
 - Use **`install.sh`**, not `openspec init` alone, to get this workflow.
 - **`openspec update`** overwrites `.cursor/` — re-run `install.sh` afterward.
 - Bundled **`agents.md`** is for **testing** cert-manager-operator; production repos should provide their own `AGENTS.md`.
-- Implementation edits go to your **fork**, not the upstream target repo.
-- Rejecting an artifact regenerates **only that artifact** (except **specs.md** — rejection exits the workflow); approved artifacts are never modified.
+- Implementation edits go to your **fork** (default) or **working folder** (`use_working_folder_as_repo: true`) — not the upstream target repo.
+- Rejecting an artifact regenerates **only that artifact** (except **specs.md** — rejection exits the workflow); the agent may also **patch the template** if feedback requires structural changes.
+- Feedback round summaries are written to `openspec/changes/<change>/feedback_stage_artifacts/` — they persist across schema reinstalls.
 
 ---
 
