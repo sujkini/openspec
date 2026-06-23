@@ -85,7 +85,6 @@ code_generation:
     - manual
     - any
 
-optional_not_in_eval_stages:
-  - checklist.md
+optional_not_in_eval_stages: []
 
 stage_samples_dir: evals/eval-generation/stage-samples/
