@@ -182,6 +182,19 @@ Upstream cert-manager
 - **After refactors**: **`make verify`** and **`make lint`** (`.golangci.yaml`).
 - **Add or update tests** for code you change (unit, `test/apis`, or e2e as appropriate).
 
+### Per-task testing during `/opsx-apply` (code generation eval gate)
+
+During implementation, each code generation task is verified with **real command execution** (not agent assertions). See **[`stage-gate/CODE_GENERATION_EVAL_PROMPT.md`](stage-gate/CODE_GENERATION_EVAL_PROMPT.md)** for the full protocol and **[`unit-tests-code-gen.md`](../../unit-tests-code-gen.md)** for design rationale.
+
+| Task type | Verification | Test strategy |
+|-----------|-------------|--------------|
+| API types | `go build`, `go vet` | Build-only |
+| Codegen (`make generate/manifests`) | `make generate && make manifests && make verify` | Consistency check |
+| Controller logic (`pkg/controller/`) | `go build`, `go vet` | Co-generated `_test.go` + `go test` (IstioCSR exemplar) |
+| Bindata / manifests | `make update-bindata && make verify` | `make verify` |
+| OLM bundle | `make bundle && hack/verify-bundle.sh` | Bundle scripts |
+| Feature gates | `go build`, `go vet` | `go test ./pkg/features/... -run TestFeatureGates` |
+
 ---
 
 ## PR instructions

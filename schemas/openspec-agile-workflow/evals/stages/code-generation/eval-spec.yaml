@@ -51,6 +51,19 @@ assertion_types:
   - must_follow_effective_go
   - must_include_tests
   - must_not_violate_non_goals
+  - must_execute_verification
+  - must_co_generate_tests
+
+assertion_descriptions:
+  must_execute_verification: >-
+    All verification commands (go build, go vet, make targets) from
+    CODE_GENERATION_EVAL_PROMPT step 2 executed with exit code 0.
+    Enforced via real shell execution — agent assertions alone do not satisfy this.
+  must_co_generate_tests: >-
+    Controller logic tasks (api-implement modifying pkg/controller/) must produce
+    _test.go files following the IstioCSR exemplar pattern: table-driven tests using
+    fakes.FakeCtrlClient, 1:1 mapping of production files to test files. Tests must
+    compile and pass via go test.
 
 filter_rule_forward: >-
   During /opsx-apply, load evals/code-generation_eval.yaml and score only cases
