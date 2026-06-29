@@ -11,7 +11,7 @@ This repo is the **distribution package**: schema, templates, Cursor commands, a
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 cd /path/to/your-operator-project
 /tmp/openspec-workflow/install.sh .
 ```
