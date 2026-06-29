@@ -198,4 +198,4 @@ Follow the output template structure exactly.
 - **A-001**: [Assumption about target users or personas, e.g., "Cluster administrators manage this feature via the operator API"]
 - **A-002**: [Scope boundary, e.g., "Hypershift-specific behavior is out of scope unless the ticket explicitly requires it"]
 - **A-003**: [Environment assumption, e.g., "Target OpenShift version supports the operator's existing feature-gate mechanism"]
-- **A-004**: [Dependency assumption, e.g., "Core cert-manager operand is already installed and healthy before this feature is enabled"]
+- **A-004**: [Dependency assumption, e.g., "Core platform components are already installed and healthy before this feature is enabled"]

@@ -19,7 +19,9 @@ Planning/codegen agents fail when specs omit scope boundaries, testable acceptan
 ## Operating constraints
 - Do not fabricate repositories, APIs, ports, behaviors, timelines, or dependencies not stated in the spec.
 - Universal Kubernetes facts may be stated ONLY as neutral "implementation note" suggestions inside quality_issues.suggestion—not as assumed spec facts.
-- cert-manager ecosystem items are mandatory to evaluate when the spec touches operators/operands/CRDs/webhooks/TLS/RBAC/networking/monitoring/upgrades/OpenShift/MicroShift/Hypershift.
+- When an AGENTS.md file is provided for the target project and it contains a **Validation Stage
+  Hints** section, apply its project-specific ecosystem evaluation trigger, pillars, JSON schema
+  extensions, and few-shot calibration examples in addition to the generic rubric below.
 
 ## Scoring posture
 Strict on testability, consistency, operational/security completeness. Fair on writing style.
@@ -32,14 +34,10 @@ Penalize heavily if any core pillar is absent OR cannot be verified from the tex
 - Scope Boundaries & Dependencies (out-of-scope, blockers, migrations, cross-team)
 - Impacted Repositories / Systems (explicit names; if absent → missing_elements)
 
-PLUS cert-manager ecosystem pillars (evaluate; if absent → missing_elements and/or cert_manager_ecosystem.gaps):
-- API & CRD lifecycle (scope, defaults, immutability, validation, migration/deprecation if relevant)
-- Install / uninstall / reconcile semantics (including CR delete behavior)
-- RBAC & blast radius (cluster-wide writes, secrets, cross-namespace effects)
-- Webhooks & TLS (how secured, issuance path, failure modes)
-- Platform matrix (OpenShift vs MicroShift; FeatureGates/FeatureSets if relevant; Hypershift/hosted notes)
-- Observability (metrics/readiness/status conditions if relevant)
-- Upgrade / downgrade / version skew
+If an AGENTS.md Validation Stage Hints section defines **project-specific ecosystem pillars**,
+evaluate those pillars and populate the corresponding JSON schema extension (e.g.,
+`project_ecosystem`). If no AGENTS.md is provided, skip the
+project-specific ecosystem section in the JSON output.
 
 ## Rubric — B) QUALITY (Clarity & Actionability; INVEST-style)
 Flag with quotes + concrete rewrite guidance:
@@ -78,24 +76,19 @@ Set overall_status to:
     "quality_issues": [
       { "type": "Ambiguity|Testability|Sizing|Consistency", "quote": "string", "suggestion": "string" }
     ],
-    "cert_manager_ecosystem": {
-      "api_lifecycle_complete": true,
-      "rbac_blast_radius_documented": true,
-      "webhook_tls_and_failure_modes": true,
-      "install_uninstall_semantics_clear": true,
-      "platform_matrix_addressed": true,
-      "observability_status_documented": true,
-      "upgrade_skew_addressed": true,
-      "gaps": ["string"]
+    "project_ecosystem": {
+      "...": "Schema defined by AGENTS.md Validation Stage Hints, if provided. Omit this key entirely when no AGENTS.md ecosystem schema is defined."
     },
     "blockers": ["string"],
     "non_blockers": ["string"]
   }
 }
 
-Rules for booleans in cert_manager_ecosystem:
+Rules for `project_ecosystem` (when AGENTS.md defines one):
+- Use the exact key name and boolean fields specified in the AGENTS.md JSON Schema Extension.
 - Set a boolean true ONLY if the spec text substantively covers that area; otherwise false.
-- Put questions and missing details in gaps (even when boolean is false).
+- Put questions and missing details in `gaps` (even when boolean is false).
+- When no AGENTS.md ecosystem schema is provided, omit `project_ecosystem` entirely.
 
 Populate blockers/non_blockers:
 - blockers: issues preventing safe implementation or causing spec self-contradiction
@@ -110,69 +103,64 @@ Populate blockers/non_blockers:
 
 ## Few-Shot Calibration Examples
 
+These examples are **project-agnostic**. When AGENTS.md provides project-specific
+few-shot examples in its Validation Stage Hints, use those as additional calibration.
+
 ### Example 1: Well-Written Spec (PASS)
 
 **Input spec text:**
-> **Title**: Add certificate rotation support for webhook serving certs
+> **Title**: Add automatic session timeout for inactive admin users
 >
-> **Motivation**: Cluster admins currently must manually restart the operator pod when the serving certificate expires, causing 15-minute outages on average. This impacts all clusters running cert-manager-operator v1.13+.
+> **Motivation**: Security audit found that admin sessions persist indefinitely, creating
+> risk of unauthorized access on shared workstations. 3 security incidents in Q1 traced to
+> stale sessions.
 >
-> **User Persona**: Cluster administrator managing OpenShift 4.14+ clusters with cert-manager-operator installed.
+> **User Persona**: Platform administrator managing the application via the admin console.
 >
 > **Acceptance Criteria**:
-> 1. Given a webhook serving cert within 30 days of expiry, When the reconciler runs, Then a new Certificate CR is created targeting the serving-cert Secret.
-> 2. Given cert-manager issues a new certificate, When the Secret is updated, Then the webhook configuration is patched with the new CA bundle within 60 seconds.
-> 3. Given cert-manager is unavailable, When certificate rotation is attempted, Then the operator logs a warning event, sets a Degraded status condition, and continues serving with the existing cert.
+> 1. Given an admin user inactive for 30 minutes, When the timeout period expires, Then
+>    the session is invalidated and the user is redirected to the login page.
+> 2. Given an admin user performing actions, When each action occurs, Then the timeout
+>    timer resets to 30 minutes.
+> 3. Given a session timeout occurs during unsaved work, When the user re-authenticates,
+>    Then a recovery prompt offers to restore the draft state.
 >
-> **Scope**: Only webhook serving certs. Mutual TLS and client certs are out of scope. No changes to the CRD API.
+> **Scope**: Admin console sessions only. API token expiry is out of scope.
 >
-> **Dependencies**: Requires cert-manager v1.12+ with Certificate CRD. No database migrations.
+> **Dependencies**: Requires auth-service v2.3+ with session management API.
 >
-> **Impacted Repos**: openshift/cert-manager-operator (operator logic), openshift/cert-manager-operator (e2e tests).
+> **Impacted Repos**: frontend/admin-console (UI logic), backend/auth-service (session API).
 >
-> **RBAC**: Operator ServiceAccount needs `get/create/update` on `certificates.cert-manager.io` in the operator namespace. No cluster-wide secret access added.
->
-> **Upgrade**: Existing clusters without rotation get it automatically on operator upgrade. No migration needed. Downgrade: rotation CRs are ignored by older operator versions (no cleanup needed).
+> **Upgrade**: Existing active sessions continue until natural expiry on next deploy.
+> No database migration needed.
 
 **Expected output:**
 
 ```json
 {
   "metadata": {
-    "ticket_id": "CM-801",
+    "ticket_id": "SEC-201",
     "doc_type": "jira",
     "pass_threshold": 80,
     "output_mode": "json_plus_summary",
     "weights_applied": { "completeness": 0.6, "quality": 0.4 }
   },
   "validation_results": {
-    "completeness_score": 92,
+    "completeness_score": 90,
     "quality_score": 88,
-    "overall_score": 90,
+    "overall_score": 89,
     "overall_status": "PASS",
     "missing_elements": [],
     "quality_issues": [
       {
         "type": "Testability",
-        "quote": "patched with the new CA bundle within 60 seconds",
-        "suggestion": "Clarify whether 60 seconds is measured from Secret update or from reconciler detecting the change. Consider specifying the metric to assert on in e2e tests."
+        "quote": "recovery prompt offers to restore the draft state",
+        "suggestion": "Clarify what 'draft state' encompasses — form fields only, or also navigation context and uploads? Define data retention duration for drafts."
       }
     ],
-    "cert_manager_ecosystem": {
-      "api_lifecycle_complete": true,
-      "rbac_blast_radius_documented": true,
-      "webhook_tls_and_failure_modes": true,
-      "install_uninstall_semantics_clear": true,
-      "platform_matrix_addressed": false,
-      "observability_status_documented": true,
-      "upgrade_skew_addressed": true,
-      "gaps": [
-        "Platform matrix: Does this apply to MicroShift or only full OpenShift? Are there FeatureGate requirements?"
-      ]
-    },
     "blockers": [],
     "non_blockers": [
-      "Platform matrix coverage for MicroShift could be explicitly stated"
+      "Draft recovery scope could be more precisely defined"
     ]
   }
 }
@@ -233,16 +221,6 @@ Populate blockers/non_blockers:
         "suggestion": "Add Given/When/Then acceptance criteria. E.g., 'Given a dataset of 10k rows, When the user opens the dashboard, Then the table renders within 500ms as measured by Lighthouse CI'."
       }
     ],
-    "cert_manager_ecosystem": {
-      "api_lifecycle_complete": true,
-      "rbac_blast_radius_documented": true,
-      "webhook_tls_and_failure_modes": true,
-      "install_uninstall_semantics_clear": true,
-      "platform_matrix_addressed": true,
-      "observability_status_documented": true,
-      "upgrade_skew_addressed": true,
-      "gaps": []
-    },
     "blockers": [],
     "non_blockers": [
       "Performance target not quantified",
@@ -257,16 +235,19 @@ Populate blockers/non_blockers:
 ### Example 3: Contradictory Spec (BLOCKED)
 
 **Input spec text:**
-> **Title**: Add new TrustPolicy CRD for cross-namespace certificate issuance
+> **Title**: Add tenant isolation for shared workspaces
 >
-> **Description**: Add a cluster-scoped TrustPolicy CRD that allows namespaces to reference issuers from other namespaces. The CRD should be namespace-scoped so tenants can manage their own policies. On uninstall, all TrustPolicy CRs must be preserved for audit. The operator finalizer must delete all TrustPolicy CRs on uninstall to avoid orphans.
+> **Description**: Add a cluster-scoped TenantPolicy resource that defines isolation
+> boundaries. The resource should be namespace-scoped so tenants can self-manage their
+> policies. On removal, all TenantPolicy resources must be preserved for compliance audit.
+> The controller finalizer must delete all TenantPolicy resources on removal to avoid orphans.
 
 **Expected output:**
 
 ```json
 {
   "metadata": {
-    "ticket_id": "CM-999",
+    "ticket_id": "PLAT-999",
     "doc_type": "enhancement",
     "pass_threshold": 80,
     "output_mode": "json_plus_summary",
@@ -278,45 +259,27 @@ Populate blockers/non_blockers:
     "overall_score": 39,
     "overall_status": "BLOCKED",
     "missing_elements": [
-      "User Personas: Who creates TrustPolicies—cluster admin or namespace admin?",
+      "User Personas: Who creates TenantPolicies — platform admin or tenant admin?",
       "Acceptance Criteria: No testable conditions defined",
       "Scope Boundaries: No out-of-scope items listed",
       "Impacted Repositories: No repos identified",
-      "RBAC: Cross-namespace access model not specified"
+      "Security model: Cross-namespace access and RBAC not specified"
     ],
     "quality_issues": [
       {
         "type": "Consistency",
-        "quote": "cluster-scoped TrustPolicy CRD... should be namespace-scoped",
-        "suggestion": "CRD scope is mutually exclusive: choose cluster-scoped OR namespace-scoped and document the rationale."
+        "quote": "cluster-scoped TenantPolicy... should be namespace-scoped",
+        "suggestion": "Resource scope is mutually exclusive: choose cluster-scoped OR namespace-scoped and document the rationale."
       },
       {
         "type": "Consistency",
-        "quote": "TrustPolicy CRs must be preserved for audit... must delete all TrustPolicy CRs on uninstall",
-        "suggestion": "Uninstall behavior contradicts itself. Define one policy: either preserve CRs (remove finalizer, leave CRs) or clean up CRs (finalizer deletes them). Cannot do both."
+        "quote": "must be preserved for compliance audit... must delete all TenantPolicy resources on removal",
+        "suggestion": "Removal behavior contradicts itself. Define one policy: either preserve resources (remove finalizer, leave resources) or clean up (finalizer deletes them). Cannot do both."
       }
     ],
-    "cert_manager_ecosystem": {
-      "api_lifecycle_complete": false,
-      "rbac_blast_radius_documented": false,
-      "webhook_tls_and_failure_modes": false,
-      "install_uninstall_semantics_clear": false,
-      "platform_matrix_addressed": false,
-      "observability_status_documented": false,
-      "upgrade_skew_addressed": false,
-      "gaps": [
-        "API lifecycle: CRD scope contradiction must be resolved before API can be designed",
-        "RBAC: Cross-namespace issuer reference implies cluster-wide read on Issuers—blast radius not documented",
-        "Install/uninstall: Contradictory CR lifecycle on uninstall",
-        "Webhooks: Will this CRD have validation/mutation webhooks? TLS issuance path?",
-        "Platform matrix: OpenShift/MicroShift/Hypershift applicability not stated",
-        "Observability: Status conditions for TrustPolicy not defined",
-        "Upgrade: Migration path from no-TrustPolicy to TrustPolicy not addressed"
-      ]
-    },
     "blockers": [
-      "CRD scope contradiction: spec says both cluster-scoped and namespace-scoped",
-      "Uninstall semantics contradiction: spec says both preserve and delete CRs"
+      "Resource scope contradiction: spec says both cluster-scoped and namespace-scoped",
+      "Removal semantics contradiction: spec says both preserve and delete resources"
     ],
     "non_blockers": [
       "Missing acceptance criteria (fixable)",
@@ -334,7 +297,7 @@ When invoking the validator, use this format:
 
 ```
 metadata:
-  ticket_id: <OPTIONAL e.g. CM-624>
+  ticket_id: <OPTIONAL e.g. PROJ-624>
   doc_type: enhancement
   pass_threshold: 80
   output_mode: json_plus_summary

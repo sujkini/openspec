@@ -2,7 +2,145 @@
 
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation.
 
-This repo is the **distribution package**: schema, templates, Cursor commands, and optional eval tooling. You install it into your own project with `install.sh`.
+This repo is the **distribution package**: schema, templates, Cursor commands, and optional eval tooling. Designed to work across **any operator** — each team clones this repo, customizes `agents.md` for their operator, and runs the workflow.
+
+---
+
+## Getting Started for New Operators
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+cd /path/to/your-operator-project
+/tmp/openspec-workflow/install.sh .
+```
+
+This installs the schema, Cursor commands, skills, and evals into your project. **Restart Cursor** after install so slash commands load.
+
+### 2. Customize `agents.md` for your operator
+
+Edit **one file**: `openspec/schemas/openspec-agile-workflow/agents.md`
+
+This is the **only operator-specific file** in the workflow. Everything else (templates, stage-gate prompts, evals) is generic. Your `agents.md` should define:
+
+- **Repository layout** — directory structure, key packages
+- **Architecture patterns** — controller frameworks, reconciliation flow, how your operator works
+- **Shared utilities** — common packages, helper functions, test mocking patterns
+- **Test exemplar** — how tests are structured (mocks, table-driven patterns, file naming)
+- **Execution agent routing** — agent IDs and which paths/packages they own
+- **Per-task verification matrix** — which `make` targets and `go test` commands to run per task type
+- **Stage-specific hints** — operator-specific guidance for repo-assessment, planning, validation stages
+
+The bundled `agents.md` in this repo is for **cert-manager-operator** as an example. Replace it entirely with your operator's documentation.
+
+### 3. Start a change
+
+You have **two modes** of operation:
+
+#### Mode A: Working-folder mode (code changes in your local checkout)
+
+Use this when your Cursor workspace IS the operator repo you want to work in.
+
+```
+/opsx-new PROJ-123
+```
+
+When prompted for the target repo, tell the agent: **"use this as the working directory"**
+
+This sets `use_working_folder_as_repo: true` — the agent will:
+- Assess YOUR current checkout for repo-assessment
+- Implement code changes directly in your working directory
+- No fork URL needed, no clone, no draft PR
+
+#### Mode B: Fork mode (generate a draft PR)
+
+Use this when you want the agent to clone your fork and open a draft PR.
+
+```
+/opsx-new PROJ-123
+```
+
+When prompted, provide:
+- **Target repo URL** (e.g. `https://github.com/openshift/my-operator`) — needed before repo-assessment
+- **Fork repo URL** (e.g. `https://github.com/youruser/my-operator`) — needed before `/opsx-apply`
+
+The agent will clone your fork, create a feature branch, implement task-by-task, and open a draft PR.
+
+### 4. Run the workflow
+
+```
+/opsx-new PROJ-123          → start change from Jira ticket
+/opsx-continue              → validation.json      [approve]
+/opsx-continue              → specs.md             [approve]
+/opsx-continue              → repo-assessment.md + constitution.md  [approve]
+/opsx-continue              → plan.md             [approve]
+/opsx-continue              → tasks.md            [approve]
+/opsx-apply                 → task T1 [approve] → task T2 [approve] → … → done
+/opsx-archive               → archive the change
+```
+
+You can also start from an **Enhancement Proposal** file in your working directory instead of a Jira key — just tell the agent the path.
+
+---
+
+## How the eval loop works (`/eval-loop`)
+
+The eval loop is a **retrospective improvement** tool. After a feature is fully completed (EP written, code merged, bugs found), you feed that history into `/eval-loop` to generate eval cases that improve future workflow runs.
+
+### What to provide
+
+Fill the files under `evals/inputs/` with data from **one completed feature**:
+
+| File | What to paste |
+|------|---------------|
+| `evals/inputs/feature-meta.yaml` | Feature name, epic key, target repo URL |
+| `evals/inputs/01-ep-ard.md` | The Enhancement Proposal or ARD document |
+| `evals/inputs/02-jira-epic.md` | Jira epic export (summary, description, acceptance criteria, linked stories) |
+| `evals/inputs/03-original-repo.md` | Pre-feature repo state: commit SHA, branch, key file listings |
+| `evals/inputs/04-user-stories.md` | All user stories / sub-tasks linked to the epic |
+| `evals/inputs/05-repo-prs.md` | PR links, summaries, and key diffs from the completed implementation |
+| `evals/inputs/bugs/index.yaml` | List of bug keys related to this feature |
+| `evals/inputs/bugs/<KEY>.md` | One file per bug with details |
+
+### Running it
+
+```
+/eval-loop
+```
+
+This runs:
+1. **Epic Bug Analysis** — analyzes PRs and bugs for patterns
+2. **Eval Generation** — creates eval cases, refines templates and `agents.md`, updates baseline
+
+### Where outputs go
+
+| Location | What |
+|----------|------|
+| `evals/baseline/evals/<stage>/<stage>_eval.yaml` | Eval cases per stage (cumulative) |
+| `evals/refined-templates/` | Improved template variants (eval-specific) |
+| `evals/refined-templates/agents.md` | Refined `agents.md` with learnings from bugs/PRs |
+| `evals/outputs/epic-bug-analysis/` | Pattern analysis, RCA summaries |
+| `schemas/.../evals/*_eval.yaml` | Synced stage evals for forward workflow |
+
+### Syncing evals to the forward workflow
+
+After `/eval-loop` completes, the generated eval cases must be present in `schemas/openspec-agile-workflow/evals/` so the forward workflow (`/opsx-continue` and `/opsx-apply`) can use them as quality gates. The pipeline does this automatically — it writes each stage's eval file to **both** locations:
+
+| Retrospective (eval loop) | Forward workflow (used by `/opsx-continue`) |
+|---------------------------|---------------------------------------------|
+| `evals/baseline/evals/repo-assessment/repo-assessment_eval.yaml` | `schemas/openspec-agile-workflow/evals/repo-assessment_eval.yaml` |
+| `evals/baseline/evals/constitution/constitution_eval.yaml` | `schemas/openspec-agile-workflow/evals/constitution_eval.yaml` |
+| `evals/baseline/evals/plan/plan_eval.yaml` | `schemas/openspec-agile-workflow/evals/plan_eval.yaml` |
+| `evals/baseline/evals/tasks/tasks_eval.yaml` | `schemas/openspec-agile-workflow/evals/tasks_eval.yaml` |
+| `evals/baseline/evals/implementation/implementation_eval.yaml` | `schemas/openspec-agile-workflow/evals/implementation_eval.yaml` |
+| `evals/baseline/evals/code-generation/code-generation_eval.yaml` | `schemas/openspec-agile-workflow/evals/code-generation_eval.yaml` |
+
+If you run `install.sh` after running `/eval-loop`, the synced eval files under `schemas/.../evals/` will be copied into your project at `openspec/schemas/openspec-agile-workflow/evals/` — making the new eval cases active in your next `/opsx-continue` or `/opsx-apply` run.
+
+### Repeating
+
+After reviewing outputs, replace `evals/inputs/` with data from your **next** completed feature and run `/eval-loop` again. Prior evals accumulate — each round builds on the last.
 
 ---
 
@@ -60,38 +198,25 @@ During **implementation**, approval happens **after every task** (not per artifa
 | Jira access | Ticket key at `/opsx-new`; spec via MCP or paste into `inputs/jira-spec.md` |
 | Target GitHub repo | URL before **repo-assessment** (`inputs/jira.yaml` → `target_repo`); **or** use working-folder mode |
 | Fork GitHub repo | URL before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`); **skip in working-folder mode** |
-| `AGENTS.md` in target repo | **Expected in production** — see [agents.md](#agentsmd-testing-only) below |
 
-### Required after install (forward workflow)
+---
 
-These are installed by `install.sh` and are **required** for `/opsx-new` through `/opsx-apply`:
+## Configuration (`config.yaml`)
 
-```
-openspec/
-├── config.yaml                              # selects openspec-agile-workflow schema
-├── changes/                                 # one folder per change
-│   └── <change>/feedback_stage_artifacts/   # round summaries (per rejection loop)
-└── schemas/openspec-agile-workflow/
-    ├── schema.yaml                          # workflow definition
-    ├── templates/                           # artifact + agent templates
-    │   └── code-generation.md              # Code Generation Agent (implementation)
-    ├── evals/                               # stage evals for /opsx-continue
-    ├── stage-gate/                          # eval + feedback prompts
-    ├── feedback_stage_artifacts/            # format spec (README only — data in changes/)
-    └── agents.md                            # bundled roster (testing only — see below)
+After install, `openspec/config.yaml` controls workflow behavior. Key flags you can tune:
 
-.cursor/
-├── commands/                                # opsx-*, OAPE commands
-└── skills/                                  # workflow skills
+```yaml
+flags:
+  max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting
+  exit_on_all_tasks_complete: true # Auto-exit implementation stage when all tasks in tasks.md are marked [x]
 ```
 
-### Optional (retrospective eval loop)
+| Flag | Default | What it does |
+|------|---------|--------------|
+| `max_feedback_rounds` | 3 | Limits how many times you can reject and refine an artifact before the workflow halts and asks you to restart |
+| `exit_on_all_tasks_complete` | true | When all tasks in `tasks.md` are checked off, the implementation stage ends automatically (writes report, opens PR) |
 
-```
-evals/                                       # only needed for /eval-loop
-```
-
-The forward workflow does **not** require `evals/` at project root. Stage evals for `/opsx-continue` ship inside the schema package.
+The `rules:` section in `config.yaml` defines per-stage constraints the agent follows (validation scoring, spec format, implementation mode). You generally don't need to edit these unless you want to change workflow behavior.
 
 ---
 
@@ -100,7 +225,7 @@ The forward workflow does **not** require `evals/` at project root. Stage evals 
 `install.sh` copies everything needed to run **openspec-agile-workflow** into a target project. It is the supported install path — **`openspec init` alone** installs the default `spec-driven` schema, not this workflow.
 
 ```bash
-git clone -b openspec-code-gen https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-project
 ```
 
@@ -118,9 +243,9 @@ Or install into the current directory:
 2. **Runs `openspec init --tools cursor`** if `openspec/` does not exist (creates the OpenSpec skeleton).
 3. **Creates** `openspec/changes/` if missing.
 4. **Copies the full schema package** from `schemas/openspec-agile-workflow/` → `openspec/schemas/openspec-agile-workflow/` (schema, templates, stage evals, stage-gate prompts).
-5. **Copies `agents.md`** from this repo root into `openspec/schemas/openspec-agile-workflow/agents.md` (cert-manager-operator roster for testing — see below).
+5. **Copies `agents.md`** from this repo root into `openspec/schemas/openspec-agile-workflow/agents.md`.
 6. **Copies `config.yaml.example`** → `openspec/config.yaml` (selects this schema and artifact rules).
-7. **Copies all Cursor commands** from `tooling/cursor/commands/` → `.cursor/commands/` (15 files: opsx-new, opsx-continue, opsx-apply, OAPE commands, eval-loop, etc.).
+7. **Copies all Cursor commands** from `tooling/cursor/commands/` → `.cursor/commands/` (opsx-new, opsx-continue, opsx-apply, OAPE commands, eval-loop, etc.).
 8. **Copies all Cursor skills** from `tooling/cursor/skills/` → `.cursor/skills/` (openspec workflow skills plus OAPE `effective-go` and `e2e-test-generator`).
 9. **Copies OAPE e2e fixtures** from `tooling/cursor/e2e-test-generator/` → `.cursor/e2e-test-generator/` (used by `/oape:e2e-generate`).
 10. **Copies `evals/`** → project `evals/` (optional retrospective pipeline for `/eval-loop`; preserves existing baseline if re-run).
@@ -145,15 +270,14 @@ Or install into the current directory:
 
 ---
 
-## agents.md (testing only)
+## agents.md — operator-specific customization
 
-This distribution repo ships **`agents.md`** inside the schema package for **testing and development** against the [cert-manager-operator](https://github.com/openshift/cert-manager-operator) repository. It defines:
+This distribution repo ships `agents.md` for **cert-manager-operator** as a reference example. **Each operator team must replace it** with their own operator-specific documentation.
 
+Your `agents.md` defines:
 - Agent IDs (e.g. `API_Agent`, `OperatorController_Agent`, `Testing_Agent`)
 - Execution routing to OAPE commands
-- Repo-specific conventions for that operator
-
-**It is cert-manager-operator specific.** Do not treat it as a generic agent roster for other projects.
+- Repo-specific conventions, architecture, and test patterns
 
 ### Where agents are resolved (lookup order)
 
@@ -163,7 +287,7 @@ When the workflow needs agent routing (repo-assessment onward):
 2. `openspec/changes/<change>/inputs/agents.md`
 3. `{target_repo}/AGENTS.md` ← **expected long-term location**
 4. `{target_repo}/agents.md`
-5. `{schema_root}/agents.md` ← bundled testing copy from install
+5. `{schema_root}/agents.md` ← bundled copy from install
 
 If none are found, the agent asks you once to provide `AGENTS.md`. If you decline, the workflow continues in **PROVISIONAL** mode (documented in constitution, plan, and tasks).
 
@@ -177,7 +301,7 @@ If none are found, the agent asks you once to provide `AGENTS.md`. If you declin
 
 | Command | Purpose |
 |---------|---------|
-| `/opsx-new CM-830` | Start a change from a Jira key; writes `inputs/jira.yaml` |
+| `/opsx-new PROJ-123` | Start a change from a Jira key; writes `inputs/jira.yaml` |
 | `/opsx-continue` | Create the next artifact; runs stage evals; asks for approval |
 | `/opsx-apply` | Implement tasks on your fork — **one task at a time**, user approval after each |
 | `/opsx-archive` | Archive a completed change |
@@ -211,42 +335,6 @@ Other OAPE commands (`review`, `predict-regressions`, etc.) are **not** used dur
 
 ---
 
-## Step-by-step example (forward workflow)
-
-```
-/opsx-new CM-830
-/opsx-continue    → validation.json              [approve]
-/opsx-continue    → specs.md                     [approve]
-/opsx-continue    → repo-assessment + constitution [approve]
-/opsx-continue    → plan.md                      [approve]
-/opsx-continue    → tasks.md                     [approve]
-/opsx-apply       → task T1 [approve] → task T2 [approve] → … → draft PR
-/opsx-archive
-```
-
-### Inputs during a change
-
-| Input | When required |
-|-------|----------------|
-| Jira ticket key | `/opsx-new` |
-| Jira spec content | Paste into `inputs/jira-spec.md` or use Jira MCP |
-| Target repo URL | Before **repo-assessment** — agent prompts if empty (`inputs/jira.yaml` → `target_repo`); **skip if using working-folder mode** |
-| Fork repo URL | Before **`/opsx-apply`** (`inputs/jira.yaml` → `fork_repo_url`); **skip in working-folder mode** |
-| `AGENTS.md` | Before repo-assessment/plan/tasks if not in target repo — see [agents.md](#agentsmd-testing-only) |
-
-### Working-folder mode
-
-If you tell the agent to **"use the working folder as the repo"** (or similar), it activates local-checkout mode:
-
-- Sets `use_working_folder_as_repo: true` in `inputs/jira.yaml`
-- Uses your **current project checkout** for repo-assessment, constitution, plan, tasks, and implementation
-- **No fork URL** required, **no clone**, **no feature branch** (unless you ask), **no draft PR**
-- Implementation edits apply directly in your working directory
-
-This is useful when your project checkout is the same repo you want to assess and implement in.
-
----
-
 ## Implementation (`/opsx-apply`)
 
 Implementation follows **`tasks.md`** in linear execution order, respecting task dependencies.
@@ -263,15 +351,6 @@ For **each pending task**:
 8. On reject: add revision feedback, re-run **current task only**
 
 When all tasks are done: write **`implementation-report.md`** (aggregates all task reports), commit, push feature branch, open a **draft PR** on your fork. In **working-folder mode**, no push/PR — summarize local changes instead.
-
-Typical task chain for a full feature:
-
-```
-T1  api-generate        → API types / CRD scaffolding
-T2  api-generate-tests  → .testsuite.yaml integration tests
-T3  api-implement       → controller / operator logic
-T4  e2e-generate        → end-to-end tests (when applicable)
-```
 
 ---
 
@@ -298,7 +377,7 @@ Agent preamble (system prompt: role, mission, inputs, quality rules)
 | `design-bundle.md` | User message template for codegen |
 | `implementation-report.md` | Closing documentation agent |
 
-Templates serve as both the **system prompt** (how to generate) and the **output schema** (what to produce).
+Templates are **generic** — they work for any operator. Operator-specific depth comes from `agents.md`.
 
 ---
 
@@ -348,23 +427,48 @@ Cases are **authored by `/eval-loop`** from PR diffs and bugs, tagged with `oape
 Paste feature bundle into evals/inputs/ → /eval-loop → baseline updated → repeat with next bundle
 ```
 
-One command runs the full loop:
+See the [eval loop section](#how-the-eval-loop-works-eval-loop) above for detailed input format.
 
-1. Validate `evals/inputs/` (no placeholder files)
-2. Load prior baseline and refined templates (round 2+)
-3. **Epic Bug Analysis** → `evals/outputs/epic-bug-analysis/`
-4. **Eval Generation** → merge artifact eval cases, **author code-generation evals**, refine templates, sync stage evals
-5. Update `evals/baseline/` and round state
+---
 
-| Step | You do |
-|------|--------|
-| 1 | Fill all files under `evals/inputs/` with one completed feature (EP, epic, stories, PRs, bugs) |
-| 2 | Run **`/eval-loop`** in Cursor |
-| 3 | Review `evals/baseline/` and `evals/refined-templates/` |
-| 4 | Replace `evals/inputs/` with the next feature bundle |
-| 5 | Run **`/eval-loop`** again — prior evals and refined templates feed the next round |
+## Repository layout (this distribution repo)
 
-Eval workflow templates are read/written at `evals/refined-templates/` — **not** `schemas/.../templates/`. See `evals/README.md` for file layout and input format.
+```
+schemas/openspec-agile-workflow/
+├── schema.yaml                    # workflow definition
+├── agents.md                      # operator-specific (customize per operator)
+├── templates/                     # artifact + agent templates (generic)
+│   ├── code-generation.md        # Code Generation Agent prompt
+│   └── tasks-modes/              # multipass mode templates for tasks.md
+├── evals/                         # stage evals (forward workflow gate)
+├── stage-gate/                    # SYSTEM_PROMPT, USER_FEEDBACK_PROMPT, artifact map
+└── feedback_stage_artifacts/      # format spec for rejection round summaries
+evals/                             # retrospective eval loop (/eval-loop)
+├── inputs/                        # paste one feature bundle at a time
+├── baseline/                      # cumulative evals + changelog
+├── epic-bug-analysis/             # SYSTEM_PROMPT for analysis
+├── eval-generation/               # SYSTEM_PROMPT + stage samples
+├── stages/                        # eval-spec.yaml rubrics per stage
+└── refined-templates/             # improved templates (eval workflow output)
+tooling/cursor/
+├── commands/                      # opsx-new, opsx-continue, opsx-apply, OAPE, eval-loop
+├── skills/                        # openspec-* + OAPE effective-go, e2e-test-generator
+└── e2e-test-generator/            # fixtures + docs for /oape:e2e-generate
+config.yaml.example                # → openspec/config.yaml
+install.sh                         # install into another project
+```
+
+---
+
+## Important notes
+
+- Use **`install.sh`**, not `openspec init` alone, to get this workflow.
+- **`openspec update`** overwrites `.cursor/` — re-run `install.sh` afterward.
+- **`agents.md`** is the only operator-specific file — customize it for your operator.
+- All templates are **generic** and work for any operator without modification.
+- Implementation edits go to your **fork** (default) or **working folder** (`use_working_folder_as_repo: true`) — not the upstream target repo.
+- Rejecting an artifact regenerates **only that artifact** (except **specs.md** — rejection exits the workflow); the agent may also **patch the template** if feedback requires structural changes.
+- Feedback round summaries are written to `openspec/changes/<change>/feedback_stage_artifacts/` — they persist across schema reinstalls.
 
 ---
 
@@ -375,46 +479,6 @@ openspec schema validate openspec-agile-workflow
 ```
 
 Run from a project where the schema is installed under `openspec/schemas/`.
-
----
-
-## Repository layout (this distribution repo)
-
-```
-agents.md                          # cert-manager-operator roster (copied into schema on install)
-config.yaml.example                # → openspec/config.yaml
-install.sh                         # install into another project
-schemas/openspec-agile-workflow/
-├── schema.yaml                    # workflow definition
-├── agents.md                      # synced copy for schema package
-├── templates/                     # artifact + agent templates (forward workflow)
-│   ├── code-generation.md        # Code Generation Agent prompt
-│   └── tasks-modes/              # multipass mode templates for tasks.md
-├── evals/                         # stage evals (forward workflow gate)
-├── stage-gate/                    # SYSTEM_PROMPT, USER_FEEDBACK_PROMPT, artifact map
-└── feedback_stage_artifacts/      # format spec for rejection round summaries
-evals/                             # retrospective eval loop (/eval-loop)
-├── inputs/                        # paste one feature bundle at a time
-├── baseline/                      # cumulative evals + changelog
-├── epic-bug-analysis/
-└── eval-generation/
-tooling/cursor/
-├── commands/                      # opsx-new, opsx-continue, opsx-apply, OAPE, eval-loop
-├── skills/                        # openspec-* + OAPE effective-go, e2e-test-generator
-└── e2e-test-generator/            # fixtures + docs for /oape:e2e-generate
-oape-ai-e2e/                       # upstream OAPE plugin (source for OAPE skills/commands)
-```
-
----
-
-## Important notes
-
-- Use **`install.sh`**, not `openspec init` alone, to get this workflow.
-- **`openspec update`** overwrites `.cursor/` — re-run `install.sh` afterward.
-- Bundled **`agents.md`** is for **testing** cert-manager-operator; production repos should provide their own `AGENTS.md`.
-- Implementation edits go to your **fork** (default) or **working folder** (`use_working_folder_as_repo: true`) — not the upstream target repo.
-- Rejecting an artifact regenerates **only that artifact** (except **specs.md** — rejection exits the workflow); the agent may also **patch the template** if feedback requires structural changes.
-- Feedback round summaries are written to `openspec/changes/<change>/feedback_stage_artifacts/` — they persist across schema reinstalls.
 
 ---
 

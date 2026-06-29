@@ -8,7 +8,8 @@ description: >-
 command: /eval-loop
 
 # Eval workflow template source — NOT schemas/ (upstream defaults for /opsx-* only)
-refined_templates_dir: evals/refined-templates/
+  refined_templates_dir: evals/refined-templates/
+  refined_agents_md: evals/refined-templates/agents.md
 
 # Upstream defaults (read-only during eval pipeline; seed refined-templates on round 1 if empty)
 schema_templates_dir:
@@ -66,7 +67,8 @@ phases:
       - id: seed-refined-templates
         rule: >-
           If evals/refined-templates/ is empty or missing key files, copy from
-          schema_templates_dir once. Never write eval refinements to schemas/.
+          schema_templates_dir once and copy agents.md from schemas/openspec-agile-workflow/agents.md.
+          Never write eval refinements to schemas/.
       - id: inventory-templates
         reads: [evals/refined-templates/, evals/eval-generation/template-inventory.yaml]
       - id: identify-gaps
@@ -75,9 +77,12 @@ phases:
         rule: >-
           For every gap marked patchable in template-gaps.md, patch the
           corresponding file under evals/refined-templates/ IN PLACE.
+          Also refine evals/refined-templates/agents.md with operator-specific
+          learnings (new patterns, test strategies, architecture insights from bugs/PRs).
           Save .patch files and update refinement-changelog.
         writes:
           - evals/refined-templates/*.md
+          - evals/refined-templates/agents.md
           - evals/outputs/eval-generation/refinement-patches/*.patch
           - evals/baseline/refinement-changelog.md
       - id: refine-validation
@@ -192,6 +197,7 @@ refine_in_place:
     - tasks-modes/*.md
     - implementation-checklist.md
     - implementation-report.md
+    - agents.md
 
 feedback_loop:
   description: >-

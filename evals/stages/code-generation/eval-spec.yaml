@@ -63,16 +63,16 @@ example:
   round: 1
   stage: code-generation
   oape_command: api-implement
-  source_issue_ids: [CM-546]
-  patterns: [PAT-004]
+  source_issue_ids: [PROJ-123]
+  patterns: [PAT-001]
   input_refs:
     - evals/inputs/05-repo-prs.md
-    - evals/inputs/bugs/CM-546.md
+    - evals/inputs/bugs/PROJ-123.md
   prompt: |
-    Controller reconciliation must set Ready via HandleReconcileResult when operand deployment is available.
+    Controller reconciliation must follow the established pattern for status updates.
   assertions:
     must_use_pattern:
-      - HandleReconcileResult
+      - ReconcileResult
     must_not_use:
       - client.Create
       - client.Update

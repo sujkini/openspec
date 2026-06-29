@@ -22,13 +22,13 @@ agents_md:
     path: agents.md
     path_relative_to_schema: agents.md
     description: >-
-      Cert Manager Operator agent roster and execution routing. Shipped inside the
+      Operator-specific agent roster and execution routing. Shipped inside the
       schema package at openspec/schemas/openspec-agile-workflow/agents.md
       (installed by install.sh from distribution repo root agents.md).
+      Customize this file for your operator.
     use_when: >-
-      target_repo URL contains cert-manager-operator (or fork thereof) and the
-      upstream repo has no AGENTS.md/agents.md; also when change inputs do not
-      override with a local copy.
+      The target repo has no AGENTS.md/agents.md and change inputs do not
+      override with a local copy. Falls back to the bundled schema copy.
   used_in_stages:
     - id: repo-understanding
       required: false

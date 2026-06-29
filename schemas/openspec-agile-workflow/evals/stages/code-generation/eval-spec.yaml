@@ -61,8 +61,8 @@ assertion_descriptions:
     Enforced via real shell execution — agent assertions alone do not satisfy this.
   must_co_generate_tests: >-
     Controller logic tasks (api-implement modifying pkg/controller/) must produce
-    _test.go files following the IstioCSR exemplar pattern: table-driven tests using
-    fakes.FakeCtrlClient, 1:1 mapping of production files to test files. Tests must
+    _test.go files following established test patterns: table-driven tests using
+    appropriate fakes/mocks, 1:1 mapping of production files to test files. Tests must
     compile and pass via go test.
 
 filter_rule_forward: >-
@@ -75,16 +75,16 @@ example:
   round: 1
   stage: code-generation
   oape_command: api-implement
-  source_issue_ids: [CM-546]
-  patterns: [PAT-004]
+  source_issue_ids: [PROJ-123]
+  patterns: [PAT-001]
   input_refs:
     - evals/inputs/05-repo-prs.md
-    - evals/inputs/bugs/CM-546.md
+    - evals/inputs/bugs/PROJ-123.md
   prompt: |
-    Controller reconciliation must set Ready via HandleReconcileResult when operand deployment is available.
+    Controller reconciliation must follow the established pattern for status updates.
   assertions:
     must_use_pattern:
-      - HandleReconcileResult
+      - ReconcileResult
     must_not_use:
       - client.Create
       - client.Update

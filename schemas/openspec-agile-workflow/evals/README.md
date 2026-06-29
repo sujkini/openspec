@@ -11,6 +11,7 @@ Merged eval rubrics for `/opsx-continue` artifact gates. Installed to:
 | `plan_eval.yaml` | plan |
 | `tasks_eval.yaml` | tasks |
 | `implementation_eval.yaml` | implementation |
+| `code-generation_eval.yaml` | code-generation (per-task during /opsx-apply) |
 
 Assertion schemas: `evals/stages/<stage>/eval-spec.yaml`  
 Gate instructions: `../stage-gate/SYSTEM_PROMPT.md`

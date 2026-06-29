@@ -1,8 +1,0 @@
---- tasks-modes/single.md (prior backfill)
-+++ tasks-modes/single.md (full bundle backfill)
-@@ Completeness rules
-+OLM N-1→N upgrade verification pairing
-+Documentation placeholder consistency task
-+User-defined controller Watches() task
-@@ Quality self-check
-+OLM upgrade and docs placeholder tasks when plan requires

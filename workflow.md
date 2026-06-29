@@ -83,7 +83,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 - **Templates:** `templates/code-generation.md` (code generation rules), `templates/design-bundle.md` (per-task context bundle), `templates/implementation.md` (phase log format)
 - **Role/Context:** *"You are the Code Generation Agent (Robotic Engineer Role)"* and the OAPE Implementation Orchestrator.
-- **Objectives:** Execute approved tasks from `tasks.md` task-by-task in linear execution order. For each task: compose a design bundle, resolve and invoke one OAPE command (or implement manually for manual agents), verify acceptance criteria, run code-generation eval gate, refine code, then present results for user approval.
+- **Objectives:** Execute approved tasks from `tasks.md` task-by-task in linear execution order. For each task: compose a design bundle, resolve and invoke one OAPE command (or implement manually for manual agents), verify acceptance criteria, **execute test block**, run code-generation eval gate, refine code, then present results for user approval.
 - **Guardrails:**
   - One OAPE command per task — never invoke multiple commands for the same task.
   - Forbidden commands during implementation: `predict-regressions`, `review`, `implement-review-fixes`, `analyze-rfe`, `init`.
@@ -91,6 +91,31 @@ The workflow uses seven distinct agent personas, each defined in a template unde
   - Never ask user approval before the code eval refinement loop completes.
   - Do not implement the next task in the same pass — each invocation covers one Task ID only.
   - Follow constitution.md conventions exactly. Match existing patterns in the repository.
+  - **Unit test block is mandatory** — every controller task must co-generate `_test.go` files and execute `go test` with real output before the eval gate scores the code.
+
+#### Unit Test Block (per-task, mandatory for controller tasks)
+
+After OAPE command execution, the code eval gate enforces a **test execution block** (`CODE_GENERATION_EVAL_PROMPT.md` Step 4):
+
+1. **Classify the task** by `oape_command` and files modified:
+   - `api-implement` modifying `pkg/controller/<name>/` → co-generate `_test.go` → `go test`
+   - `api-generate` creating `*_types.go` → `go build` + `go vet`
+   - `api-generate-tests` → run `go test` on generated test package
+   - Feature gate tasks → run existing feature gate tests
+   - Codegen/verify tasks → `make verify`
+   - E2E tasks → `go build` on test package
+
+2. **Co-generate tests** (controller logic tasks):
+   - Follow the test exemplar in `agents.md` (operator-specific mock patterns, table-driven structure)
+   - First controller task also creates mock/fake client and `test_utils.go`
+   - Test cases: successful reconciliation, exists-check failure, create-when-not-exists, update-when-spec-changed, error propagation
+
+3. **Execute real tests** — not agent assertions:
+   ```
+   go test ./pkg/controller/<name>/... -v -count=1
+   ```
+
+4. **Record results** — pass/fail, exit code, failure lines captured in eval scorecard. Tests must pass before user approval gate.
 
 ---
 
@@ -164,9 +189,10 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 │  │    1. Compose design-bundle.md               │    │
 │  │    2. Resolve & invoke ONE OAPE command      │    │
 │  │    3. Verify acceptance criteria             │    │
-│  │    4. Code eval gate (refine ≤2 passes)      │    │
-│  │    5. Present summary + scorecard            │    │
-│  │    6. User approves CODE ──┐                 │    │
+│  │    4. Execute test block (real go test)       │    │
+│  │    5. Code eval gate (refine ≤2 passes)      │    │
+│  │    6. Present summary + scorecard            │    │
+│  │    7. User approves CODE ──┐                 │    │
 │  │       ├─ approve: task report → next task    │    │
 │  │       └─ reject: REVISION FEEDBACK → retry   │    │
 │  └──────────────────────────────────────────────┘    │

@@ -68,19 +68,21 @@ go vet <package-under-change>/...
 ```
 
 Resolve `<package-under-change>` from the task's Target file(s):
-- `api/operator/v1alpha1/trustmanager_types.go` → `go build ./api/operator/v1alpha1/...`
-- `pkg/controller/trustmanager/controller.go` → `go build ./pkg/controller/trustmanager/...`
+- `api/<group>/<version>/<name>_types.go` → `go build ./api/<group>/<version>/...`
+- `pkg/controller/<name>/controller.go` → `go build ./pkg/controller/<name>/...`
 - `pkg/operator/starter.go` → `go build ./pkg/operator/...`
 - Multiple packages modified → run `go build` and `go vet` for each
 
 ### 2b. Task-specific verification
 
-Run additional commands from the task's **Acceptance criteria** in `tasks.md §4`:
+Run additional commands from the task's **Acceptance criteria** in `tasks.md §4`.
+Refer to `agents.md` "Per-task testing" section for the operator-specific verification
+matrix mapping task types to commands.
 
 | Task type | Additional commands |
 |-----------|-------------------|
 | Codegen (`make generate`, `make manifests`) | `make generate && make manifests && make verify` |
-| Feature gate edits | `go test ./pkg/features/... -run TestFeatureGates` |
+| Feature gate edits | `go test ./<features-package>/... -run <test-pattern>` |
 | Bindata / manifest tasks | `make update-bindata && make verify` |
 | OLM bundle tasks | `make bundle && hack/verify-bundle.sh` |
 | Hack scripts | `bash -n <script-path>` (syntax check) |
@@ -92,16 +94,16 @@ Record each command with its real exit code:
 ```yaml
 verification:
   commands:
-    - cmd: "go build ./pkg/controller/trustmanager/..."
+    - cmd: "go build ./pkg/controller/<name>/..."
       exit_code: 0
       pass: true
-    - cmd: "go vet ./pkg/controller/trustmanager/..."
+    - cmd: "go vet ./pkg/controller/<name>/..."
       exit_code: 0
       pass: true
     - cmd: "go build ./pkg/operator/..."
       exit_code: 2
       pass: false
-      stderr_summary: "pkg/operator/starter.go:42: undefined: trustmanager.SetupManager"
+      stderr_summary: "pkg/operator/starter.go:42: undefined: <name>.SetupManager"
   overall_pass: false
 ```
 
@@ -129,7 +131,7 @@ For each filtered case in `evals:`:
 | `must_include_tests` | Task-appropriate tests present (co-generated `_test.go` for controller tasks) |
 | `must_not_violate_non_goals` | Non-goals from task/spec not violated |
 | `must_execute_verification` | Verification commands from step 2 all passed (exit code 0) |
-| `must_co_generate_tests` | Controller tasks produced `_test.go` files following exemplar pattern |
+| `must_co_generate_tests` | Controller tasks produced `_test.go` files following the exemplar pattern defined in `agents.md` |
 
 **`must_pass_make_targets` is now enforced by real execution.** The agent MUST have
 actually run the listed make target in step 2 and it MUST have returned exit code 0.
@@ -151,33 +153,25 @@ the task type. Tests are **real `go test` executions** — not agent assertions.
 | **Controller logic** | `oape_command` is `api-implement` AND task modifies `pkg/controller/<name>/` | Co-generate `_test.go` files → run `go test` |
 | **API types** | `oape_command` is `api-generate` AND task creates/modifies `*_types.go` | Run `go build` + `go vet` (sufficient; CRD tests deferred to codegen task) |
 | **API tests** | `oape_command` is `api-generate-tests` | Task itself produces tests → run `go test` on generated test package |
-| **Feature gate** | Task modifies `features.go` | Run existing `go test ./pkg/features/... -run TestFeatureGates` |
+| **Feature gate** | Task modifies `features.go` | Run existing feature gate tests |
 | **Codegen / verify** | Task runs `make generate`, `make manifests` | Run `make verify` (checks generated files match) |
 | **Bindata / manifests** | `oape_command` is `manual` AND task creates YAML/scripts | Run `make verify` or `bash -n` (no Go tests needed) |
 | **OLM bundle** | Task modifies bundle/ or CSV | Run `make bundle && hack/verify-bundle.sh` |
 | **E2E** | `oape_command` is `e2e-generate` | Run `go build` on test package (full e2e needs live cluster) |
 
-### 4b. Controller logic tasks — co-generate `_test.go` (IstioCSR exemplar pattern)
+### 4b. Controller logic tasks — co-generate `_test.go`
 
 When the task type is **controller logic** (`api-implement` modifying `pkg/controller/`):
 
 1. **Co-generate test file(s)** alongside the production code, in the same package directory.
-   Follow the IstioCSR exemplar structure:
-
-   | Production file | Test file | Test function pattern |
-   |----------------|-----------|----------------------|
-   | `deployments.go` | `deployments_test.go` | `TestCreateOrApplyDeployments` |
-   | `services.go` | `services_test.go` | `TestCreateOrApplyServices` |
-   | `serviceaccounts.go` | `serviceaccounts_test.go` | `TestCreateOrApplyServiceAccounts` |
-   | `rbacs.go` | `rbacs_test.go` | `TestCreateOrApplyRBACResource` |
-   | `controller.go` | `controller_test.go` | `TestReconcile` |
-   | `certificates.go` | `certificates_test.go` | `TestCreateOrApplyCertificates` |
+   Follow the test exemplar pattern defined in **`agents.md`** (section "Tests" or equivalent).
+   Each production `.go` file gets a matching `_test.go` file.
 
 2. **First controller task** must also create:
-   - `fakes/fake_ctrl_client.go` — counterfeiter-generated mock matching IstioCSR's interface
-   - `test_utils.go` — shared test helpers (factory functions like `testTrustManager()`, `testDeployment()`)
+   - Mock/fake client file (e.g. `fakes/` directory) — matching the operator's established mock pattern
+   - `test_utils.go` — shared test helpers (factory functions for CR instances, expected objects)
 
-3. **Test structure** — table-driven tests using `fakes.FakeCtrlClient`:
+3. **Test structure** — table-driven tests using the operator's mock client:
    - Successful reconciliation case
    - Exists-check failure case
    - Create-when-not-exists case
@@ -188,7 +182,6 @@ When the task type is **controller logic** (`api-implement` modifying `pkg/contr
    new ones matching the file being added.
 
 5. Test files are **permanent parts of the codebase** — committed alongside production code.
-   This matches IstioCSR's structure where every `.go` file has a matching `_test.go`.
 
 ### 4c. Execute tests
 
@@ -196,13 +189,13 @@ Run the resolved test command and capture real output:
 
 ```bash
 # Controller tasks
-go test ./pkg/controller/trustmanager/... -v -count=1
+go test ./pkg/controller/<name>/... -v -count=1
 
 # Feature gate tasks
-go test ./pkg/features/... -run TestFeatureGates -v
+go test ./<features-package>/... -run <TestPattern> -v
 
 # API test generation tasks
-go test ./api/operator/v1alpha1/... -v -count=1
+go test ./api/<group>/<version>/... -v -count=1
 
 # Full suite (when task Acceptance criteria specifies)
 make test
@@ -214,10 +207,10 @@ make test
 test_execution:
   strategy: co_generated_tests  # or: existing_tests, build_only, make_verify
   commands:
-    - cmd: "go test ./pkg/controller/trustmanager/... -v -count=1"
+    - cmd: "go test ./pkg/controller/<name>/... -v -count=1"
       exit_code: 0
       pass: true
-      summary: "ok  github.com/openshift/cert-manager-operator/pkg/controller/trustmanager 1.234s"
+      summary: "ok  <module>/pkg/controller/<name> 1.234s"
       tests_run: 12
       tests_passed: 12
       tests_failed: 0
@@ -226,8 +219,8 @@ test_execution:
       pass: true
   overall_pass: true
   test_files_generated:
-    - pkg/controller/trustmanager/deployments_test.go
-    - pkg/controller/trustmanager/fakes/fake_ctrl_client.go
+    - pkg/controller/<name>/deployments_test.go
+    - pkg/controller/<name>/fakes/fake_ctrl_client.go
 ```
 
 If any test fails: fix code (and/or test), re-run. Counts toward the 2-pass refinement budget
@@ -266,17 +259,17 @@ overall_score: 95
 overall_pass: true
 verification:
   commands:
-    - cmd: "go build ./pkg/controller/trustmanager/..."
+    - cmd: "go build ./pkg/controller/<name>/..."
       exit_code: 0
       pass: true
-    - cmd: "go vet ./pkg/controller/trustmanager/..."
+    - cmd: "go vet ./pkg/controller/<name>/..."
       exit_code: 0
       pass: true
   overall_pass: true
 test_execution:
   strategy: co_generated_tests
   commands:
-    - cmd: "go test ./pkg/controller/trustmanager/... -v -count=1"
+    - cmd: "go test ./pkg/controller/<name>/... -v -count=1"
       exit_code: 0
       pass: true
       tests_run: 8
@@ -284,13 +277,13 @@ test_execution:
       tests_failed: 0
   overall_pass: true
   test_files_generated:
-    - pkg/controller/trustmanager/deployments_test.go
+    - pkg/controller/<name>/deployments_test.go
 cases:
-  - id: eval-r003-codegen-001
+  - id: eval-r001-codegen-001
     score: 95
     pass: true
     failures: []
-  - id: eval-r003-codegen-013
+  - id: eval-r001-codegen-002
     score: 95
     pass: true
     failures: []
@@ -309,8 +302,8 @@ Include all three result sections:
    ### Verification Results
    | Command | Exit Code | Result |
    |---------|-----------|--------|
-   | go build ./pkg/controller/trustmanager/... | 0 | PASSED |
-   | go vet ./pkg/controller/trustmanager/... | 0 | PASSED |
+   | go build ./pkg/controller/<name>/... | 0 | PASSED |
+   | go vet ./pkg/controller/<name>/... | 0 | PASSED |
    ```
 
 3. **Test execution results** — table of test commands with real output:
@@ -319,7 +312,7 @@ Include all three result sections:
    ### Test Execution Results
    | Command | Tests | Passed | Failed | Result |
    |---------|-------|--------|--------|--------|
-   | go test ./pkg/controller/trustmanager/... -v | 8 | 8 | 0 | PASSED |
+   | go test ./pkg/controller/<name>/... -v | 8 | 8 | 0 | PASSED |
    ```
 
 4. **Code eval scorecard** — overall %, cases pass/fail, refinement rounds, eval-driven fixes applied
@@ -351,7 +344,7 @@ Ask (substitute task_id, task_title, verification/test results):
 - **Never** report "PASSED" for commands that were not actually executed — capture real exit codes
 - **Always** run `go build` + `go vet` for every task that produces or modifies Go source files
 - **Always** co-generate `_test.go` files for controller logic tasks (`api-implement` modifying `pkg/controller/`)
-- Co-generated test files are **permanent** — committed alongside production code (matches IstioCSR exemplar)
+- Co-generated test files are **permanent** — committed alongside production code (follow the test exemplar in `agents.md`)
 - Score **code in fork cwd** — not markdown under `openspec/changes/`
 - Task reports accumulate under `implementation/task-reports/` for final `implementation-report.md`
 - Refinement budget: **2 passes total** shared across eval failures, verification failures, and test failures

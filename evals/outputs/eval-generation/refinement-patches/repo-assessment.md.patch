@@ -1,7 +1,0 @@
---- repo-assessment.md (prior backfill)
-+++ repo-assessment.md (full bundle backfill)
-@@ §4.2
-+Addon operand assessment: namespaced singleton default, GA API fields table,
-+bindata version / platform compatibility, exemplar package cross-ref
-@@ §10.2
-+Per-component traffic matrix table: API 6443, webhook 10250, metrics 9402, DNS 53, istio-csr gRPC

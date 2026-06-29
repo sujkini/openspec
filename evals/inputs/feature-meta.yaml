@@ -1,6 +1,3 @@
-feature_name: Istio CSR integration
-epic_key: CM-463
-tp_epic_key: CM-463
-ga_strat_key: OCPSTRAT-1974
-target_repo: https://github.com/openshift/cert-manager-operator
-round_label: round-3-istio-csr-cm463
+feature_name: PASTE_FEATURE_NAME_HERE
+epic_key: PASTE_EPIC_KEY_HERE
+target_repo: PASTE_TARGET_REPO_URL_HERE

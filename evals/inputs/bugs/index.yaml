@@ -1,11 +1,4 @@
-bugs:
-  - key: CM-770
-    file: bugs/CM-770.md
-  - key: CM-521
-    file: bugs/CM-521.md
-  - key: CM-546
-    file: bugs/CM-546.md
-  - key: OCPBUGS-57841
-    file: bugs/OCPBUGS-57841.md
-  - key: CM-735
-    file: bugs/CM-735.md
+bugs: []
+# Add bugs related to your feature bundle:
+#  - key: PROJ-123
+#    file: bugs/PROJ-123.md

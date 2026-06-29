@@ -1,8 +1,0 @@
---- implementation.md (prior backfill)
-+++ implementation.md (full bundle backfill)
-@@ Reconciler guardrails
-+Unified manager wiring in setup_manager.go (CM-735)
-+Status conditions Ready/Degraded via updateStatus (CM-546)
-+Limited teardown on CR delete — no full cleanup (PAT-002)
-+Static library-go drift revert (CM-758)
-+User-defined Watches() for delete/recreate (CM-764)

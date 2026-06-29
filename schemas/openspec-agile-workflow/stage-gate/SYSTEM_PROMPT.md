@@ -70,7 +70,7 @@ openspec/changes/<change-name>/eval-results/<artifact-id>.yaml
 
 ```yaml
 artifact_id: plan
-artifact_path: openspec/changes/cm-830/plan.md
+artifact_path: openspec/changes/my-feature/plan.md
 stage: plan
 stage_eval_file: evals/plan_eval.yaml
 scored_at: <ISO8601>

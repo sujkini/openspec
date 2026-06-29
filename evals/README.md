@@ -8,6 +8,52 @@ Continuous improvement loop for **openspec-agile-workflow**: derive evals from c
 
 `/eval-loop` merges cases into `evals/baseline/evals/` **and** syncs flat copies to the schema `evals/` directory.
 
+---
+
+## Getting Started for New Operators
+
+This workflow is designed to be used across multiple operators. Each operator team clones this repo and customizes it for their specific operator.
+
+### Setup steps
+
+1. **Clone this repo**
+   ```bash
+   git clone <this-repo-url>
+   cd openspec-repo
+   ```
+
+2. **Edit `schemas/openspec-agile-workflow/agents.md` for your operator**
+   This is the **only operator-specific file** in the schema. It defines:
+   - Your operator's architecture, components, and knowledge graph
+   - Execution agent IDs and routing rules for task assignment
+   - Testing instructions specific to your operator
+   - PR hygiene and dev environment details
+
+   All other templates in `schemas/openspec-agile-workflow/templates/` are generic and work for any operator.
+
+3. **Fill `evals/inputs/` with your feature bundle data**
+   Replace the placeholder content in each file:
+   | File | What to paste |
+   |------|---------------|
+   | `feature-meta.yaml` | Feature name, epic key, target repo URL |
+   | `01-ep-ard.md` | Enhancement Proposal / ARD content |
+   | `02-jira-epic.md` | Jira epic export |
+   | `03-original-repo.md` | Pre-feature repo state (commit, branch, key files) |
+   | `04-user-stories.md` | User stories linked to the epic |
+   | `05-repo-prs.md` | PR links and diffs for the completed feature |
+   | `bugs/index.yaml` | Bug keys list |
+   | `bugs/<KEY>.md` | One file per bug |
+
+4. **Run `/eval-loop` to generate evals tailored to your operator**
+   ```
+   /eval-loop
+   ```
+   This populates `evals/baseline/`, `evals/refined-templates/`, and syncs stage evals to `schemas/.../evals/`.
+
+5. **Repeat** — replace `evals/inputs/` with the next feature bundle and run `/eval-loop` again.
+
+---
+
 ## One command, one feature bundle
 
 ```
@@ -70,7 +116,7 @@ All eval cases for a stage live in a **single YAML file**:
 | implementation | `evals/baseline/evals/implementation/implementation_eval.yaml` |
 | code-generation | `evals/baseline/evals/code-generation/code-generation_eval.yaml` |
 
-Each file contains an `evals:` list with all cases (round 1, round 2, …). Do **not** scatter per-case `eval-r*.yaml` files.
+Each file contains an `evals:` list with all cases (round 1, round 2, ...). Do **not** scatter per-case `eval-r*.yaml` files.
 
 **code-generation** cases are tagged with `oape_command` and run during **`/opsx-apply`** per task (not during `/opsx-continue`).
 
