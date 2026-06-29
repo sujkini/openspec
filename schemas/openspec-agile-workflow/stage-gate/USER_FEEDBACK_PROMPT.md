@@ -15,16 +15,21 @@ Present artifact → Ask approval →
   Reject with feedback → FEEDBACK LOOP (below) until user approves
 ```
 
-### Feedback loop (repeat until Approve)
+### Feedback loop (repeat until Approve or max rounds reached)
 
 ```
 1. Capture user feedback
-2. Load context (prior artifacts, current artifact, current template, evals, inputs)
-3. Update template for this artifact if feedback requires it
-4. Regenerate refined artifact(s)
-5. Write round summary → feedback_stage_artifacts/
-6. Re-run eval gate (when applicable)
-7. Present scorecard + feedback addressed → Ask approval again
+2. Check round count against max_feedback_rounds (config.yaml flags, default 3)
+   — If round N >= max_feedback_rounds: HALT and inform the user that the
+     maximum feedback rounds have been reached. Present the latest artifact
+     and suggest revising inputs or starting a new change. Do NOT continue
+     the loop.
+3. Load context (prior artifacts, current artifact, current template, evals, inputs)
+4. Update template for this artifact if feedback requires it
+5. Regenerate refined artifact(s)
+6. Write round summary → feedback_stage_artifacts/
+7. Re-run eval gate (when applicable)
+8. Present scorecard + feedback addressed → Ask approval again
 ```
 
 **Exception — `specs.md`:** Rejection **exits the workflow**. Do **not** run this loop.

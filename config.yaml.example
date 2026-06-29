@@ -15,6 +15,10 @@ context: |
   task-by-task execution with per-task user approval (/opsx-apply), then pushes a
   draft PR to the user's fork.
 
+flags:
+  max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
+  exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
+
 rules:
   validation:
     - Read jira_key from inputs/jira.yaml; use inputs/jira-spec.md as spec source

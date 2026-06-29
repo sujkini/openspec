@@ -100,7 +100,7 @@ The forward workflow does **not** require `evals/` at project root. Stage evals 
 `install.sh` copies everything needed to run **openspec-agile-workflow** into a target project. It is the supported install path — **`openspec init` alone** installs the default `spec-driven` schema, not this workflow.
 
 ```bash
-git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b openspec-code-gen https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-project
 ```
 

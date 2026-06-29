@@ -284,10 +284,18 @@ user_approval_feedback_gate:
       openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml
     joint_round_summary: >-
       openspec/changes/<change>/feedback_stage_artifacts/repo-assessment+constitution/round-<N>.yaml
+  max_feedback_rounds:
+    default: 3
+    config_key: flags.max_feedback_rounds
+    on_limit_reached: >-
+      HALT the feedback loop. Present the latest artifact version and inform the
+      user that the maximum feedback rounds have been reached. Suggest revising
+      inputs or starting a new change. Do not continue the loop or auto-approve.
   flow: >-
     present_artifact → ask_approval →
     (approve → lock_artifact → unlock_next → stop) |
-    (reject_with_feedback → load_context → update_template_if_required
+    (reject_with_feedback → check_round_count_vs_max_feedback_rounds
+     → load_context → update_template_if_required
      → regenerate_current_artifact → write_feedback_stage_summary
      → re_run_stage_eval_gate → ask_approval)
   approval_prompt: >-
@@ -1286,6 +1294,10 @@ artifacts:
         review, or any command outside allowed_commands.
 
       ## Post-loop (all tasks approved)
+      0. **Exit check:** When `exit_on_all_tasks_complete` is true (config.yaml flags,
+         default true), verify all tasks in tasks.md §3 are marked `- [x]`. If all
+         complete, proceed to closing artifacts below and then EXIT the implementation
+         stage. Do not prompt for additional work.
       1. Write implementation-report.md — aggregate all `implementation/task-reports/*.md`
       2. Write implementation-checklist.md
       2. Write adrs.md ONLY if any phase logged DEVIATIONS.
