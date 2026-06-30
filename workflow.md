@@ -3,7 +3,7 @@
 **Schema:** `openspec-agile-workflow`
 **Version:** 1
 
-Gated spec-driven workflow: Spec Understanding → Repo Understanding → Planning → Task Creation → Implementation. Produces `validation.json`, `specs.md`, `repo-assessment.md`, `constitution.md`, `plan.md`, `tasks.md`, and (during implementation) `implementation-report.md`, `implementation-checklist.md`, and optional `adrs.md`. Implementation uses OAPE command orchestration (`/opsx:apply`).
+Gated spec-driven workflow: Spec Understanding → Repo Understanding → Planning → Task Creation → Implementation. Produces `validation.json`, `specs.md`, `repo-assessment.md`, `plan.md`, `tasks.md`, and (during implementation) `implementation-report.md`, `implementation-checklist.md`, and optional `adrs.md`. `constitution.md` is provided as an **input** (not generated). Implementation uses OAPE command orchestration (`/opsx:apply`).
 
 ---
 
@@ -13,7 +13,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 ### 1.1 Specification Validator
 
-- **Template:** `templates/validation.md`
+- **Template:** `templates/validation-template.md`
 - **Role/Context:** *"You are the 'Specification Validator': a quality gate for software specs before engineering or agentic codegen."*
 - **Objectives:** Evaluate a Jira ticket's specification for completeness (60% weight) and quality (40% weight). Score each dimension 0–100. Emit a single JSON object (`validation.json`) with scores, missing elements, quality issues, cert-manager ecosystem gaps, blockers, and an overall status.
 - **Guardrails:**
@@ -23,7 +23,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 ### 1.2 Specification Analyst
 
-- **Template:** `templates/spec.md`
+- **Template:** `templates/spec-template.md`
 - **Role/Context:** *"You are the 'Specification Analyst': a requirements transformation agent for a spec-driven development pipeline."*
 - **Objectives:** Transform a raw Jira ticket (plus optional validation context) into a clean, technology-agnostic feature specification (`specs.md`). Produce user stories with priorities (P1/P2/P3), Given/When/Then acceptance scenarios, functional requirements (FR-001...), success criteria (SC-001...), and assumptions (A-001...).
 - **Guardrails:**
@@ -34,7 +34,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 ### 1.3 Repository Assessment Agent
 
-- **Template:** `templates/repo-assessment.md`
+- **Template:** `templates/repo-assessment-template.md`
 - **Role/Context:** *"You are the Repository Assessment Agent (Principal Software Engineer)."*
 - **Objectives:** Produce a grounded, repo-evidenced assessment — a "how to work in this repo" playbook — across 12 mandatory sections (§0 Inputs & Tooling through §12 Quick Reference Card). Every section answers: *"What does a Planning AI Agent need to know about this to produce a safe, accurate, and complete implementation plan?"*
 - **Guardrails:**
@@ -44,19 +44,21 @@ The workflow uses seven distinct agent personas, each defined in a template unde
   - Completeness target: ≥90%. Output must reach §12 in full.
   - Branch verification before feature claims — never assume main/master has code that the pinned branch lacks.
 
-### 1.4 Constitution Agent
+### 1.4 Constitution (Input — not generated)
 
-- **Template:** `templates/constitution.md`
-- **Role/Context:** *"You are the 'Constitution Agent': a repository governance analyst for a spec-driven development pipeline."*
-- **Objectives:** Derive core principles, coding conventions, development workflow, and governance rules from the codebase itself (`constitution.md`). Set `AgentRoutingMode` to PROVIDED (if AGENTS.md found) or PROVISIONAL (if not). This artifact is injected into all downstream agents as non-negotiable guardrails.
-- **Guardrails:**
-  - Every principle must be repo-evidence-backed — no generic best-practice platitudes.
-  - No implementation decisions (those belong in `plan.md`).
-  - No file inventories or risk analysis (those belong in `repo-assessment.md`).
+- **Template:** `templates/constitution-template.md` (retained for reference and fallback generation)
+- **Role:** `constitution.md` is provided as a **pre-approved input**, not generated as an artifact during the workflow.
+- **Lookup order:**
+  1. `{target_repo}/constitution.md`
+  2. `{target_repo}/CONSTITUTION.md`
+  3. `openspec/changes/<change>/inputs/constitution.md`
+  4. `{schema_root}/inputs/constitution.md`
+- **Fallback:** If not found in any location, the agent generates one using `templates/constitution-template.md` as a one-time step and saves it to `openspec/changes/<change>/inputs/constitution.md`.
+- **Purpose:** Injected into all downstream agents (Planning, Task Creation, Code Generation) as non-negotiable guardrails. Contains core principles, coding conventions, development workflow, agent routing mode, and governance rules.
 
 ### 1.5 Technical Planning Agent
 
-- **Template:** `templates/plan.md`
+- **Template:** `templates/plan-template.md`
 - **Role/Context:** *"You are the Technical Planning Agent for the cert-manager ecosystem."*
 - **Objectives:** Produce `plan.md` — the architectural and sequencing blueprint for implementation (§0–§8). Explains HOW work should proceed and in what order, using implementation phases with Goal, Dependencies, Target files, Required capabilities, and Verification hooks.
 - **Guardrails:**
@@ -69,7 +71,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 ### 1.6 Sub-Task Creation Agent
 
-- **Template:** `templates/tasks.md` (base) + `templates/tasks-modes/` (pass-specific instructions)
+- **Template:** `templates/tasks-template.md` (base) + `templates/tasks-modes/` (pass-specific instructions)
 - **Role/Context:** *"You are the Sub-Task Creation Agent (Technical Project Manager mode)."*
 - **Objectives:** Convert validated requirements + technical plan into an ordered execution backlog (`tasks.md`) with 6 sections (§0–§5): input coverage checklist, task dependency DAG (Mermaid), linear execution order, task execution manifest, per-task payloads, and orchestration notes.
 - **Guardrails:**
@@ -81,7 +83,7 @@ The workflow uses seven distinct agent personas, each defined in a template unde
 
 ### 1.7 Code Generation Agent (OAPE Implementation Orchestrator)
 
-- **Templates:** `templates/code-generation.md` (code generation rules), `templates/design-bundle.md` (per-task context bundle), `templates/implementation.md` (phase log format)
+- **Templates:** `templates/code-generation-template.md` (code generation rules), `templates/design-bundle-template.md` (per-task context bundle), `templates/implementation-template.md` (phase log format)
 - **Role/Context:** *"You are the Code Generation Agent (Robotic Engineer Role)"* and the OAPE Implementation Orchestrator.
 - **Objectives:** Execute approved tasks from `tasks.md` task-by-task in linear execution order. For each task: compose a design bundle, resolve and invoke one OAPE command (or implement manually for manual agents), verify acceptance criteria, **execute test block**, run code-generation eval gate, refine code, then present results for user approval.
 - **Guardrails:**
@@ -151,14 +153,13 @@ After OAPE command execution, the code eval gate enforces a **test execution blo
 ┌──────────────────────────────────────────────────────┐
 │  STAGE 2: REPO UNDERSTANDING                         │
 │                                                      │
-│  ┌────────────────────┐  ┌────────────────────┐      │
-│  │ repo-assessment.md │  │  constitution.md   │      │
-│  │ (co-generated;     │  │  (co-generated;    │      │
-│  │  joint approval    │◀▶│   joint approval   │      │
-│  │  gate)             │  │   gate)            │      │
-│  └─────────┬──────────┘  └────────┬───────────┘      │
-│            └──────────┬───────────┘                   │
-└───────────────────────┼──────────────────────────────┘
+│  ┌────────────────────┐                              │
+│  │ repo-assessment.md │  constitution.md = INPUT     │
+│  │ (approval gate)    │  (resolved via lookup order  │
+│  │                    │   after repo-assessment)     │
+│  └─────────┬──────────┘                              │
+│            │                                         │
+└────────────┼─────────────────────────────────────────┘
                 /opsx-continue   │  user approves
                                  ▼
 ┌──────────────────────────────────────────────────────┐
@@ -330,18 +331,18 @@ Each artifact has a defined format and output path:
 
 | Artifact | Format | Output path | Gate type |
 |----------|--------|-------------|-----------|
-| `validation.json` | JSON (strict schema — see `templates/validation.md`) | `openspec/changes/<change>/validation.json` | Threshold (score ≥ `pass_threshold`, default 80) |
-| `specs.md` | Markdown (output template in `templates/spec.md`) | `openspec/changes/<change>/specs.md` | Approval (reject = exit workflow) |
-| `repo-assessment.md` | Markdown (12-section output template in `templates/repo-assessment.md`) | `openspec/changes/<change>/repo-assessment.md` | Approval (joint with constitution) |
-| `constitution.md` | Markdown (output template in `templates/constitution.md`) | `openspec/changes/<change>/constitution.md` | Approval (joint with repo-assessment) |
-| `plan.md` | Markdown (§0–§8 output schema in `templates/plan.md`) | `openspec/changes/<change>/plan.md` | Approval |
-| `tasks.md` | Markdown (§0–§5 output schema in `templates/tasks.md`) | `openspec/changes/<change>/tasks.md` | Approval |
-| `implementation-phase-log.md` | Markdown (append-only log, template: `templates/implementation.md`) | `openspec/changes/<change>/implementation-phase-log.md` | Per-task approval |
-| Task reports | Markdown (template: `templates/implementation-task-report.md`) | `openspec/changes/<change>/implementation/task-reports/<task-id>.md` | Written on task approval |
-| Design bundle | Markdown (template: `templates/design-bundle.md`) | `openspec/changes/<change>/implementation/design-bundle.md` | Regenerated per task |
-| `implementation-report.md` | Markdown (template: `templates/implementation-report.md`) | `openspec/changes/<change>/implementation-report.md` | Informational (post-loop) |
-| `implementation-checklist.md` | Markdown (template: `templates/implementation-checklist.md`) | `openspec/changes/<change>/implementation-checklist.md` | Informational (post-loop) |
-| `adrs.md` | Markdown (template: `templates/adrs.md`) | `openspec/changes/<change>/adrs.md` | Informational (only if deviations logged) |
+| `validation.json` | JSON (strict schema — see `templates/validation-template.md`) | `openspec/changes/<change>/validation.json` | Threshold (score ≥ `pass_threshold`, default 80) |
+| `specs.md` | Markdown (output template in `templates/spec-template.md`) | `openspec/changes/<change>/specs.md` | Approval (reject = exit workflow) |
+| `repo-assessment.md` | Markdown (12-section output template in `templates/repo-assessment-template.md`) | `openspec/changes/<change>/repo-assessment.md` | Approval (joint with constitution) |
+| `constitution.md` | Markdown (output template in `templates/constitution-template.md`) | `openspec/changes/<change>/constitution.md` | Approval (joint with repo-assessment) |
+| `plan.md` | Markdown (§0–§8 output schema in `templates/plan-template.md`) | `openspec/changes/<change>/plan.md` | Approval |
+| `tasks.md` | Markdown (§0–§5 output schema in `templates/tasks-template.md`) | `openspec/changes/<change>/tasks.md` | Approval |
+| `implementation-phase-log.md` | Markdown (append-only log, template: `templates/implementation-template.md`) | `openspec/changes/<change>/implementation-phase-log.md` | Per-task approval |
+| Task reports | Markdown (template: `templates/implementation-task-report-template.md`) | `openspec/changes/<change>/implementation/task-reports/<task-id>.md` | Written on task approval |
+| Design bundle | Markdown (template: `templates/design-bundle-template.md`) | `openspec/changes/<change>/implementation/design-bundle.md` | Regenerated per task |
+| `implementation-report.md` | Markdown (template: `templates/implementation-report-template.md`) | `openspec/changes/<change>/implementation-report.md` | Informational (post-loop) |
+| `implementation-checklist.md` | Markdown (template: `templates/implementation-checklist-template.md`) | `openspec/changes/<change>/implementation-checklist.md` | Informational (post-loop) |
+| `adrs.md` | Markdown (template: `templates/adrs-template.md`) | `openspec/changes/<change>/adrs.md` | Informational (only if deviations logged) |
 | Eval results | YAML | `openspec/changes/<change>/eval-results/<artifact-id>.yaml` | Written by eval gate |
 | Code eval results | YAML | `openspec/changes/<change>/eval-results/code-generation-<task-id>.yaml` | Written by code eval gate |
 | Feedback round summaries | YAML | `openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml` | Written on user rejection |

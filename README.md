@@ -20,9 +20,16 @@ This installs the schema, Cursor commands, skills, and evals into your project. 
 
 ### 2. Customize `agents.md` for your operator
 
-Edit **one file**: `openspec/schemas/openspec-agile-workflow/agents.md`
+Edit **two files** in `openspec/schemas/openspec-agile-workflow/inputs/`:
 
-This is the **only operator-specific file** in the workflow. Everything else (templates, stage-gate prompts, evals) is generic. Your `agents.md` should define:
+- **`inputs/agents.md`** — operator-specific agent routing and architecture
+- **`inputs/constitution.md`** — operator-specific coding guardrails and conventions
+
+These are the **only operator-specific files** in the workflow. Everything else (templates, stage-gate prompts, evals) is generic.
+
+Also update **`agents.md`** in the schema root (`openspec/schemas/openspec-agile-workflow/agents.md`).
+
+Your `agents.md` should define:
 
 - **Repository layout** — directory structure, key packages
 - **Architecture patterns** — controller frameworks, reconciliation flow, how your operator works
@@ -73,7 +80,7 @@ The agent will clone your fork, create a feature branch, implement task-by-task,
 /opsx-new PROJ-123          → start change from Jira ticket
 /opsx-continue              → validation.json      [approve]
 /opsx-continue              → specs.md             [approve]
-/opsx-continue              → repo-assessment.md + constitution.md  [approve]
+/opsx-continue              → repo-assessment.md  [approve] (constitution.md resolved as input)
 /opsx-continue              → plan.md             [approve]
 /opsx-continue              → tasks.md            [approve]
 /opsx-apply                 → task T1 [approve] → task T2 [approve] → … → done
@@ -151,13 +158,14 @@ A structured workflow that turns a Jira ticket into reviewed artifacts, then imp
 ### Pipeline
 
 ```
-validation → specs → repo-assessment + constitution → plan → tasks → implementation → archive
+validation → specs → repo-assessment → [resolve constitution.md input] → plan → tasks → implementation → archive
 ```
 
 | Stage | Artifacts | Purpose |
 |-------|-----------|---------|
 | **Spec understanding** | `validation.json`, `specs.md` | Validate and refine the Jira spec before any repo work |
-| **Repo understanding** | `repo-assessment.md`, `constitution.md` | Ground planning in the target repository |
+| **Repo understanding** | `repo-assessment.md` | Ground planning in the target repository |
+| **Constitution (input)** | `constitution.md` (resolved, not generated) | Non-negotiable guardrails for planning and implementation |
 | **Planning** | `plan.md` | Phased implementation plan (§0–§8) |
 | **Task creation** | `tasks.md` | Executable task manifest with assigned agents |
 | **Implementation** | code on fork + `implementation-report.md` | Task-by-task OAPE execution with per-task approval |
@@ -292,15 +300,43 @@ Your `agents.md` defines:
 
 When the workflow needs agent routing (repo-assessment onward):
 
-1. `openspec/changes/<change>/inputs/AGENTS.md` (change-local override)
-2. `openspec/changes/<change>/inputs/agents.md`
-3. `{target_repo}/AGENTS.md` ← **expected long-term location**
-4. `{target_repo}/agents.md`
-5. `{schema_root}/agents.md` ← bundled copy from install
+1. `{target_repo}/AGENTS.md` ← **check target repo first**
+2. `{target_repo}/agents.md`
+3. `{schema_root}/inputs/agents.md` ← schema inputs/ folder
+4. `{schema_root}/agents.md` ← bundled copy from install
 
-If none are found, the agent asks you once to provide `AGENTS.md`. If you decline, the workflow continues in **PROVISIONAL** mode (documented in constitution, plan, and tasks).
+If none are found, the agent asks you once to provide `AGENTS.md`. If you decline, the workflow continues in **PROVISIONAL** mode (documented in plan and tasks).
 
 **Production expectation:** your target repository should own its `AGENTS.md`. The bundled copy is a fallback so you can run the workflow end-to-end before the target repo has one.
+
+---
+
+## constitution.md — operator-specific input
+
+`constitution.md` defines non-negotiable guardrails, coding conventions, and governance rules for your operator. It is **not generated as an artifact** during the workflow — it is resolved as an input before planning begins.
+
+### Where constitution is resolved (lookup order)
+
+After repo-assessment is approved, the workflow resolves `constitution.md`:
+
+1. `{target_repo}/constitution.md` ← **check target repo first**
+2. `{target_repo}/CONSTITUTION.md`
+3. `{schema_root}/inputs/constitution.md` ← schema inputs/ folder
+
+### If not found
+
+If none of the lookup paths have a real constitution, the agent will generate one using `templates/constitution-template.md` as a **one-time step** (not a recurring workflow artifact). The result is saved to `openspec/changes/<change>/inputs/constitution.md` for reuse.
+
+### What to include
+
+Your constitution should contain:
+- **Core Principles** — repo-evidence-backed coding patterns
+- **Additional Constraints** — tech stack, compliance, naming
+- **Development Workflow** — CI gates, review process, verify commands
+- **Agent Routing** — AgentRoutingMode (PROVIDED/PROVISIONAL)
+- **Governance** — precedence rules with AGENTS.md, CONTRIBUTING.md
+
+See `templates/constitution-template.md` for the full structure.
 
 ---
 
@@ -351,7 +387,7 @@ Implementation follows **`tasks.md`** in linear execution order, respecting task
 For **each pending task**:
 
 1. Compose `implementation/design-bundle.md` scoped to **that task only**
-2. Resolve **exactly one** allowed OAPE command (or manual work per `templates/code-generation.md` for non-OAPE agents)
+2. Resolve **exactly one** allowed OAPE command (or manual work per `templates/code-generation-template.md` for non-OAPE agents)
 3. Run the command in your **fork** working copy (or project cwd in working-folder mode)
 4. Verify against the task's acceptance criteria
 5. Run **code-generation evals** → refine code until evals pass (max 2 passes)
@@ -374,17 +410,19 @@ Agent preamble (system prompt: role, mission, inputs, quality rules)
 <markdown skeleton for the artifact>
 ```
 
+All templates follow the naming convention `<stage-name>-template.md`:
+
 | Template | Agent role |
 |----------|------------|
-| `validation.md` | Specification Validator |
-| `spec.md` | Specification Analyst |
-| `repo-assessment.md` | Repository Assessment Agent |
-| `constitution.md` | Constitution Agent |
-| `plan.md` | Technical Planning Agent |
-| `tasks.md` + `tasks-modes/*.md` | Sub-Task Creation Agent (multipass) |
-| `code-generation.md` | Code Generation Agent (implementation) |
-| `design-bundle.md` | User message template for codegen |
-| `implementation-report.md` | Closing documentation agent |
+| `validation-template.md` | Specification Validator |
+| `spec-template.md` | Specification Analyst |
+| `repo-assessment-template.md` | Repository Assessment Agent |
+| `constitution-template.md` | Constitution Agent |
+| `plan-template.md` | Technical Planning Agent |
+| `tasks-template.md` + `tasks-modes/*-template.md` | Sub-Task Creation Agent (multipass) |
+| `code-generation-template.md` | Code Generation Agent (implementation) |
+| `design-bundle-template.md` | User message template for codegen |
+| `implementation-report-template.md` | Closing documentation agent |
 
 Templates are **generic** — they work for any operator. Operator-specific depth comes from `agents.md`.
 
@@ -446,9 +484,9 @@ See the [eval loop section](#how-the-eval-loop-works-eval-loop) above for detail
 schemas/openspec-agile-workflow/
 ├── schema.yaml                    # workflow definition
 ├── agents.md                      # operator-specific (customize per operator)
-├── templates/                     # artifact + agent templates (generic)
-│   ├── code-generation.md        # Code Generation Agent prompt
-│   └── tasks-modes/              # multipass mode templates for tasks.md
+├── templates/                     # artifact + agent templates (generic, named *-template.md)
+│   ├── code-generation-template.md  # Code Generation Agent prompt
+│   └── tasks-modes/              # multipass mode templates for tasks.md (*-template.md)
 ├── evals/                         # stage evals (forward workflow gate)
 ├── stage-gate/                    # SYSTEM_PROMPT, USER_FEEDBACK_PROMPT, artifact map
 └── feedback_stage_artifacts/      # format spec for rejection round summaries
