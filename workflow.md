@@ -209,11 +209,22 @@ After OAPE command execution, the code eval gate enforces a **test execution blo
 
 **Eval gate (every artifact except specs):**
 
-After generating an artifact (v1), the agent scores it against stage-specific eval cases (`evals/<stage>_eval.yaml`). If cases fail, the agent refines the artifact and re-scores. This loop runs before the user ever sees the artifact. The eval gate never modifies schema templates — only the change artifact.
+After generating an artifact (v1), the agent scores it against stage-specific eval cases (`evals/<stage>_eval.yaml`). If cases fail, the agent refines the artifact and re-scores. After scoring, an **evaluation report** is generated. This loop runs before the user ever sees the artifact. The eval gate never modifies schema templates — only the change artifact.
 
 ```
-generate_v1 → run_stage_evals → refine_artifact → re_score → present_to_user
+generate_v1 → run_stage_evals → refine_artifact → re_score → generate_evaluation_report → present_to_user
 ```
+
+**Evaluation report (every artifact):**
+
+After eval scoring completes, the agent generates `<artifact-id>_evaluation_report.md` alongside the artifact. The report contains:
+
+- **Eval summary**: overall score, cases passed/failed
+- **Gap analysis**: evaluates the artifact against its input dependencies and `agents.md` for missing content, inconsistencies, or incomplete coverage
+- **Quality assessment**: completeness, consistency with prior artifacts, repo grounding, and agent routing correctness
+- **Recommendations**: items for the user to verify and potential downstream impacts
+
+The evaluation report is generated for ALL artifacts — even those with `skip` or `rubric_only` gates (which get gap analysis and quality assessment without eval case scoring). This ensures the user always has a structured quality assessment before approval.
 
 **User approval (every artifact):**
 

@@ -76,3 +76,14 @@ artifacts:
     gate: skip
 
 eval_results_dir: openspec/changes/<change-name>/eval-results/
+
+# Evaluation reports — generated alongside each artifact after eval scoring
+evaluation_reports:
+  enabled: true
+  output_dir: openspec/changes/<change-name>/
+  naming: "<artifact-id>_evaluation_report.md"
+  description: >-
+    After eval scoring (or rubric check), generate a structured evaluation report
+    that presents: eval pass/fail summary, gap analysis against input artifacts
+    and agents.md, and quality assessment. Present to user alongside the artifact
+    for approval.

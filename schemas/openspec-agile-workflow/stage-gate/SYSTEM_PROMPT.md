@@ -117,21 +117,92 @@ Include in the refinement prompt — do not regenerate blind:
 
 Re-run Step 2 on v2. Update eval-results file (append `refinement_round: 2` or replace with latest).
 
-## Step 4 — User approval gate
+## Step 4 — Generate evaluation report
+
+After eval scoring (or rubric check for validation), generate an **evaluation report** and write it alongside the artifact:
+
+**Output path:** `openspec/changes/<change>/<artifact-id>_evaluation_report.md`
+
+The evaluation report must contain:
+
+### Report structure
+
+```markdown
+# Evaluation Report: <artifact-id>
+
+**Change:** <change-name>
+**Artifact:** <artifact-id> (<artifact-path>)
+**Evaluated at:** <ISO8601 timestamp>
+
+## Eval Summary
+
+| Metric | Value |
+|--------|-------|
+| Overall score | X% |
+| Cases passed | N / M |
+| Cases failed | F |
+| Refinement applied | Yes/No |
+
+## Cases Detail
+
+| Case ID | Score | Pass | Failures |
+|---------|-------|------|----------|
+| ... | ... | ... | ... |
+
+## Gap Analysis
+
+Evaluate the generated artifact against:
+1. **Input artifacts** used to produce it (listed dependencies)
+2. **agents.md** (operator-specific routing, architecture, test patterns)
+3. **Template requirements** (structural completeness)
+
+For each gap found:
+- What is missing or inconsistent
+- Which input artifact or agents.md section it should have addressed
+- Severity: CRITICAL / MODERATE / MINOR
+
+## Quality Assessment
+
+- Completeness: Does the artifact cover all requirements from input artifacts?
+- Consistency: Does it align with prior approved artifacts?
+- Grounding: Are all claims supported by repo evidence or input data?
+- Agent routing: Does it correctly use agents.md when applicable?
+
+## Recommendations
+
+- Items to verify during review
+- Potential issues for downstream stages
+```
+
+### When to generate
+
+| Gate type | Evaluation report |
+|-----------|-------------------|
+| `stage_evals` | Full report with all cases, gaps, and quality assessment |
+| `rubric_only` | Report with rubric scoring and gap analysis (no eval cases) |
+| `skip` | Minimal report — gap analysis and quality assessment only (no scoring) |
+
+Always generate the report — even for `skip` gates. The report serves as a quality checkpoint for the user.
+
+## Step 5 — User approval gate
 
 Present to user:
 
 1. **Artifact**: path + short summary of what was produced/refined
-2. **Eval scorecard**: overall % + table of cases (pass/fail) + top failures
-3. **Refinement**: "Refined after eval" yes/no; what was added/fixed
-4. **Ask**:
+2. **Evaluation report**: path to the `<artifact-id>_evaluation_report.md`
+3. **Eval scorecard**: overall % + table of cases (pass/fail) + top failures
+4. **Gaps identified**: summary of critical/moderate gaps from the evaluation report
+5. **Refinement**: "Refined after eval" yes/no; what was added/fixed
+6. **Ask**:
 
 > Eval score: **{overall_score}%** ({N}/{M} cases pass).  
+> Evaluation report: `openspec/changes/<change>/<artifact-id>_evaluation_report.md`  
+> Gaps: {critical_count} critical, {moderate_count} moderate, {minor_count} minor  
 > Approve this artifact and proceed to the next stage?  
 > **(Approve / Reject with feedback)**
 
 - **Approve** → mark artifact done per schema gate; STOP (one artifact per `/opsx-continue`)
-- **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): load prior artifacts + current template, update template if feedback requires it, regenerate **current artifact only**, write round summary to `feedback_stage_artifacts/`, re-run eval gate if applicable, re-present this step; loop until approve; do not modify previously approved artifacts
+- **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): load prior artifacts + current template, update template if feedback requires it, regenerate **current artifact only**, write round summary to `feedback_stage_artifacts/`, re-run eval gate if applicable, regenerate evaluation report, re-present this step; loop until approve; do not modify previously approved artifacts
 
 Do **not** create the next artifact in the same invocation.
 

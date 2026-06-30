@@ -187,9 +187,16 @@ stage_eval_gate:
   artifact_map: stage-gate/artifact-eval-map.yaml
   generation_templates: templates/
   eval_results: openspec/changes/<change>/eval-results/<artifact-id>.yaml
+  evaluation_report:
+    output_path: openspec/changes/<change>/eval-results/<artifact-id>_evaluation_report.md
+    description: >-
+      After eval scoring, generate an evaluation report presenting pass/fail
+      summary, gap analysis against input artifacts and agents.md, and quality
+      assessment. Present to user alongside the artifact for approval.
+    generated_for: all artifacts (stage_evals, rubric_only, and skip gates)
   flow: >-
-    generate_v1 → run_stage_evals → refine_artifact → user_approval
-    → (reject → user_approval_feedback_gate → re_eval → user_approval)
+    generate_v1 → run_stage_evals → refine_artifact → generate_evaluation_report → user_approval
+    → (reject → user_approval_feedback_gate → re_eval → regenerate_evaluation_report → user_approval)
   do_not_modify:
     - templates/
     - evals/refined-templates/

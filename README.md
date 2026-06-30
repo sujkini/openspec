@@ -168,8 +168,17 @@ validation → specs → repo-assessment + constitution → plan → tasks → i
 After each artifact is generated:
 
 ```
-generate v1 → run stage evals → refine artifact → user approve → next stage
+generate v1 → run stage evals → refine artifact → generate evaluation report → user approve → next stage
 ```
+
+Every artifact gets an **evaluation report** (`<artifact-id>_evaluation_report.md`) written alongside it. The report presents:
+
+- How many evals passed/failed with scores
+- Gap analysis — what's missing or inconsistent with input artifacts and `agents.md`
+- Quality assessment — completeness, consistency, grounding
+- Recommendations for review
+
+The evaluation report is presented to you together with the artifact for approval.
 
 If you **reject** with feedback, the agent:
 
