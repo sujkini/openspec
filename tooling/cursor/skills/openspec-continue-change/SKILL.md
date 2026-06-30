@@ -162,3 +162,31 @@ For **openspec-agile-workflow**, eval gate mapping:
 - **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output
+
+## Dashboard Telemetry (optional — skip if backend not running)
+
+Track this artifact's phase on the observability dashboard. All commands run from workspace root. Errors are non-fatal — ignore and continue if the dashboard backend is not running.
+
+**Before creating the artifact** (after picking the first `ready` artifact in step 3):
+```bash
+python -m src.telemetry.cli start-phase --change "<name>" --artifact "<artifact-id>"
+```
+
+**After user approves the artifact**:
+```bash
+python -m src.telemetry.cli end-artifact --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_overall_score> --label "<quality_label>" --iterations <refinement_count>
+```
+
+**If user rejects `specs` (exit workflow)**:
+```bash
+python -m src.telemetry.cli end-artifact --change "<name>" --artifact specs --status failed
+python -m src.telemetry.cli end-run --change "<name>" --status failed
+```
+
+Artifact-to-phase mapping (automatic):
+| Artifacts | Phase |
+|-----------|-------|
+| validation, specs | Phase 1 — spec_understanding |
+| repo-assessment, constitution | Phase 2 — repo_assessment |
+| plan | Phase 3 — arch_planning |
+| tasks | Phase 4 — subtask_creation |

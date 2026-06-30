@@ -17,7 +17,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.
+   Run `python -m src.telemetry.openspec_wrapper list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.
 
    Present the top 3-4 most recently modified changes as options, showing:
    - Change name
@@ -31,7 +31,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 2. **Check current status**
    ```bash
-   openspec status --change "<name>" --json
+   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
    ```
    Parse the JSON to understand current state. The response includes:
    - `schemaName`: The workflow schema being used (e.g., "spec-driven")
@@ -54,7 +54,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
    - Pick the FIRST artifact with `status: "ready"` from the status output
    - Get its instructions:
      ```bash
-     openspec instructions <artifact-id> --change "<name>" --json
+     python -m src.telemetry.openspec_wrapper instructions <artifact-id> --change "<name>" --json
      ```
    - Parse the JSON. The key fields are:
      - `context`: Project background (constraints for you - do NOT include in output)
@@ -121,7 +121,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 4. **After completing the artifact + gate, show progress**
    ```bash
-   openspec status --change "<name>"
+   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
    ```
 
 **Output**
@@ -162,3 +162,4 @@ For **openspec-agile-workflow**, eval gate mapping:
 - **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output
+

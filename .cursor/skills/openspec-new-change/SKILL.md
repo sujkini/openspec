@@ -14,14 +14,3 @@ Syntax: `/opsx-new CM-830` or `/opsx-new CM-830 change-name`
 
 Repo URL optional now; required before repo-assessment stage.
 
-## Dashboard Telemetry
-
-After creating the change directory and writing `inputs/jira.yaml`, register this run
-with the observability dashboard so all subsequent `/opsx-continue` and `/opsx-apply`
-invocations can track phases and tasks. Run from the workspace root:
-
-```bash
-python -m src.telemetry.cli init-run --change "<name>" --jira-key "<JIRA_KEY>"
-```
-
-If the command fails (e.g. dashboard backend not running), ignore the error and continue — telemetry is optional.

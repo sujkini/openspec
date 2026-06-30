@@ -29,8 +29,8 @@ OAPE (or manual — see `{schema_root}/templates/code-generation.md`) → verify
 
 2. **Status and apply instructions**
    ```bash
-   openspec status --change "<name>" --json
-   openspec instructions apply --change "<name>" --json
+   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
+   python -m src.telemetry.openspec_wrapper instructions apply --change "<name>" --json
    ```
 
 3. **Prerequisites** — OAPE command files; gh/go/git/make; artifacts approved; `implementation/task-reports/` dir.
@@ -51,10 +51,14 @@ OAPE (or manual — see `{schema_root}/templates/code-generation.md`) → verify
    - **On approve:** write `implementation/task-reports/<task-id>.md`; mark `- [x]`; append phase log
    - **On reject:** REVISION FEEDBACK; re-run current task only
 
-8. **Post-loop** — `implementation-report.md` aggregates all task reports; checklist; adrs; push; draft PR.
+8. **Post-loop** — `implementation-report.md` aggregates all task reports; checklist; adrs; push; draft PR. Then sync dashboard state:
+   ```bash
+   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
+   ```
 
 **Guardrails**
 - Never ask user approval before code eval refinement loop completes (when cases exist)
 - One OAPE command per task; approval after every task
 - One task report per approved task
 - OAPE in fork cwd only
+
