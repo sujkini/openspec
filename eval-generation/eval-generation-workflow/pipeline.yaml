@@ -56,7 +56,7 @@ phases:
         rule: >-
           If eval-generation/eval-generation-workflow/refined-templates/ is empty or missing key files,
           copy from schema_templates_dir once and copy agents.md from
-          openspec/schemas/openspec-agile-workflow/agents.md. Never write eval refinements to openspec/schemas/.
+          openspec/inputs/agents.md. Never write eval refinements to openspec/schemas/.
       - id: inventory-templates
         reads: [eval-generation/eval-generation-workflow/refined-templates/, eval-generation/eval-generation-workflow/eval-generation/template-inventory.yaml]
       - id: identify-gaps

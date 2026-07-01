@@ -14,7 +14,7 @@ You are the Eval Generation Agent. Using Epic Bug Analysis outputs + prior basel
 
 1. **Seed refined-templates** (round 1 only):
    If `eval-generation/eval-generation-workflow/refined-templates/` is empty, copy from
-   `openspec/schemas/openspec-agile-workflow/templates/` and copy agents.md.
+   `openspec/schemas/openspec-agile-workflow/templates/` and copy agents.md from `openspec/inputs/agents.md`.
 
 2. **Inventory templates** — read template-inventory.yaml and refined-templates/
 
