@@ -1,9 +1,9 @@
 # Eval case schema — plan stage
 
 stage: plan
-template: eval-generation/eval-generation-workflow/refined-templates/plan-template.md
+template: eval-generation/output-refined-templates/plan-template.md
 artifact: plan.md
-output_eval_file: eval-generation/output-eval-generation/plan/plan_eval.yaml
+output_eval_file: eval-generation/output-evals/plan/plan_eval.yaml
 
 required_fields:
   - id

@@ -29,7 +29,7 @@ Paths below are **relative to the schema root** (`openspec/schemas/openspec-agil
 
 | Purpose | Path |
 |---------|------|
-| **Eval cases** | `eval-generation/code-generation_eval.yaml` |
+| **Eval cases** | `evals/code-generation_eval.yaml` |
 | **Assertion schema** | `eval-generation/eval-generation-workflow/stages/code-generation-eval-spec.yaml` |
 | **Do NOT edit** | Eval YAML during forward workflow (read-only; cases added via `/eval-loop`) |
 
@@ -45,7 +45,7 @@ From the current task, determine `oape_command`:
 | `/oape:e2e-generate` | `e2e-generate` |
 | Manual agent (no OAPE) | `manual` |
 
-Load `eval-generation/code-generation_eval.yaml`. Score only cases where:
+Load `evals/code-generation_eval.yaml`. Score only cases where:
 
 - `oape_command` equals the resolved command, **or**
 - `oape_command` is `any` (applies to all tasks)
@@ -252,7 +252,7 @@ openspec/changes/<change-name>/eval-results/code-generation-<task-id>.yaml
 task_id: T3_2
 oape_command: api-implement
 stage: code-generation
-stage_eval_file: eval-generation/code-generation_eval.yaml
+stage_eval_file: evals/code-generation_eval.yaml
 scored_at: <ISO8601>
 refinement_rounds: 1
 overall_score: 95

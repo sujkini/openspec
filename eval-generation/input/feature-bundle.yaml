@@ -31,7 +31,7 @@ repo_prs: |
 
 # --- Optional: Bugs ---
 # List bugs discovered during/after the feature implementation.
-# These drive code-generation evals and routing-learnings.
+# These drive code-generation evals and template gap analysis.
 
 bugs:
   # - key: BUG-001

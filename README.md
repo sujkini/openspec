@@ -140,7 +140,12 @@ You can also start from an **Enhancement Proposal** file instead of a Jira key �
 ├── eval-generation/                       # Optional retrospective eval loop
 │   ├── input/                             # Single feature-bundle.yaml
 │   ├── output-evals/                      # Stage-wise cumulative eval results
+│   ├── output-refined-templates/          # Working copy + output (seeded → patched each round)
 │   └── eval-generation-workflow/          # Internal workflow machinery
+│       ├── template-gaps/                 # Gap reports per template + agents.md
+│       ├── outputs/                       # Epic-bug-analysis + patches
+│       ├── rounds/                        # Round snapshots
+│       └── generation-phase/              # SYSTEM_PROMPT, template-inventory
 └── README.md
 ```
 
@@ -273,9 +278,10 @@ Fill `eval-generation/input/feature-bundle.yaml` with data from **one completed 
 
 | Location | What |
 |----------|------|
-| `eval-generation/output-eval-generation/<stage>/<stage>_eval.yaml` | Eval cases per stage (cumulative) |
-| `eval-generation/eval-generation-workflow/refined-templates/` | Improved templates |
-| `openspec/schemas/.../eval-generation/*_eval.yaml` | Synced for forward workflow |
+| `eval-generation/output-evals/<stage>/<stage>_eval.yaml` | Eval cases per stage (cumulative) |
+| `eval-generation/eval-generation-workflow/template-gaps/` | Gap reports per template and agents.md |
+| `eval-generation/output-refined-templates/` | Refined templates (review and apply to sources) |
+| `openspec/schemas/.../evals/*_eval.yaml` | Synced for forward workflow |
 
 ### Repeating
 

@@ -1,18 +1,19 @@
 # Template inventory — Eval Generation inputs
-# READ/WRITE: eval-generation/eval-generation-workflow/refined-templates/ only (NOT schemas/)
+# READ/WRITE: eval-generation/output-refined-templates/ only (NOT schemas/)
 
-refined_templates_dir: eval-generation/eval-generation-workflow/refined-templates/
+refined_templates_dir: eval-generation/output-refined-templates/
 schema_templates_dir_readonly: openspec/schemas/openspec-agile-workflow/templates/
 
 agents_md:
-  workflow_roster: agents.md
-  baseline_routing_learnings: eval-generation/eval-generation-workflow/routing-learnings.md
+  source: openspec/inputs/agents.md
+  working_copy: eval-generation/output-refined-templates/agents.md
+  gaps: eval-generation/eval-generation-workflow/template-gaps/agents-gaps.md
 
 spec_understanding:
   - id: validation
     file: validation-template.md
     artifact: validation.json
-    note: Refine in refined-templates/ — spec-stage eval; not duplicated under output-eval-generation/
+    note: Refine in output-refined-templates/ — spec-stage eval; not duplicated under output-evals/
   - id: specs
     file: spec-template.md
     artifact: specs.md

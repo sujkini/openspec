@@ -1,9 +1,9 @@
 # Eval case schema — constitution stage
 
 stage: constitution
-template: eval-generation/eval-generation-workflow/refined-templates/constitution-template.md
+template: eval-generation/output-refined-templates/constitution-template.md
 artifact: constitution.md
-output_eval_file: eval-generation/output-eval-generation/constitution/constitution_eval.yaml
+output_eval_file: eval-generation/output-evals/constitution/constitution_eval.yaml
 
 required_fields:
   - id

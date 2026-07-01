@@ -80,7 +80,7 @@ When updating:
 2. Keep changes minimal — only what feedback requires
 3. Record `template_update.summary` for the round file (Step 5)
 
-**Do not** edit `eval-generation/eval-generation-workflow/refined-templates/` (eval-loop only).
+**Do not** edit `eval-generation/output-refined-templates/` (eval-loop only).
 
 ---
 
@@ -159,7 +159,7 @@ Ask:
 - **Never** overwrite files for artifacts already marked `done` (except artifact(s) currently under approval)
 - If feedback **requires** changing an approved upstream artifact, **stop** and tell the user which stage must be reopened
 - **Do not** use or create `prompts/<artifact-id>.yaml`
-- **Do not** edit `eval-generation/eval-generation-workflow/refined-templates/`
+- **Do not** edit `eval-generation/output-refined-templates/`
 - **Do not** create the next workflow artifact in the same invocation
 
 ---

@@ -1,6 +1,6 @@
 # Stage Eval Gate — Forward workflow (`/opsx-continue`)
 
-Score and refine **change artifacts** using stage evals shipped with the schema package. **Do not** modify schema templates or `eval-generation/eval-generation-workflow/refined-templates/`.
+Score and refine **change artifacts** using stage evals shipped with the schema package. **Do not** modify schema templates or `eval-generation/output-refined-templates/`.
 
 Paths below are **relative to the schema root** (`openspec/schemas/openspec-agile-workflow/` when installed, or `schemas/openspec-agile-workflow/` in this distribution repo).
 
@@ -21,9 +21,9 @@ Next `/opsx-continue` unlocks the following artifact only after user approved th
 | Purpose | Path |
 |---------|------|
 | **Generate artifact** | `templates/` (via `openspec instructions --json`) |
-| **Score artifact** | `eval-generation/<stage>_eval.yaml` |
+| **Score artifact** | `evals/<stage>_eval.yaml` |
 | **Assertion schema** | `eval-generation/eval-generation-workflow/stages/<stage>-eval-spec.yaml` |
-| **Do NOT edit** | `schemas/.../templates/`, `eval-generation/eval-generation-workflow/refined-templates/` |
+| **Do NOT edit** | `schemas/.../templates/`, `eval-generation/output-refined-templates/` |
 
 ## Step 1 — Generate artifact (v1)
 
@@ -72,7 +72,7 @@ openspec/changes/<change-name>/eval-results/<artifact-id>.yaml
 artifact_id: plan
 artifact_path: openspec/changes/my-feature/plan.md
 stage: plan
-stage_eval_file: eval-generation/plan_eval.yaml
+stage_eval_file: evals/plan_eval.yaml
 scored_at: <ISO8601>
 overall_score: 72
 overall_pass: false
@@ -111,7 +111,7 @@ Include in the refinement prompt — do not regenerate blind:
 
 - **Fix only** failed assertions and obvious contradictions with dependencies
 - **Preserve** content that already passes eval cases
-- **Do not** edit `schemas/.../templates/` or `eval-generation/eval-generation-workflow/refined-templates/`
+- **Do not** edit `schemas/.../templates/` or `eval-generation/output-refined-templates/`
 - **Do not** invent facts not in dependencies / inputs
 - Overwrite artifact at `outputPath` with v2
 
@@ -223,5 +223,5 @@ If not found, the agent generates one using `templates/constitution-template.md`
 - Forward workflow (eval gate) refines **artifacts only** — not templates
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when feedback requires structural changes; record in `feedback_stage_artifacts/`
 - Stage evals are **read-only** during forward workflow (do not add cases mid-change unless user asks)
-- `eval-generation/eval-generation-workflow/refined-templates/` is for `/eval-loop` only
+- `eval-generation/output-refined-templates/` is for `/eval-loop` only
 - One artifact (+ eval gate) per `/opsx-continue` invocation

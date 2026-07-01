@@ -1,9 +1,9 @@
 # Eval case schema — implementation stage
 
 stage: implementation
-template: eval-generation/eval-generation-workflow/refined-templates/implementation-report-template.md
+template: eval-generation/output-refined-templates/implementation-report-template.md
 artifact: code changes + implementation-report.md
-output_eval_file: eval-generation/output-eval-generation/implementation/implementation_eval.yaml
+output_eval_file: eval-generation/output-evals/implementation/implementation_eval.yaml
 
 required_fields:
   - id

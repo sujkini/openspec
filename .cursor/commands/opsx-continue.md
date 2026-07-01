@@ -44,7 +44,7 @@ Continue working on a change by creating the **next** artifact (one per invocati
    - Write `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
    - If any case fails: **refine the artifact** at `outputPath` (v2) using the **refinement context bundle** (v1 text + eval failures + openspec instructions + dependencies + inputs + failed case prompts)
    - Re-score after refinement
-   - **Do NOT** modify `{schema_root}/templates/` or `eval-generation/eval-generation-workflow/refined-templates/`
+   - **Do NOT** modify `{schema_root}/templates/` or `eval-generation/output-refined-templates/`
 8. **STOP** — present eval scorecard + artifact summary. Ask:
 
    > Eval score: **X%** (N/M cases pass). Approve this artifact? **(Approve / Reject with feedback)**
@@ -72,11 +72,11 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 |----------|------------------------------------------|
 | validation | Rubric in `templates/validation-template.md` only |
 | specs | Skip (no stage eval) |
-| repo-assessment | `eval-generation/repo-assessment_eval.yaml` |
-| constitution | `eval-generation/constitution_eval.yaml` |
-| plan | `eval-generation/plan_eval.yaml` |
-| tasks | `eval-generation/tasks_eval.yaml` |
-| implementation | `eval-generation/implementation_eval.yaml` |
+| repo-assessment | `evals/repo-assessment_eval.yaml` |
+| constitution | `evals/constitution_eval.yaml` |
+| plan | `evals/plan_eval.yaml` |
+| tasks | `evals/tasks_eval.yaml` |
+| implementation | `evals/implementation_eval.yaml` |
 
 ## Guardrails
 

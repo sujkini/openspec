@@ -210,18 +210,18 @@ working_folder_repo:
 stage_eval_gate:
   description: >-
     After each artifact is generated, score it against merged stage evals under
-    this schema package (eval-generation/*_eval.yaml). Refine the change artifact only —
+    this schema package (evals/*_eval.yaml). Refine the change artifact only —
     never schema templates.
   schema_root:
     installed: openspec/schemas/openspec-agile-workflow
     distribution: schemas/openspec-agile-workflow
   evals_dir: evals
   stage_eval_files:
-    repo-assessment: eval-generation/repo-assessment_eval.yaml
-    plan: eval-generation/plan_eval.yaml
-    tasks: eval-generation/tasks_eval.yaml
-    implementation: eval-generation/implementation_eval.yaml
-  eval_specs_dir: eval-generation/stages
+    repo-assessment: evals/repo-assessment_eval.yaml
+    plan: evals/plan_eval.yaml
+    tasks: evals/tasks_eval.yaml
+    implementation: evals/implementation_eval.yaml
+  eval_specs_dir: eval-generation/eval-generation-workflow/stages
   system_prompt: stage-gate/SYSTEM_PROMPT.md
   artifact_map: stage-gate/artifact-eval-map.yaml
   generation_templates: templates/
@@ -238,7 +238,7 @@ stage_eval_gate:
     → (reject → user_approval_feedback_gate → re_eval → regenerate_evaluation_report → user_approval)
   do_not_modify:
     - templates/
-    - eval-generation/eval-generation-workflow/refined-templates/
+    - eval-generation/output-refined-templates/
   refinement_context:
     - draft_artifact_v1
     - eval_results_and_failed_assertions
@@ -266,7 +266,7 @@ code_generation_eval_gate:
   schema_root:
     installed: openspec/schemas/openspec-agile-workflow
     distribution: schemas/openspec-agile-workflow
-  stage_eval_file: eval-generation/code-generation_eval.yaml
+  stage_eval_file: evals/code-generation_eval.yaml
   eval_spec: eval-generation/eval-generation-workflow/stages/code-generation-eval-spec.yaml
   system_prompt: stage-gate/CODE_GENERATION_EVAL_PROMPT.md
   eval_results: openspec/changes/<change>/eval-results/code-generation-<task-id>.yaml
@@ -304,7 +304,7 @@ code_generation_eval_gate:
     - constitution_md
     - test_output
   do_not_modify:
-    - eval-generation/code-generation_eval.yaml
+    - evals/code-generation_eval.yaml
     - openspec/changes/<change>/tasks.md
     - approved_upstream_artifacts
 
@@ -372,7 +372,7 @@ user_approval_feedback_gate:
     do_not:
       - Modify, overwrite, or delete any previously approved artifact file
       - Read or write prompts/<artifact-id>.yaml
-      - Edit eval-generation/eval-generation-workflow/refined-templates/
+      - Edit eval-generation/output-refined-templates/
       - Create the next artifact in the workflow sequence
       - Advance workflow stage until user approves
   revision_context:
@@ -908,7 +908,7 @@ artifacts:
 
       ## APPROVAL GATE
       0. **Eval gate** (see schema stage_eval_gate): score repo-assessment.md against
-         eval-generation/repo-assessment_eval.yaml; refine artifact
+         evals/repo-assessment_eval.yaml; refine artifact
          if needed; write eval-results/repo-assessment.yaml.
       1. SUMMARIZE: target files, reusable assets, guardrails, top risks, eval score.
       2. ASK: Approve repo-assessment.md and proceed to Planning?
@@ -971,7 +971,7 @@ artifacts:
       ## APPROVAL GATE
       After writing plan.md:
       0. **Eval gate** (see schema stage_eval_gate): score plan.md against
-         eval-generation/plan_eval.yaml; refine artifact if cases fail;
+         evals/plan_eval.yaml; refine artifact if cases fail;
          write eval-results/plan.yaml. Do not edit schema templates.
       1. SUMMARIZE: phase count (### Phase headings), top risks, open questions, eval score.
       2. ASK: see schema user_approval_feedback_gate.approval_prompt
@@ -1080,7 +1080,7 @@ artifacts:
       ## APPROVAL GATE
       After merged tasks.md:
       0. **Eval gate** (see schema stage_eval_gate): score tasks.md against
-         eval-generation/tasks_eval.yaml; refine artifact if cases fail;
+         evals/tasks_eval.yaml; refine artifact if cases fail;
          write eval-results/tasks.yaml. Do not edit schema templates.
       1. SUMMARIZE: total tasks, complexity points, high-risk count, parallelisable count,
          agent distribution, manifest preview (first 5 rows), eval score.
@@ -1240,7 +1240,7 @@ artifacts:
          task's payload directly in cwd with minimal scoped edits; log deviations.
       7. **Verify**: Run Acceptance criteria for this task; record pass/fail.
       8. **Code eval gate** (see schema code_generation_eval_gate and
-         stage-gate/CODE_GENERATION_EVAL_PROMPT.md): load eval-generation/code-generation_eval.yaml;
+         stage-gate/CODE_GENERATION_EVAL_PROMPT.md): load evals/code-generation_eval.yaml;
          filter by resolved oape_command; score fork working copy; write
          eval-results/code-generation-<task-id>.yaml; **refine code in fork until
          all applicable cases pass or 2 refinement passes** — do NOT ask user

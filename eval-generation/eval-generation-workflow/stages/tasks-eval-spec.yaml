@@ -1,9 +1,9 @@
 # Eval case schema — tasks stage
 
 stage: tasks
-template: eval-generation/eval-generation-workflow/refined-templates/tasks-template.md
+template: eval-generation/output-refined-templates/tasks-template.md
 artifact: tasks.md
-output_eval_file: eval-generation/output-eval-generation/tasks/tasks_eval.yaml
+output_eval_file: eval-generation/output-evals/tasks/tasks_eval.yaml
 
 required_fields:
   - id

@@ -1,7 +1,7 @@
 # Maps openspec-agile-workflow artifact IDs → stage eval files (forward /opsx-continue gate)
 #
 # Generation templates: templates/ (via openspec instructions)
-# Eval rubrics: eval-generation/<stage>_eval.yaml
+# Eval rubrics: evals/<stage>_eval.yaml
 # Do NOT refine templates during forward workflow — refine the change artifact only.
 
 schema_templates_dir: templates/
@@ -29,7 +29,7 @@ artifacts:
     stage: repo-assessment
     generates: repo-assessment.md
     schema_template: repo-assessment.md
-    stage_eval_file: eval-generation/repo-assessment_eval.yaml
+    stage_eval_file: evals/repo-assessment_eval.yaml
     eval_spec: eval-generation/eval-generation-workflow/stages/repo-assessment-eval-spec.yaml
     gate: stage_evals
 
@@ -41,7 +41,7 @@ artifacts:
     stage: plan
     generates: plan.md
     schema_template: plan.md
-    stage_eval_file: eval-generation/plan_eval.yaml
+    stage_eval_file: evals/plan_eval.yaml
     eval_spec: eval-generation/eval-generation-workflow/stages/plan-eval-spec.yaml
     gate: stage_evals
 
@@ -49,13 +49,13 @@ artifacts:
     stage: tasks
     generates: tasks.md
     schema_template: tasks.md
-    stage_eval_file: eval-generation/tasks_eval.yaml
+    stage_eval_file: evals/tasks_eval.yaml
     eval_spec: eval-generation/eval-generation-workflow/stages/tasks-eval-spec.yaml
     gate: stage_evals
 
   implementation:
     stage: implementation
-    stage_eval_file: eval-generation/implementation_eval.yaml
+    stage_eval_file: evals/implementation_eval.yaml
     eval_spec: eval-generation/eval-generation-workflow/stages/implementation-eval-spec.yaml
     gate: stage_evals
     note: Score implementation task reports during code-generation eval gate

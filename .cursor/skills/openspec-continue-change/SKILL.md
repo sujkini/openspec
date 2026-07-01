@@ -92,7 +92,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
           - `inputs/jira.yaml` and related change inputs
           - user feedback if rejecting approval
        4. Re-score refined artifact
-       5. **Never** edit `{schema_root}/templates/` or `eval-generation/eval-generation-workflow/refined-templates/`
+       5. **Never** edit `{schema_root}/templates/` or `eval-generation/output-refined-templates/`
      - If `gate: rubric_only` (validation): score against `validation.md` rubric
      - If `gate: skip` (specs, reports): skip to approval
 

@@ -2,7 +2,7 @@
 
 stage: code-generation
 artifact: fork code per OAPE task
-output_eval_file: eval-generation/output-eval-generation/code-generation/code-generation_eval.yaml
+output_eval_file: eval-generation/output-evals/code-generation/code-generation_eval.yaml
 
 required_fields:
   - id

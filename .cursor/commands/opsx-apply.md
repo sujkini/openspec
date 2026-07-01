@@ -91,7 +91,7 @@ Implement an OpenSpec change using OAPE commands, driven by a composed design bu
 
    Read `{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`.
 
-   - Load `eval-generation/code-generation_eval.yaml`; filter by resolved `oape_command`
+   - Load `{schema_root}/evals/code-generation_eval.yaml`; filter by resolved `oape_command`
    - Score fork working copy; write `eval-results/code-generation-<task-id>.yaml`
    - **If cases fail:** fix code in fork → re-verify → re-score (up to 2 refinement passes)
    - **Do not** present user approval until this loop completes

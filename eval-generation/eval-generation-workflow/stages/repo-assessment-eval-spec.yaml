@@ -1,9 +1,9 @@
 # Eval case schema — repo-assessment stage
 
 stage: repo-assessment
-template: eval-generation/eval-generation-workflow/refined-templates/repo-assessment-template.md
+template: eval-generation/output-refined-templates/repo-assessment-template.md
 artifact: repo-assessment.md
-output_eval_file: eval-generation/output-eval-generation/repo-assessment/repo-assessment_eval.yaml
+output_eval_file: eval-generation/output-evals/repo-assessment/repo-assessment_eval.yaml
 
 required_fields:
   - id
