@@ -1,4 +1,0 @@
-stage: code-generation
-template: null
-note: Per-task code evals for /opsx-apply; cases tagged oape_command
-evals: []
