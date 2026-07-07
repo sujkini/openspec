@@ -168,6 +168,8 @@ flags:
 
 The `rules:` section defines per-stage constraints. You generally don't need to edit these.
 
+For the **Agentic AI Observability Dashboard** (pipeline metrics, token burn, SSE logs), see [DASHBOARD_README.md](DASHBOARD_README.md).
+
 ---
 
 ## What is openspec-agile-workflow?

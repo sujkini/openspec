@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# opsx — Drop-in replacement for `openspec` that emits dashboard telemetry.
+#
+# Usage:
+#   opsx status --change cm-830 --json
+#   opsx instructions plan --change cm-830 --json
+#   opsx list --json
+#
+# Runs the real `openspec` CLI under the hood, parses its output, and
+# pushes lifecycle events to the dashboard backend automatically.
+# If the dashboard backend is down, telemetry fails silently.
+#
+# Platform-agnostic: works on Cursor, OpenShell, VS Code, bare terminal, CI/CD.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+exec python -m src.telemetry.openspec_wrapper "$@"

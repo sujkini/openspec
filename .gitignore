@@ -1,3 +1,20 @@
 .DS_Store
 *.env
 requirements.env
+
+# Dashboard backend
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Dashboard frontend
+web/node_modules/
+web/dist/
+
+# Dashboard telemetry state (per-change runtime)
+.dashboard.json
+
+# Agent ephemeral plans
+.cursor/plans/

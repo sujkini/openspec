@@ -17,7 +17,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 1. **If no change name provided, prompt for selection**
 
-   Run `python -m src.telemetry.openspec_wrapper list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.
+   Run `openspec list --json` to get available changes sorted by most recently modified. Then use the **AskUserQuestion tool** to let the user select which change to work on.
 
    Present the top 3-4 most recently modified changes as options, showing:
    - Change name
@@ -31,7 +31,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 2. **Check current status**
    ```bash
-   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
+   openspec status --change "<name>" --json
    ```
    Parse the JSON to understand current state. The response includes:
    - `schemaName`: The workflow schema being used (e.g., "spec-driven")
@@ -54,7 +54,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
    - Pick the FIRST artifact with `status: "ready"` from the status output
    - Get its instructions:
      ```bash
-     python -m src.telemetry.openspec_wrapper instructions <artifact-id> --change "<name>" --json
+     openspec instructions <artifact-id> --change "<name>" --json
      ```
    - Parse the JSON. The key fields are:
      - `context`: Project background (constraints for you - do NOT include in output)
@@ -76,13 +76,13 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
      - Use `template` as the structure - fill in its sections
      - Apply `context` and `rules` as constraints when writing - but do NOT copy them into the file
      - Write to the output path specified in instructions
-     - Templates come from **`{schema_root}/templates/`** via openspec instructions (resolve `openspec/schemas/openspec-agile-workflow/`)
+     - Templates come from **`{schema_root}/templates/`** via openspec instructions (resolve `openspec/schemas/openspec-agile-workflow/` or `schemas/openspec-agile-workflow/`)
 
    - **Stage eval gate (openspec-agile-workflow only)**:
-     - Resolve schema root: `openspec/schemas/openspec-agile-workflow/`
+     - Resolve schema root: `openspec/schemas/openspec-agile-workflow/` (installed) or `schemas/openspec-agile-workflow/` (distribution)
      - Read **`{schema_root}/stage-gate/SYSTEM_PROMPT.md`** and **`{schema_root}/stage-gate/artifact-eval-map.yaml`**
      - If artifact has `gate: stage_evals`:
-       1. Score artifact at `outputPath` against all cases in `{schema_root}/eval-generation/<stage>_eval.yaml`
+       1. Score artifact at `outputPath` against all cases in `{schema_root}/evals/<stage>_eval.yaml`
        2. Write `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
        3. If any case fails: refine **artifact only** (overwrite `outputPath`) using refinement context bundle:
           - v1 artifact full text
@@ -92,7 +92,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
           - `inputs/jira.yaml` and related change inputs
           - user feedback if rejecting approval
        4. Re-score refined artifact
-       5. **Never** edit `{schema_root}/templates/` or `eval-generation/output-refined-templates/`
+       5. **Never** edit `{schema_root}/templates/` or `evals/refined-templates/`
      - If `gate: rubric_only` (validation): score against `validation.md` rubric
      - If `gate: skip` (specs, reports): skip to approval
 
@@ -121,7 +121,7 @@ Continue working on a change: create the next artifact, **run baseline evals**, 
 
 4. **After completing the artifact + gate, show progress**
    ```bash
-   python -m src.telemetry.openspec_wrapper status --change "<name>" --json
+   openspec status --change "<name>"
    ```
 
 **Output**
@@ -163,3 +163,30 @@ For **openspec-agile-workflow**, eval gate mapping:
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output
 
+## Dashboard Telemetry (optional — skip if backend not running)
+
+Track this artifact's phase on the observability dashboard. All commands run from workspace root. Errors are non-fatal — ignore and continue if the dashboard backend is not running.
+
+**Before creating the artifact** (after picking the first `ready` artifact in step 3):
+```bash
+python -m src.telemetry.cli start-phase --change "<name>" --artifact "<artifact-id>"
+```
+
+**After user approves the artifact**:
+```bash
+python -m src.telemetry.cli end-artifact --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_overall_score> --label "<quality_label>" --iterations <refinement_count>
+```
+
+**If user rejects `specs` (exit workflow)**:
+```bash
+python -m src.telemetry.cli end-artifact --change "<name>" --artifact specs --status failed
+python -m src.telemetry.cli end-run --change "<name>" --status failed
+```
+
+Artifact-to-phase mapping (automatic):
+| Artifacts | Phase |
+|-----------|-------|
+| validation, specs | Phase 1 — spec_understanding |
+| repo-assessment, constitution | Phase 2 — repo_assessment |
+| plan | Phase 3 — arch_planning |
+| tasks | Phase 4 — subtask_creation |
