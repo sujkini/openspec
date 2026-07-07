@@ -8,6 +8,9 @@ class GlobalHealthMetrics(BaseModel):
     total_run_cost_usd: float
     cumulative_wall_time_s: float
     compliance_index: float
+    gate_passing_rate: float
+    human_rejection_rate: float
+    total_refinement_iterations: int
     agent_success_rate: float
     tasks_passed: int
     tasks_total: int

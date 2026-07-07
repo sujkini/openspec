@@ -91,6 +91,9 @@ export interface GlobalHealthMetrics {
   total_run_cost_usd: number;
   cumulative_wall_time_s: number;
   compliance_index: number;
+  gate_passing_rate: number;
+  human_rejection_rate: number;
+  total_refinement_iterations: number;
   agent_success_rate: number;
   tasks_passed: number;
   tasks_total: number;

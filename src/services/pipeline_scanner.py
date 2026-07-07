@@ -12,6 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import AppConfig
 from src.models.phase import PhaseExecution, PhaseName, PhaseStatus
 from src.models.run import PipelineRun, RunStatus
+from src.services.change_metrics import (
+    ARTIFACT_PHASE_MAP,
+    phase_duration_s,
+    phase_iteration_count,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +94,14 @@ async def scan_changes(db: AsyncSession, cfg: AppConfig) -> list[str]:
 
                 score = eval_data.get("overall_score", 0)
                 passed = eval_data.get("overall_pass", False)
+                artifact_id = eval_file.stem.split("-")[0] if "-" in eval_file.stem else eval_file.stem
+                if artifact_id in ARTIFACT_PHASE_MAP:
+                    phase_num = ARTIFACT_PHASE_MAP[artifact_id][0]
+                    iteration_count = phase_iteration_count(change_dir, phase_num)
+                    duration_s = phase_duration_s(change_dir, phase_num)
+                else:
+                    iteration_count = 1
+                    duration_s = 0.0
 
                 phase = PhaseExecution(
                     run_id=run.id,
@@ -97,6 +110,8 @@ async def scan_changes(db: AsyncSession, cfg: AppConfig) -> list[str]:
                     status=PhaseStatus.passed if passed else PhaseStatus.failed,
                     quality_score=float(score),
                     quality_label=f"Score: {score}/100",
+                    iteration_count=iteration_count,
+                    duration_s=duration_s,
                 )
                 db.add(phase)
 

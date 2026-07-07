@@ -15,3 +15,6 @@ web/dist/
 
 # Dashboard telemetry state (per-change runtime)
 .dashboard.json
+
+# Agent ephemeral plans
+.cursor/plans/

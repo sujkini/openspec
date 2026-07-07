@@ -24,17 +24,25 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from src.services.change_metrics import (
+    ARTIFACT_PHASE_MAP,
+    phase5_iteration_count,
+    phase5_should_close,
+    phase_duration_s,
+    phase_iteration_count,
+    read_task_refinement_rounds,
+)
+
 CHANGES_DIR = Path("openspec/changes")
 STATE_FILE = ".dashboard.json"
 
-ARTIFACT_PHASE_MAP: dict[str, tuple[int, str, bool]] = {
-    "validation":      (1, "spec_understanding", False),
-    "specs":           (1, "spec_understanding", True),
-    "repo-assessment": (2, "repo_assessment",    False),
-    "constitution":    (2, "repo_assessment",    True),
-    "plan":            (3, "arch_planning",      True),
-    "tasks":           (4, "subtask_creation",   True),
-}
+
+def _phase5_close_on() -> str:
+    try:
+        from src.core.config import load_config
+        return load_config().metrics.phase5_close_on
+    except Exception:
+        return "implementation_report"
 
 
 def _state_path(change: str) -> Path:
@@ -145,7 +153,10 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
         return
 
     run_id = state.get("run_id", "")
+    change_dir = CHANGES_DIR / args.change
     tokens_in, tokens_out = _estimate_artifact(args.change, args.artifact)
+    iteration_count = phase_iteration_count(change_dir, phase_number)
+    duration_s = phase_duration_s(change_dir, phase_number)
 
     client = _client()
     try:
@@ -164,7 +175,8 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
                 quality_label=getattr(args, "label", "") or "",
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
-                iteration_count=getattr(args, "iterations", 1) or 1,
+                iteration_count=iteration_count,
+                duration_s=duration_s,
             )
             phases[key]["ended"] = True
             _save_state(args.change, state)
@@ -185,6 +197,9 @@ def on_apply_start(args: argparse.Namespace) -> None:
         return
 
     phases = state.setdefault("phases", {})
+    if "5" in phases and phases["5"].get("ended"):
+        _out({"ok": True, "phase_id": phases["5"]["id"], "already_completed": True})
+        return
     if "5" in phases and not phases["5"].get("ended"):
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_running": True})
         return
@@ -238,6 +253,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
         return
 
     tokens_in, tokens_out = _estimate_task(args.change, args.task_id)
+    loops = read_task_refinement_rounds(CHANGES_DIR / args.change, args.task_id)
 
     client = _client()
     try:
@@ -247,7 +263,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cost_usd=0,
-            self_correction_loops=getattr(args, "loops", 0) or 0,
+            self_correction_loops=loops,
         )
         _out({"ok": True, "task_pk": task_pk, "tokens_in": tokens_in, "tokens_out": tokens_out})
     finally:
@@ -273,15 +289,19 @@ def on_apply_complete(args: argparse.Namespace) -> None:
         total_tokens_out += to
 
     run_id = state.get("run_id", "")
+    iteration_count = phase5_iteration_count(change_dir)
+    should_close, label = phase5_should_close(change_dir, close_on=_phase5_close_on())
+    quality_label = getattr(args, "label", "") or (label if should_close else "all tasks approved")
+
     client = _client()
     try:
         client.end_phase(
             phase_info["id"],
             status="passed",
-            quality_label=getattr(args, "label", "") or "all tasks approved",
+            quality_label=quality_label,
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,
-            iteration_count=1,
+            iteration_count=iteration_count,
         )
         phases["5"]["ended"] = True
 
@@ -331,12 +351,17 @@ def sync(args: argparse.Namespace) -> None:
                     eval_data = yaml.safe_load(eval_path.read_text()) or {}
                     score = eval_data.get("overall_score", 0)
 
+                iteration_count = phase_iteration_count(change_dir, phase_number)
+                duration_s = phase_duration_s(change_dir, phase_number)
+
                 client.end_phase(
                     phases[key]["id"],
                     status="passed",
                     quality_score=score,
                     tokens_in=tokens_in,
                     tokens_out=tokens_out,
+                    iteration_count=iteration_count,
+                    duration_s=duration_s,
                 )
                 phases[key]["ended"] = True
                 updated.append(f"phase {key} ({phase_name})")
@@ -346,60 +371,51 @@ def sync(args: argparse.Namespace) -> None:
     # --- Phase 5 (code_generation): detect from task reports on disk ---
     phases = state.setdefault("phases", {})
     if not phases.get("5", {}).get("ended"):
-        tasks_md = change_dir / "tasks.md"
-        task_reports_dir = change_dir / "implementation" / "task-reports"
-        if tasks_md.exists() and task_reports_dir.exists():
-            import re
-            content = tasks_md.read_text()
-            task_ids = re.findall(r'\d+\.\s+(T\d+_\d+)\s*[—–-]', content)
-            if not task_ids:
-                task_ids = re.findall(r'- \[[ x]\]\s+\*?\*?(T\d+_\d+)', content)
-            if not task_ids:
-                task_ids = re.findall(r'\b(T\d+_\d+)\b', content)
-                task_ids = list(dict.fromkeys(task_ids))
+        should_close, label = phase5_should_close(change_dir, close_on=_phase5_close_on())
 
-            if task_ids:
-                existing_reports = {f.stem for f in task_reports_dir.glob("*.md")}
-                all_done = all(tid in existing_reports for tid in task_ids)
+        if should_close or (change_dir / "tasks.md").exists():
+            if "5" not in phases:
+                client = _client()
+                try:
+                    phase_id = client.start_phase(run_id, 5, "code_generation")
+                    phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
+                except Exception:
+                    pass
+                finally:
+                    client.close()
 
-                if "5" not in phases:
-                    client = _client()
-                    try:
-                        phase_id = client.start_phase(run_id, 5, "code_generation")
-                        phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
-                    except Exception:
-                        pass
-                    finally:
-                        client.close()
+            if should_close and "5" in phases and not phases["5"].get("ended"):
+                from src.telemetry.tokens import estimate_task_tokens
 
-                if all_done and "5" in phases and not phases["5"].get("ended"):
-                    from src.telemetry.tokens import estimate_task_tokens
-                    total_in, total_out = 0, 0
-                    for tid in task_ids:
-                        ti, to = estimate_task_tokens(change_dir, tid)
-                        total_in += ti
-                        total_out += to
+                reports_dir = change_dir / "implementation" / "task-reports"
+                existing_reports = {f.stem for f in reports_dir.glob("*.md")} if reports_dir.exists() else set()
+                total_in, total_out = 0, 0
+                for tid in existing_reports:
+                    ti, to = estimate_task_tokens(change_dir, tid)
+                    total_in += ti
+                    total_out += to
 
-                    client = _client()
-                    try:
-                        client.end_phase(
-                            phases["5"]["id"],
-                            status="passed",
-                            quality_label=f"{len(task_ids)}/{len(task_ids)} tasks approved",
-                            tokens_in=total_in,
-                            tokens_out=total_out,
-                        )
-                        phases["5"]["ended"] = True
-                        updated.append("phase 5 (code_generation)")
+                iteration_count = phase5_iteration_count(change_dir)
 
-                        impl_report = change_dir / "implementation-report.md"
-                        if impl_report.exists():
-                            client.end_run(run_id, status="completed")
-                            updated.append("run completed")
-                    except Exception:
-                        pass
-                    finally:
-                        client.close()
+                client = _client()
+                try:
+                    client.end_phase(
+                        phases["5"]["id"],
+                        status="passed",
+                        quality_label=label,
+                        tokens_in=total_in,
+                        tokens_out=total_out,
+                        iteration_count=iteration_count,
+                    )
+                    phases["5"]["ended"] = True
+                    updated.append("phase 5 (code_generation)")
+
+                    client.end_run(run_id, status="completed")
+                    updated.append("run completed")
+                except Exception:
+                    pass
+                finally:
+                    client.close()
 
     _save_state(args.change, state)
     _out({"ok": True, "updated": updated})

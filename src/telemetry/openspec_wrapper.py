@@ -32,6 +32,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.services.change_metrics import (
+    phase5_iteration_count,
+    phase5_should_close,
+    phase_duration_s,
+    phase_iteration_count,
+)
+
 logger = logging.getLogger(__name__)
 
 CHANGES_DIR = Path("openspec/changes")
@@ -45,6 +52,14 @@ ARTIFACT_PHASE_MAP: dict[str, tuple[int, str, bool]] = {
     "plan":            (3, "arch_planning",      True),
     "tasks":           (4, "subtask_creation",   True),
 }
+
+
+def _phase5_close_on() -> str:
+    try:
+        from src.core.config import load_config
+        return load_config().metrics.phase5_close_on
+    except Exception:
+        return "implementation_report"
 
 
 def _state_path(change: str) -> Path:
@@ -204,9 +219,10 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
                     client.close()
 
             if is_last and not phases[key].get("ended"):
+                change_dir = CHANGES_DIR / change
                 tokens_in, tokens_out = _estimate_artifact(change, artifact_id)
 
-                eval_path = CHANGES_DIR / change / "eval-results" / f"{artifact_id}.yaml"
+                eval_path = change_dir / "eval-results" / f"{artifact_id}.yaml"
                 score = 0.0
                 if eval_path.exists():
                     try:
@@ -215,6 +231,9 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
                         score = float(eval_data.get("overall_score", 0))
                     except Exception:
                         pass
+
+                iteration_count = phase_iteration_count(change_dir, phase_number)
+                duration_s = phase_duration_s(change_dir, phase_number)
 
                 client = _client()
                 try:
@@ -225,6 +244,8 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
                         quality_label=f"Score: {score}/100" if score else "",
                         tokens_in=tokens_in,
                         tokens_out=tokens_out,
+                        iteration_count=iteration_count,
+                        duration_s=duration_s,
                     )
                     phases[key]["ended"] = True
                     changed = True
@@ -267,29 +288,16 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
     if phases.get("5", {}).get("ended"):
         return
 
-    tasks_md = CHANGES_DIR / change / "tasks.md"
-    if not tasks_md.exists():
+    change_dir = CHANGES_DIR / change
+    task_reports_dir = change_dir / "implementation" / "task-reports"
+    if not task_reports_dir.exists() and not (change_dir / "tasks.md").exists():
         return
 
-    task_reports_dir = CHANGES_DIR / change / "implementation" / "task-reports"
-    if not task_reports_dir.exists():
-        return
+    should_close, label = phase5_should_close(
+        change_dir, close_on=_phase5_close_on()
+    )
 
-    content = tasks_md.read_text()
-    import re
-    task_ids = re.findall(r'\d+\.\s+(T\d+_\d+)\s*[—–-]', content)
-    if not task_ids:
-        task_ids = re.findall(r'- \[[ x]\]\s+\*?\*?(T\d+_\d+)', content)
-    if not task_ids:
-        task_ids = re.findall(r'\b(T\d+_\d+)\b', content)
-        task_ids = list(dict.fromkeys(task_ids))
-    if not task_ids:
-        return
-
-    existing_reports = {f.stem for f in task_reports_dir.glob("*.md")}
-    all_done = all(tid in existing_reports for tid in task_ids)
-
-    if not all_done:
+    if not should_close:
         if "5" not in phases:
             client = _client()
             try:
@@ -303,10 +311,12 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
         return
 
     from src.telemetry.tokens import estimate_task_tokens
+
+    existing_reports = {f.stem for f in task_reports_dir.glob("*.md")} if task_reports_dir.exists() else set()
     total_in = 0
     total_out = 0
-    for tid in task_ids:
-        ti, to = estimate_task_tokens(CHANGES_DIR / change, tid)
+    for tid in existing_reports:
+        ti, to = estimate_task_tokens(change_dir, tid)
         total_in += ti
         total_out += to
 
@@ -321,14 +331,18 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
         finally:
             client.close()
 
+    iteration_count = phase5_iteration_count(change_dir)
+
     client = _client()
     try:
         client.end_phase(
             phases["5"]["id"],
             status="passed",
-            quality_label=f"{len(task_ids)}/{len(task_ids)} tasks approved",
+            quality_label=label,
             tokens_in=total_in,
             tokens_out=total_out,
+            iteration_count=iteration_count,
+            duration_s=phase_duration_s(change_dir, 5),
         )
         phases["5"]["ended"] = True
 
@@ -336,12 +350,10 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
             run_id=state["run_id"],
             agent_id="Pipeline",
             event_type="state_machine",
-            message=f"Phase 5 (code_generation) completed — {len(task_ids)} tasks, tokens_in={total_in}, tokens_out={total_out}",
+            message=f"Phase 5 (code_generation) completed — {label}, tokens_in={total_in}, tokens_out={total_out}",
         )
 
-        impl_report = CHANGES_DIR / change / "implementation-report.md"
-        if impl_report.exists():
-            client.end_run(state["run_id"], status="completed")
+        client.end_run(state["run_id"], status="completed")
 
     except Exception as exc:
         _telem_warning("end_phase(code_generation)", exc)

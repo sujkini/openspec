@@ -41,7 +41,8 @@
       "default": { "input": 2.00, "output": 8.00 }
     },
     "max_self_correction_loops": 5,
-    "phase_timeout_s": 600
+    "phase_timeout_s": 600,
+    "phase5_close_on": "implementation_report"
   },
 
   "fallbacks": {

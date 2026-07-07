@@ -33,6 +33,8 @@ export default function GlobalHealthMetrics({ metrics }: GlobalHealthMetricsProp
           <MetricCard label="Total Run Cost" value="—" />
           <MetricCard label="Cumulative Wall Time" value="—" />
           <MetricCard label="Compliance Index" value="—" />
+          <MetricCard label="Gate Passing Rate" value="—" />
+          <MetricCard label="Refinement Iterations" value="—" />
           <MetricCard label="Agent Success Rate" value="—" />
         </div>
       </section>
@@ -61,6 +63,16 @@ export default function GlobalHealthMetrics({ metrics }: GlobalHealthMetricsProp
           label="Compliance Index"
           value={`${metrics.compliance_index}%`}
           subtext="Const. Pass"
+        />
+        <MetricCard
+          label="Gate Passing Rate"
+          value={`${metrics.gate_passing_rate}%`}
+          subtext="First-pass phases"
+        />
+        <MetricCard
+          label="Refinement Iterations"
+          value={String(metrics.total_refinement_iterations)}
+          subtext={`${metrics.human_rejection_rate}% rejection proxy`}
         />
         <MetricCard
           label="Agent Success Rate"

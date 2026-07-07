@@ -22,6 +22,9 @@ async def compute_global_health(
             total_run_cost_usd=0.0,
             cumulative_wall_time_s=0.0,
             compliance_index=cfg.fallbacks.default_compliance_index,
+            gate_passing_rate=cfg.fallbacks.default_gate_pass_rate,
+            human_rejection_rate=0.0,
+            total_refinement_iterations=0,
             agent_success_rate=cfg.fallbacks.default_agent_success_rate,
             tasks_passed=0,
             tasks_total=0,
@@ -46,6 +49,13 @@ async def compute_global_health(
     total_phases = len(phases)
     first_pass = sum(1 for p in phases if p.iteration_count == 1 and p.status == PhaseStatus.passed)
     compliance = (first_pass / total_phases * 100) if total_phases > 0 else cfg.fallbacks.default_compliance_index
+    gate_passing = (first_pass / total_phases * 100) if total_phases > 0 else cfg.fallbacks.default_gate_pass_rate
+    total_refinement = sum(max(0, p.iteration_count - 1) for p in phases)
+    human_rejection = (total_refinement / total_phases * 100) if total_phases > 0 else 0.0
+
+    phase_duration = sum(p.duration_s for p in phases if p.duration_s)
+    if phase_duration > wall_time:
+        wall_time = phase_duration
 
     # Agent success rate: tasks passed / tasks total
     tasks_q = await db.execute(
@@ -70,6 +80,9 @@ async def compute_global_health(
         total_run_cost_usd=round(cost, 4),
         cumulative_wall_time_s=wall_time,
         compliance_index=round(compliance, 1),
+        gate_passing_rate=round(gate_passing, 1),
+        human_rejection_rate=round(human_rejection, 1),
+        total_refinement_iterations=total_refinement,
         agent_success_rate=round(success_rate, 1),
         tasks_passed=tasks_passed,
         tasks_total=tasks_total,

@@ -4,6 +4,8 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 This repo is the **distribution package**: schema, templates, Cursor commands, and optional eval tooling. You install it into your own project with `install.sh`.
 
+For the **Agentic AI Observability Dashboard** (pipeline metrics, token burn, SSE logs), see [DASHBOARD_README.md](DASHBOARD_README.md).
+
 ---
 
 ## What is openspec-agile-workflow?

@@ -83,7 +83,19 @@ Since Cursor doesn't expose actual LLM token usage, we estimate tokens from the 
 | 2 | repo_assessment | `constitution.md` exists and has status "done" |
 | 3 | arch_planning | `plan.md` exists and has status "done" |
 | 4 | subtask_creation | `tasks.md` exists and has status "done" |
-| 5 | code_generation | All task reports in `implementation/task-reports/` match task IDs from `tasks.md` Section 2 |
+| 5 | code_generation | Task reports exist under `implementation/task-reports/` (closes as **passed** with partial label e.g. `15/23 tasks approved`, or when `implementation-report.md` exists — see `config.json > metrics.phase5_close_on`) |
+
+### Iteration and edit metrics
+
+The dashboard reads refinement data from disk:
+
+| Source | Field | Used for |
+|--------|-------|----------|
+| `eval-results/<artifact>.yaml` | `refinement_round` / `refinement_rounds` | Phase waterfall **Iterations** column |
+| `feedback_stage_artifacts/<artifact>/round-*.yaml` | file count | Added to eval refinements for total edit count |
+| `eval-results/code-generation-<task>.yaml` | `refinement_rounds` | Task `self_correction_loops` |
+
+Global Health exposes **Gate Passing Rate** (first-pass phases), **Refinement Iterations** (sum of extra passes), and **Human Rejection Rate** (refinement proxy).
 
 ## Testing From Zero
 
@@ -214,5 +226,41 @@ No LLM provider configuration is needed. Token estimation uses tiktoken (local, 
 | Tokens/Cost = 0 | Existing run created before tiktoken integration | Delete DB + `.dashboard.json`, re-run wrapper |
 | Logs vanish on refresh | Old frontend without REST hydration | Rebuild: `cd web && npm run build` |
 | Token Burn empty | No TaskExecution records | Run `on-task-start` / `on-task-complete` for each task |
-| Action buttons don't work | Backend action endpoints not implemented | Stubs only; future work |
+| Phase 5 shows partial label | Expected when not all tasks done | Configure `metrics.phase5_close_on` in `config.json` |
+
+## Real-Time End-to-End Validation
+
+Use this after pushing the dashboard to verify live telemetry during a new change (e.g. `CM-831`):
+
+```bash
+# Terminal 1 — backend
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 — frontend
+cd web && npm run dev
+
+# In Cursor — full pipeline (wrapper is invoked by SKILL.md automatically):
+# /opsx-new CM-831
+# /opsx-continue   (repeat until all planning artifacts approved)
+# /opsx-apply      (task loop)
+
+# Verify after each stage:
+python -m src.telemetry.openspec_wrapper status --change cm-831 --json
+curl -s http://localhost:8000/api/v1/runs | python -m json.tool
+curl -s http://localhost:8000/api/v1/metrics/global/<run_id> | python -m json.tool
+```
+
+**Acceptance checklist (real-time):**
+
+- Run appears after first `status --json` or `instructions` call
+- Phases 1–4 close with non-default iteration counts when eval YAML has `refinement_round > 1`
+- Phase 5 closes with partial or full task label; run status becomes `completed`
+- SSE worker logs stream during `/opsx-apply`; logs persist after browser refresh (REST hydration)
+- Token burn chart populates as tasks complete (`on-task-start` / `on-task-complete` in apply skill)
+
+**Retroactive validation (cm-830 example, verified):**
+
+- Phase 2 shows **2 iterations** (`repo-assessment.yaml` has `refinement_round: 2`)
+- Phase 5 **passed** with label `15/23 tasks approved`
+- Gate passing rate **80%** (4/5 first-pass phases), refinement iterations **1**
 | Wrapper hangs | Backend process crashed | Restart: `uvicorn src.main:app --port 8000 --reload` |

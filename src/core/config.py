@@ -52,6 +52,7 @@ class MetricsConfig(BaseModel):
     token_cost_per_million: dict[str, TokenCost] = Field(default_factory=dict)
     max_self_correction_loops: int = 5
     phase_timeout_s: int = 600
+    phase5_close_on: str = "implementation_report"
 
     def cost_for_model(self, model_id: str) -> TokenCost:
         return self.token_cost_per_million.get(
