@@ -6,7 +6,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ## Installation
 
-### 1. Clone & Install
+### 1. Clone & Install (Run this is your working directory)
 
 ```bash
 git clone -b openspec-ai-helpers https://github.com/sujkini/openspec.git /tmp/openspec-workflow
