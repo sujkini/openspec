@@ -15,6 +15,7 @@ Installs OpenSpec workflow into the specified project directory:
   5. Updates .gitignore
 
 Prerequisites:
+  rm -rf /tmp/openspec-workflow
   git clone -b dashboard-test https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 
 Then run:

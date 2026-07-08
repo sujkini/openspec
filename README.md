@@ -11,6 +11,7 @@ Run one script to install the workflow into your operator repo, edit two files, 
 ### 1. Install into your operator repo
 
 ```bash
+rm -rf /tmp/openspec-workflow
 git clone -b dashboard-test https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
