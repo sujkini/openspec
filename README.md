@@ -11,7 +11,7 @@ Run one script to install the workflow into your operator repo, edit two files, 
 ### 1. Install into your operator repo
 
 ```bash
-git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b dashboard-test https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
@@ -19,25 +19,21 @@ This installs the OpenSpec CLI, runs `openspec init`, and copies `.cursor/`, `op
 
 **Restart Cursor** after installation so slash commands load from `.cursor/commands/`.
 
-### 2. Start the observability dashboard (optional)
+### 2. Telemetry (automatic)
 
-The dashboard provides real-time pipeline metrics, token burn charts, and live event streaming.
+Telemetry is built in — no server, no database, no frontend to run.
 
-The `install.sh` script automatically configures the dashboard to point at your operator repo. Just run:
+When workflow hooks fire, events are written to `openspec/changes/<change>/telemetry/events.jsonl` and a comprehensive `metrics-report.json` is auto-generated alongside it.
 
-```bash
-/tmp/openspec-workflow/dashboard/start.sh
-```
-
-Or pass the workspace explicitly:
+To regenerate a report on demand:
 
 ```bash
-/tmp/openspec-workflow/dashboard/start.sh /path/to/your-operator-repo
+python -m openspec.telemetry.auto report --change cm-830
 ```
 
-Opens at **http://localhost:5173**. Uses Docker if available, otherwise sets up a local Python venv + Node.js.
+Output: `openspec/changes/<change>/telemetry/metrics-report.json`
 
-See [dashboard/README.md](dashboard/README.md) for full documentation.
+See [TELEMETRY_README.md](TELEMETRY_README.md) for full documentation.
 
 ### 3. Customize for your operator (2 files)
 
@@ -146,22 +142,19 @@ You can also start from an **Enhancement Proposal** file instead of a Jira key �
 │   │   ├── evals/                         # Stage eval results (forward workflow gate)
 │   │   ├── stage-gate/                    # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/      # Format spec for rejection rounds
+│   ├── telemetry/                         # Lightweight file-based telemetry
+│   │   ├── auto.py                        # CLI hooks (on-new, on-artifact-complete, sync, report)
+│   │   ├── client.py                      # NDJSON event writer (disk-only)
+│   │   ├── report.py                      # Metrics report generator
+│   │   ├── change_metrics.py              # Filesystem eval/feedback metrics parser
+│   │   ├── tokens.py                      # tiktoken-based token estimation
+│   │   └── requirements.txt              # pyyaml, tiktoken
 │   └── changes/                           # Active changes (created per /opsx-new)
+│       └── <change>/telemetry/            # events.jsonl + metrics-report.json
 ├── .cursor/                               # Pre-built — Cursor loads immediately
 │   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, OAPE, eval-loop
 │   ├── skills/                            # openspec-*, effective-go, e2e-test-generator
 │   └── e2e-test-generator/                # Fixtures for /oape:e2e-generate
-├── bin/opsx                               # CLI wrapper for openspec with telemetry
-├── dashboard/                             # SDLC Observability Dashboard (standalone)
-│   ├── src/                               # FastAPI backend (Python)
-│   ├── web/                               # React + Vite frontend (TypeScript)
-│   ├── tooling/                           # Dashboard telemetry skill hooks
-│   ├── config.json                        # Dashboard configuration
-│   ├── docker-compose.yml                 # Container orchestration
-│   ├── Dockerfile                         # Backend container image
-│   ├── Makefile                           # Dev workflow targets
-│   ├── requirements.txt                   # Python dependencies
-│   └── README.md                          # Dashboard documentation
 ├── eval-generation/                       # Optional retrospective eval loop
 │   ├── input/                             # Single feature-bundle.yaml
 │   ├── output-evals/                      # Stage-wise cumulative eval results
@@ -171,6 +164,7 @@ You can also start from an **Enhancement Proposal** file instead of a Jira key �
 │       ├── outputs/                       # Epic-bug-analysis + patches
 │       ├── rounds/                        # Round snapshots
 │       └── generation-phase/              # SYSTEM_PROMPT, template-inventory
+├── TELEMETRY_README.md                    # Telemetry documentation
 └── README.md
 ```
 
@@ -192,8 +186,6 @@ flags:
 | `exit_on_all_tasks_complete` | true | Auto-exit implementation when all tasks marked `[x]` |
 
 The `rules:` section defines per-stage constraints. You generally don't need to edit these.
-
-For the **Agentic AI Observability Dashboard** (pipeline metrics, token burn, SSE logs), see [dashboard/README.md](dashboard/README.md).
 
 ---
 
@@ -337,12 +329,13 @@ If not found, the agent generates one using `templates/constitution-template.md`
 
 ## Important Notes
 
-- **No install.sh needed** — clone and it's ready
+- **Run `install.sh`** to install the workflow into your operator repo
 - **OpenSpec CLI** is only needed at runtime (`openspec status`, `openspec instructions`)
 - **`agents.md`** + **`constitution.md`** are the only operator-specific files
 - All templates are generic and work for any operator
 - Implementation edits go to your **fork** (default) or **working folder** — not upstream
 - Rejecting an artifact regenerates only that artifact (except `specs.md` — exits workflow)
+- **Telemetry** is file-based — events log to `events.jsonl`, metrics report auto-generated as `metrics-report.json`
 
 ---
 
