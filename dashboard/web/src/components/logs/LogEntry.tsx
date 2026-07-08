@@ -24,7 +24,7 @@ export default function LogEntry({ event }: LogEntryProps) {
     <div className="flex gap-2 px-4 py-1 text-xs font-mono hover:bg-terminal-surface/40 transition-colors">
       <span className="text-terminal-muted shrink-0">[{time}]</span>
       <span className="text-terminal-muted shrink-0">-&gt;</span>
-      <span className="text-terminal-accent shrink-0">[{event.agent_id}]</span>
+      <span className="text-terminal-accent shrink-0">[{event.agent_id || "Unknown"}]</span>
       <span className={`${style.color} shrink-0`}>{style.prefix}</span>
       <span className="text-terminal-text break-all">{event.message}</span>
     </div>

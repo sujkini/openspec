@@ -165,22 +165,22 @@ For **openspec-agile-workflow**, eval gate mapping:
 
 ## Dashboard Telemetry (optional — skip if backend not running)
 
-Track this artifact's phase on the observability dashboard. All commands run from workspace root. Errors are non-fatal — ignore and continue if the dashboard backend is not running.
+Track this artifact's phase on the observability dashboard. All commands run from `dashboard/` directory. Errors are non-fatal — ignore and continue if the dashboard backend is not running.
 
 **Before creating the artifact** (after picking the first `ready` artifact in step 3):
 ```bash
-python -m src.telemetry.cli start-phase --change "<name>" --artifact "<artifact-id>"
+cd dashboard && python -m src.telemetry.cli start-phase --change "<name>" --artifact "<artifact-id>"
 ```
 
 **After user approves the artifact**:
 ```bash
-python -m src.telemetry.cli end-artifact --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_overall_score> --label "<quality_label>" --iterations <refinement_count>
+cd dashboard && python -m src.telemetry.cli end-artifact --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_overall_score> --label "<quality_label>" --iterations <refinement_count>
 ```
 
 **If user rejects `specs` (exit workflow)**:
 ```bash
-python -m src.telemetry.cli end-artifact --change "<name>" --artifact specs --status failed
-python -m src.telemetry.cli end-run --change "<name>" --status failed
+cd dashboard && python -m src.telemetry.cli end-artifact --change "<name>" --artifact specs --status failed
+cd dashboard && python -m src.telemetry.cli end-run --change "<name>" --status failed
 ```
 
 Artifact-to-phase mapping (automatic):

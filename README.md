@@ -2,30 +2,24 @@
 
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation.
 
-Clone this repo, edit two files for your operator, and start working. No install script needed.
+Run one script to install the workflow into your operator repo, edit two files, and start working.
 
 ---
 
 ## Getting Started
 
-### 1. Install OpenSpec CLI
+### 1. Install into your operator repo
 
 ```bash
-npm install -g @fission-ai/openspec
+git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+/tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
-The CLI is required at runtime for `/opsx-continue` (`openspec status`, `openspec instructions`).
+This installs the OpenSpec CLI, runs `openspec init`, and copies `.cursor/`, `openspec/`, and `eval-generation/` into your project.
 
-### 2. Clone
+**Restart Cursor** after installation so slash commands load from `.cursor/commands/`.
 
-```bash
-git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git
-cd openspec
-```
-
-**Restart Cursor** after cloning so slash commands load from `.cursor/commands/`.
-
-### 3. Customize for your operator (2 files)
+### 2. Customize for your operator (2 files)
 
 Edit these files in `openspec/inputs/`:
 
@@ -46,7 +40,7 @@ Your `agents.md` should define:
 
 The bundled `agents.md` ships with **cert-manager-operator** as a reference. Replace it entirely with your operator's documentation.
 
-### 4. Generate evals (optional, recommended)
+### 3. Generate evals (optional, recommended)
 
 To improve workflow quality over time, provide data from a **completed feature** in `eval-generation/input/feature-bundle.yaml`:
 
@@ -62,7 +56,7 @@ Fill in: feature name, epic key, target repo, Enhancement Proposal content, Jira
 
 This generates eval cases that the forward workflow (`/opsx-continue`, `/opsx-apply`) uses as quality gates. Repeat with each completed feature to accumulate better evals.
 
-### 5. Start a change
+### 4. Start a change
 
 ```
 /opsx-new PROJ-123
@@ -87,7 +81,7 @@ When prompted, provide:
 
 The agent clones your fork, implements task-by-task, and opens a draft PR.
 
-### 6. Run the workflow
+### 5. Run the workflow
 
 ```
 /opsx-new PROJ-123          → start change from Jira ticket
@@ -101,6 +95,18 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 ```
 
 You can also start from an **Enhancement Proposal** file instead of a Jira key — just tell the agent the path.
+
+### 6. Start the observability dashboard (optional)
+
+The dashboard provides real-time pipeline metrics, token burn charts, and live event streaming.
+
+```bash
+cd dashboard && ./start.sh
+```
+
+Opens at **http://localhost:5173**. Uses Docker if available, otherwise sets up a local Python venv + Node.js.
+
+See [dashboard/README.md](dashboard/README.md) for full documentation.
 
 ---
 
@@ -137,6 +143,17 @@ You can also start from an **Enhancement Proposal** file instead of a Jira key �
 │   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, OAPE, eval-loop
 │   ├── skills/                            # openspec-*, effective-go, e2e-test-generator
 │   └── e2e-test-generator/                # Fixtures for /oape:e2e-generate
+├── bin/opsx                               # CLI wrapper for openspec with telemetry
+├── dashboard/                             # SDLC Observability Dashboard (standalone)
+│   ├── src/                               # FastAPI backend (Python)
+│   ├── web/                               # React + Vite frontend (TypeScript)
+│   ├── tooling/                           # Dashboard telemetry skill hooks
+│   ├── config.json                        # Dashboard configuration
+│   ├── docker-compose.yml                 # Container orchestration
+│   ├── Dockerfile                         # Backend container image
+│   ├── Makefile                           # Dev workflow targets
+│   ├── requirements.txt                   # Python dependencies
+│   └── README.md                          # Dashboard documentation
 ├── eval-generation/                       # Optional retrospective eval loop
 │   ├── input/                             # Single feature-bundle.yaml
 │   ├── output-evals/                      # Stage-wise cumulative eval results
@@ -168,7 +185,7 @@ flags:
 
 The `rules:` section defines per-stage constraints. You generally don't need to edit these.
 
-For the **Agentic AI Observability Dashboard** (pipeline metrics, token burn, SSE logs), see [DASHBOARD_README.md](DASHBOARD_README.md).
+For the **Agentic AI Observability Dashboard** (pipeline metrics, token burn, SSE logs), see [dashboard/README.md](dashboard/README.md).
 
 ---
 

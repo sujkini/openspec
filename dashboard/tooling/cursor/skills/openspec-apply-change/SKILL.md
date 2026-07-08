@@ -61,37 +61,37 @@ OAPE (or manual — see `{schema_root}/templates/code-generation.md`) → verify
 
 ## Dashboard Telemetry (optional — skip if backend not running)
 
-Track the code-generation phase and per-task progress on the observability dashboard. All commands run from **workspace root** (not fork cwd). Errors are non-fatal — ignore and continue if the dashboard backend is not running.
+Track the code-generation phase and per-task progress on the observability dashboard. All commands run from `dashboard/` directory (not fork cwd). Errors are non-fatal — ignore and continue if the dashboard backend is not running.
 
 **Before the task loop** (after step 5 — reading context files):
 ```bash
-python -m src.telemetry.cli start-phase --change "<name>" --phase 5 --phase-name code_generation
+cd dashboard && python -m src.telemetry.cli start-phase --change "<name>" --phase 5 --phase-name code_generation
 ```
 
 **Before each task** (step 7, before composing design bundle):
 ```bash
-python -m src.telemetry.cli start-task --change "<name>" --task-id "<TASK_ID>" --title "<task_title>" --agent "<agent_id>"
+cd dashboard && python -m src.telemetry.cli start-task --change "<name>" --task-id "<TASK_ID>" --title "<task_title>" --agent "<agent_id>"
 ```
 
 **During task execution** — log notable events (OAPE command, verification, eval gate, self-correction):
 ```bash
-python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type tool_call --message "<what happened>"
-python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type harness_alert --message "<test/lint failure details>"
-python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type self_correction --message "Loop <N>/<max>: <refinement action>"
+cd dashboard && python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type tool_call --message "<what happened>"
+cd dashboard && python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type harness_alert --message "<test/lint failure details>"
+cd dashboard && python -m src.telemetry.cli log --change "<name>" --agent "<agent_id>" --type self_correction --message "Loop <N>/<max>: <refinement action>"
 ```
 
 **After user approves a task** (step 7.7):
 ```bash
-python -m src.telemetry.cli end-task --change "<name>" --task-id "<TASK_ID>" --status passed --loops <refinement_passes>
+cd dashboard && python -m src.telemetry.cli end-task --change "<name>" --task-id "<TASK_ID>" --status passed --loops <refinement_passes>
 ```
 
 **If a task is rejected and fails permanently**:
 ```bash
-python -m src.telemetry.cli end-task --change "<name>" --task-id "<TASK_ID>" --status failed --loops <refinement_passes>
+cd dashboard && python -m src.telemetry.cli end-task --change "<name>" --task-id "<TASK_ID>" --status failed --loops <refinement_passes>
 ```
 
 **Post-loop** (step 8 — after all tasks approved):
 ```bash
-python -m src.telemetry.cli end-phase --change "<name>" --phase 5 --status passed --label "<summary>"
-python -m src.telemetry.cli end-run --change "<name>" --status completed
+cd dashboard && python -m src.telemetry.cli end-phase --change "<name>" --phase 5 --status passed --label "<summary>"
+cd dashboard && python -m src.telemetry.cli end-run --change "<name>" --status completed
 ```

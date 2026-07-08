@@ -11,6 +11,8 @@ function formatTokens(n: number): string {
 }
 
 function formatDuration(seconds: number): string {
+  if (seconds === 60) return "~1m (est.)";
+  if (seconds === 0) return "\u2014";
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}m ${s.toString().padStart(2, "0")}s`;
@@ -42,6 +44,9 @@ export default function PhaseRow({ phase }: PhaseRowProps) {
         >
           {statusLabel}
         </span>
+        {phase.phase_name === "code_generation" && phase.status === "running" && (
+          <span className="text-terminal-muted text-xs ml-1">(closes on impl. report)</span>
+        )}
       </td>
       <td className="px-4 py-2.5 text-sm text-center">
         {phase.iteration_count} {phase.iteration_count > 1 ? "Iterations" : "Iteration"}

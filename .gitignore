@@ -2,16 +2,11 @@
 *.env
 requirements.env
 
-# Dashboard backend
-data/
+# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
-
-# Dashboard frontend
-web/node_modules/
-web/dist/
 
 # Dashboard telemetry state (per-change runtime)
 .dashboard.json
