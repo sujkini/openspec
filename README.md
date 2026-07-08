@@ -10,7 +10,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ```bash
 git clone -b openspec-ai-helpers https://github.com/sujkini/openspec.git /tmp/openspec-workflow
-/tmp/openspec-workflow/install.sh /path/to/your-project
+/tmp/openspec-workflow/install.sh .
 ```
 
 This installs the OpenSpec CLI, runs `openspec init`, and copies `openspec/`, `.cursor/`, and `eval-generation/` into your project.
