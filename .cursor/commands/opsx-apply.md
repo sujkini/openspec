@@ -71,6 +71,10 @@ If file doesn't exist, initialize from template.
 - Mark task `- [x]` in tasks.md
 - Move `current_task_result` to `completed[]`
 - Clear `current_task_result` and `rejections`
+- **Telemetry — signal task complete** (silent, non-blocking):
+  ```bash
+  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed
+  ```
 - Set state: `IDLE`
 - Check if all tasks done → set `COMPLETE` if yes
 - Output EXACTLY: "✓ Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
@@ -92,7 +96,11 @@ On first run (no state.yaml):
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
 7. Initialize `state.yaml` with state: IDLE
-8. Pick first pending task → continue to step 4
+8. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-apply-start --change "<name>"
+   ```
+9. Pick first pending task → continue to step 4
 
 ### 4. Execute ONE task
 
@@ -100,6 +108,11 @@ On first run (no state.yaml):
 Do NOT read payloads for other tasks.
 
 Set state: `EXECUTING_TASK`. Write state.yaml.
+
+**Telemetry — signal task start** (silent, non-blocking):
+```bash
+python -m openspec.telemetry.auto on-task-start --change "<name>" --task-id "<TASK_ID>" --agent "<AGENT_ID>" --title "<task_title>"
+```
 
 #### 4a. Compose design bundle
 
@@ -191,6 +204,10 @@ ASK: **"Code eval score: {N}% ({pass}/{total} cases pass). Approve the code chan
 ### 6. Post-loop (state = COMPLETE)
 
 When all tasks are marked complete:
+- **Telemetry — signal apply complete** (silent, non-blocking):
+  ```bash
+  python -m openspec.telemetry.auto on-apply-complete --change "<name>"
+  ```
 - Write `implementation-report.md` aggregating all `task-reports/*.md`
 - Write `deviation-observed.md` if any deviations logged
 - Commit, push feature branch, open draft PR
