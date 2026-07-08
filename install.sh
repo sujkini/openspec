@@ -11,7 +11,8 @@ Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
   2. Runs 'openspec init' in the target directory
   3. Copies openspec/, .cursor/, and eval-generation/ from this repo into the target
-  4. Updates .gitignore
+  4. Installs telemetry Python dependencies (pyyaml, tiktoken)
+  5. Updates .gitignore
 
 Prerequisites:
   git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
@@ -54,6 +55,16 @@ cp -r "$SCRIPT_DIR/.cursor" "$TARGET_DIR/"
 echo "==> Copying eval-generation/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/eval-generation" "$TARGET_DIR/"
 
+echo "==> Installing telemetry Python dependencies..."
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
+if [ -n "$PYTHON_BIN" ] && [ -f "$TARGET_DIR/openspec/telemetry/requirements.txt" ]; then
+  "$PYTHON_BIN" -m pip install -r "$TARGET_DIR/openspec/telemetry/requirements.txt" -q && \
+    echo "    Python dependencies installed (pyyaml, tiktoken)." || \
+    echo "    Warning: pip install failed. Run manually: pip install -r openspec/telemetry/requirements.txt"
+else
+  echo "    Warning: python3 not found. Install manually: pip install pyyaml tiktoken"
+fi
+
 echo "==> Updating .gitignore..."
 GITIGNORE="$TARGET_DIR/.gitignore"
 touch "$GITIGNORE"
@@ -82,6 +93,10 @@ echo "Next steps:"
 echo "  1. Edit openspec/inputs/agents.md      — define your operator's architecture & agent routing"
 echo "  2. Edit openspec/inputs/constitution.md — define coding guardrails & CI gates"
 echo "  3. Restart Cursor so slash commands load from .cursor/commands/"
-echo "  4. (Optional) Run /eval-loop to generate quality evals from a completed feature"
-echo "  5. Run /opsx-new <JIRA-KEY> to start your first change"
+echo "  4. Run /opsx-new <JIRA-KEY> to start your first change"
+echo ""
+echo "Telemetry:"
+echo "  Events are written to openspec/changes/<change>/telemetry/events.jsonl"
+echo "  Metrics report: openspec/changes/<change>/telemetry/metrics-report.json"
+echo "  Manual report:  python -m openspec.telemetry.auto report --change <name>"
 echo ""
