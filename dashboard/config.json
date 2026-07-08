@@ -1,4 +1,6 @@
 {
+  "workspace": "..",
+
   "server": {
     "host": "0.0.0.0",
     "port": 8000,
@@ -31,7 +33,7 @@
     "endpoint": "http://localhost:8000/api/v1/events",
     "batch_size": 10,
     "flush_interval_s": 5,
-    "bus_dir": "../openspec/changes",
+    "bus_dir": "openspec/changes",
     "poll_interval_s": 3.0
   },
 
@@ -58,8 +60,8 @@
   },
 
   "openspec": {
-    "changes_dir": "../openspec/changes",
-    "schemas_dir": "../openspec/schemas/openspec-agile-workflow",
+    "changes_dir": "openspec/changes",
+    "schemas_dir": "openspec/schemas/openspec-agile-workflow",
     "eval_results_pattern": "eval-results/*.yaml"
   }
 }

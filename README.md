@@ -19,7 +19,21 @@ This installs the OpenSpec CLI, runs `openspec init`, and copies `.cursor/`, `op
 
 **Restart Cursor** after installation so slash commands load from `.cursor/commands/`.
 
-### 2. Customize for your operator (2 files)
+### 2. Start the observability dashboard (optional)
+
+The dashboard provides real-time pipeline metrics, token burn charts, and live event streaming.
+
+```bash
+cd /tmp/openspec-workflow/dashboard
+pip install -r requirements.txt
+./start.sh
+```
+
+Opens at **http://localhost:5173**. Uses Docker if available, otherwise sets up a local Python venv + Node.js.
+
+See [dashboard/README.md](dashboard/README.md) for full documentation.
+
+### 3. Customize for your operator (2 files)
 
 Edit these files in `openspec/inputs/`:
 
@@ -40,7 +54,7 @@ Your `agents.md` should define:
 
 The bundled `agents.md` ships with **cert-manager-operator** as a reference. Replace it entirely with your operator's documentation.
 
-### 3. Generate evals (optional, recommended)
+### 4. Generate evals (optional, recommended)
 
 To improve workflow quality over time, provide data from a **completed feature** in `eval-generation/input/feature-bundle.yaml`:
 
@@ -56,7 +70,7 @@ Fill in: feature name, epic key, target repo, Enhancement Proposal content, Jira
 
 This generates eval cases that the forward workflow (`/opsx-continue`, `/opsx-apply`) uses as quality gates. Repeat with each completed feature to accumulate better evals.
 
-### 4. Start a change
+### 5. Start a change
 
 ```
 /opsx-new PROJ-123
@@ -81,7 +95,7 @@ When prompted, provide:
 
 The agent clones your fork, implements task-by-task, and opens a draft PR.
 
-### 5. Run the workflow
+### 6. Run the workflow
 
 ```
 /opsx-new PROJ-123          → start change from Jira ticket
@@ -95,18 +109,6 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 ```
 
 You can also start from an **Enhancement Proposal** file instead of a Jira key — just tell the agent the path.
-
-### 6. Start the observability dashboard (optional)
-
-The dashboard provides real-time pipeline metrics, token burn charts, and live event streaming.
-
-```bash
-cd dashboard && ./start.sh
-```
-
-Opens at **http://localhost:5173**. Uses Docker if available, otherwise sets up a local Python venv + Node.js.
-
-See [dashboard/README.md](dashboard/README.md) for full documentation.
 
 ---
 
