@@ -28,6 +28,19 @@ class TokenBurnOut(BaseModel):
     total_cost_usd: float
 
 
+class ArtifactEditEntry(BaseModel):
+    artifact_id: str
+    phase_name: str
+    eval_refinements: int
+    feedback_rounds: int
+    total_edits: int
+
+
+class ArtifactEditsOut(BaseModel):
+    artifacts: list[ArtifactEditEntry]
+    total_edits: int
+
+
 class EvaluateRequest(BaseModel):
     type: str  # "compliance" | "artifact" | "harness"
     content: str

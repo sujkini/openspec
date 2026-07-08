@@ -62,9 +62,9 @@ def _save_state(change: str, state: dict[str, Any]) -> None:
     p.write_text(json.dumps(state, indent=2) + "\n")
 
 
-def _client():
+def _client(change: str | None = None):
     from src.telemetry.client import TelemetryClient
-    return TelemetryClient()
+    return TelemetryClient(change=change)
 
 
 def _estimate_artifact(change: str, artifact_id: str) -> tuple[int, int]:
@@ -83,7 +83,12 @@ def _out(data: dict[str, Any]) -> None:
 
 def on_new(args: argparse.Namespace) -> None:
     """Called after /opsx-new creates a change directory."""
-    client = _client()
+    existing = _load_state(args.change)
+    if existing.get("run_id"):
+        _out({"ok": True, "run_id": existing["run_id"], "already_exists": True})
+        return
+
+    client = _client(args.change)
     try:
         change_label = f"{args.jira_key} — {args.change}"
         run_id = client.create_run(
@@ -125,12 +130,55 @@ def on_artifact_start(args: argparse.Namespace) -> None:
         _out({"ok": True, "phase_id": phases[key]["id"], "already_running": True})
         return
 
-    client = _client()
+    client = _client(args.change)
     try:
         phase_id = client.start_phase(run_id, phase_number, phase_name)
         phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
         _save_state(args.change, state)
         _out({"ok": True, "phase_id": phase_id})
+    finally:
+        client.close()
+
+
+def on_artifact_created(args: argparse.Namespace) -> None:
+    """Called when an artifact file is first written to disk (before eval/approval)."""
+    state = _load_state(args.change)
+    run_id = state.get("run_id")
+    if not run_id:
+        _out({"skip": True, "reason": "no run_id"})
+        return
+
+    client = _client(args.change)
+    try:
+        client.log_event(
+            run_id=run_id,
+            agent_id="Pipeline",
+            event_type="state_machine",
+            message=f"Artifact '{args.artifact}' created — awaiting eval gate",
+        )
+        _out({"ok": True})
+    finally:
+        client.close()
+
+
+def on_waiting_approval(args: argparse.Namespace) -> None:
+    """Called when an artifact is presented to the user for approval."""
+    state = _load_state(args.change)
+    run_id = state.get("run_id")
+    if not run_id:
+        _out({"skip": True, "reason": "no run_id"})
+        return
+
+    score_text = f" (eval score: {args.score}%)" if getattr(args, "score", 0) else ""
+    client = _client(args.change)
+    try:
+        client.log_event(
+            run_id=run_id,
+            agent_id="Pipeline",
+            event_type="state_machine",
+            message=f"Artifact '{args.artifact}' ready for approval{score_text} — waiting for human decision",
+        )
+        _out({"ok": True})
     finally:
         client.close()
 
@@ -157,9 +205,18 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
     tokens_in, tokens_out = _estimate_artifact(args.change, args.artifact)
     iteration_count = phase_iteration_count(change_dir, phase_number)
     duration_s = phase_duration_s(change_dir, phase_number)
+    cum_in = phase_info.get("tokens_in", 0) + tokens_in
+    cum_out = phase_info.get("tokens_out", 0) + tokens_out
 
-    client = _client()
+    status_verb = "approved" if args.status == "passed" else "rejected"
+    client = _client(args.change)
     try:
+        client.log_event(
+            run_id=run_id,
+            agent_id="Pipeline",
+            event_type="state_machine",
+            message=f"Human {status_verb} artifact '{args.artifact}'",
+        )
         client.log_event(
             run_id=run_id,
             agent_id="Pipeline",
@@ -173,17 +230,29 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
                 status="passed" if args.status == "passed" else "failed",
                 quality_score=getattr(args, "score", 0) or 0,
                 quality_label=getattr(args, "label", "") or "",
-                tokens_in=tokens_in,
-                tokens_out=tokens_out,
+                tokens_in=cum_in,
+                tokens_out=cum_out,
                 iteration_count=iteration_count,
                 duration_s=duration_s,
             )
             phases[key]["ended"] = True
             _save_state(args.change, state)
-            _out({"ok": True, "phase_ended": True, "tokens_in": tokens_in, "tokens_out": tokens_out})
+            _out({"ok": True, "phase_ended": True, "tokens_in": cum_in, "tokens_out": cum_out})
         else:
+            # Accumulate tokens mid-phase so dashboard updates before last artifact
+            phases[key]["tokens_in"] = cum_in
+            phases[key]["tokens_out"] = cum_out
+            client.update_phase(
+                phase_info["id"],
+                tokens_in=cum_in,
+                tokens_out=cum_out,
+                quality_score=getattr(args, "score", 0) or 0,
+                quality_label=getattr(args, "label", "") or "",
+                iteration_count=iteration_count,
+                duration_s=duration_s,
+            )
             _save_state(args.change, state)
-            _out({"ok": True, "phase_ended": False, "tokens_in": tokens_in, "tokens_out": tokens_out})
+            _out({"ok": True, "phase_ended": False, "tokens_in": cum_in, "tokens_out": cum_out})
     finally:
         client.close()
 
@@ -204,7 +273,7 @@ def on_apply_start(args: argparse.Namespace) -> None:
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_running": True})
         return
 
-    client = _client()
+    client = _client(args.change)
     try:
         phase_id = client.start_phase(run_id, 5, "code_generation")
         phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
@@ -225,7 +294,7 @@ def on_task_start(args: argparse.Namespace) -> None:
     phase_info = state.get("phases", {}).get("5")
     phase_id = phase_info["id"] if phase_info else ""
 
-    client = _client()
+    client = _client(args.change)
     try:
         task_pk = client.start_task(
             run_id=run_id,
@@ -255,7 +324,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
     tokens_in, tokens_out = _estimate_task(args.change, args.task_id)
     loops = read_task_refinement_rounds(CHANGES_DIR / args.change, args.task_id)
 
-    client = _client()
+    client = _client(args.change)
     try:
         client.end_task(
             task_pk,
@@ -293,7 +362,7 @@ def on_apply_complete(args: argparse.Namespace) -> None:
     should_close, label = phase5_should_close(change_dir, close_on=_phase5_close_on())
     quality_label = getattr(args, "label", "") or (label if should_close else "all tasks approved")
 
-    client = _client()
+    client = _client(args.change)
     try:
         client.end_phase(
             phase_info["id"],
@@ -337,7 +406,7 @@ def sync(args: argparse.Namespace) -> None:
 
         tokens_in, tokens_out = _estimate_artifact(args.change, artifact_id)
 
-        client = _client()
+        client = _client(args.change)
         try:
             if key not in phases:
                 phase_id = client.start_phase(run_id, phase_number, phase_name)
@@ -375,7 +444,7 @@ def sync(args: argparse.Namespace) -> None:
 
         if should_close or (change_dir / "tasks.md").exists():
             if "5" not in phases:
-                client = _client()
+                client = _client(args.change)
                 try:
                     phase_id = client.start_phase(run_id, 5, "code_generation")
                     phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
@@ -397,7 +466,7 @@ def sync(args: argparse.Namespace) -> None:
 
                 iteration_count = phase5_iteration_count(change_dir)
 
-                client = _client()
+                client = _client(args.change)
                 try:
                     client.end_phase(
                         phases["5"]["id"],
@@ -437,6 +506,15 @@ def build_parser() -> argparse.ArgumentParser:
     sa.add_argument("--change", required=True)
     sa.add_argument("--artifact", required=True)
 
+    acr = sub.add_parser("on-artifact-created", help="Signal artifact file written to disk")
+    acr.add_argument("--change", required=True)
+    acr.add_argument("--artifact", required=True)
+
+    wa = sub.add_parser("on-waiting-approval", help="Signal artifact presented for user approval")
+    wa.add_argument("--change", required=True)
+    wa.add_argument("--artifact", required=True)
+    wa.add_argument("--score", type=float, default=0)
+
     ac = sub.add_parser("on-artifact-complete", help="Signal artifact approved/rejected")
     ac.add_argument("--change", required=True)
     ac.add_argument("--artifact", required=True)
@@ -473,6 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
 _DISPATCH = {
     "on-new": on_new,
     "on-artifact-start": on_artifact_start,
+    "on-artifact-created": on_artifact_created,
+    "on-waiting-approval": on_waiting_approval,
     "on-artifact-complete": on_artifact_complete,
     "on-apply-start": on_apply_start,
     "on-task-start": on_task_start,

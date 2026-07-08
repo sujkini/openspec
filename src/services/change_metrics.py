@@ -11,8 +11,8 @@ import yaml
 ARTIFACT_PHASE_MAP: dict[str, tuple[int, str, bool]] = {
     "validation": (1, "spec_understanding", False),
     "specs": (1, "spec_understanding", True),
-    "repo-assessment": (2, "repo_assessment", False),
-    "constitution": (2, "repo_assessment", True),
+    "repo-assessment": (2, "repo_assessment", True),
+    "constitution": (2, "repo_assessment", False),
     "plan": (3, "arch_planning", True),
     "tasks": (4, "subtask_creation", True),
 }
@@ -37,16 +37,20 @@ def _eval_path(change_dir: Path, artifact_id: str) -> Path:
 
 
 def read_eval_refinement_round(change_dir: Path, artifact_id: str) -> int:
-    """Eval gate refinement passes for an artifact (default 1)."""
+    """Extra eval-gate refinements beyond the initial draft (0 = first pass only).
+
+    ``refinement_round`` / ``refinement_rounds`` in eval YAML is 1-indexed pass
+    number (1 = first eval, 2 = one refinement). This returns pass - 1.
+    """
     data = _load_yaml(_eval_path(change_dir, artifact_id))
     for key in ("refinement_round", "refinement_rounds"):
         val = data.get(key)
         if val is not None:
             try:
-                return max(1, int(val))
+                return max(0, int(val) - 1)
             except (TypeError, ValueError):
                 pass
-    return 1
+    return 0
 
 
 def read_task_refinement_rounds(change_dir: Path, task_id: str) -> int:
@@ -81,12 +85,15 @@ def artifact_edit_count(change_dir: Path, artifact_id: str) -> int:
 
 
 def phase_iteration_count(change_dir: Path, phase_number: int) -> int:
-    """Max edit count across artifacts in a phase (for waterfall display)."""
+    """Eval pass count for phase waterfall (1 = first pass only)."""
     artifacts = PHASE_ARTIFACTS.get(phase_number, [])
     if not artifacts:
         return 1
-    counts = [artifact_edit_count(change_dir, a) for a in artifacts]
-    return max(counts) if counts else 1
+    edit_counts = [artifact_edit_count(change_dir, a) for a in artifacts]
+    if not edit_counts:
+        return 1
+    # Total edits + 1 = 1-indexed pass number (matches refinement_round in eval YAML).
+    return max(1, max(edit_counts) + 1)
 
 
 def total_refinement_iterations(change_dir: Path) -> int:

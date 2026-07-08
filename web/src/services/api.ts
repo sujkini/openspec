@@ -6,6 +6,8 @@ import type {
   AgentEvent,
   GlobalHealthMetrics,
   TokenBurnOut,
+  ArtifactEditsOut,
+  RunReportOut,
 } from "@/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,5 +55,15 @@ export async function fetchGlobalHealth(
 
 export async function fetchTokenBurn(runId: string): Promise<TokenBurnOut> {
   return request(`/metrics/token-burn/${runId}`);
+}
+
+export async function fetchArtifactEdits(
+  runId: string
+): Promise<ArtifactEditsOut> {
+  return request(`/metrics/artifact-edits/${runId}`);
+}
+
+export async function fetchRunReport(runId: string): Promise<RunReportOut> {
+  return request(`/runs/${runId}/report`);
 }
 

@@ -10,62 +10,146 @@ SDLC Observability for the OpenSpec Agile Workflow pipeline. Tracks multi-phase 
 │  (Vite, port 5173)      │     REST polling     │  SQLite + SSE Broker     │
 └─────────────────────────┘                      └──────────┬───────────────┘
                                                             │
-                                                            │ HTTP POST/PATCH
-                                                            │
-                                              ┌─────────────┴──────────────┐
-                                              │  openspec_wrapper.py       │
-                                              │  (wraps real openspec CLI) │
-                                              │  + tiktoken estimation     │
-                                              └─────────────┬──────────────┘
-                                                            │
-                                                            │ subprocess
+                                               ┌────────────┴────────────┐
+                                               │  FileEventPoller        │
+                                               │  (background asyncio)   │
+                                               │  polls events.jsonl →   │
+                                               │  ingests to DB + SSE    │
+                                               └────────────┬────────────┘
+                                                            │ reads NDJSON
                                                             ▼
-                                              ┌────────────────────────────┐
-                                              │  openspec CLI (npm)        │
-                                              │  @fission-ai/openspec     │
-                                              │  (UNMODIFIED)             │
-                                              └────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  openspec/changes/<name>/telemetry/events.jsonl                          │
+│  (NDJSON — one event per line, written by TelemetryClient)               │
+└────────────────────────────────────────────────────────────────────────────┘
+                                                            ▲
+                                                            │ writes events
+                                               ┌────────────┴────────────┐
+                                               │  TelemetryClient        │
+                                               │  (dual-mode: disk +     │
+                                               │   optional HTTP)        │
+                                               └────────────┬────────────┘
+                                                            │ called by
+                           ┌────────────────────────────────┼────────────────────┐
+                           │                                │                    │
+              ┌────────────┴──────────┐       ┌─────────────┴──────┐   ┌────────┴────────┐
+              │  auto.py              │       │  openspec_wrapper  │   │  SKILL.md hooks  │
+              │  (lifecycle hooks)    │       │  (CLI wrapper)     │   │  (agent calls)   │
+              └───────────────────────┘       └────────────────────┘   └─────────────────┘
 ```
 
-**Key design principle**: The dashboard is a separate, optional layer. The openspec CLI is never modified. If the dashboard backend is down, all telemetry calls fail silently and the pipeline works exactly as before.
+**Key design principles**:
+- **Filesystem-first telemetry**: Events are written as NDJSON to `events.jsonl` on disk, then ingested by a background poller. This works in sandboxed environments where HTTP calls may be blocked.
+- **Isolation**: The dashboard never modifies the openspec CLI, schemas, or pipeline artifacts. If the backend is down, events still accumulate on disk and are ingested when the backend starts.
+- **Fallback**: If the CLI fails or is not installed, the wrapper falls back to reading artifacts from disk and still emits telemetry.
 
-## Prerequisites
+---
 
-- **Python 3.10+** with pip
-- **Node.js 18+** with npm
-- **OpenSpec CLI**: `npm install -g @fission-ai/openspec`
+## Getting Started (New Users)
 
-## Quick Start
+Follow these steps after cloning the repo. Tested on Fedora / RHEL; should work on any Linux or macOS.
+
+### 1. Prerequisites
+
+| Tool | Required version | Install |
+|------|-----------------|---------|
+| Python | 3.10+ | `sudo dnf install python3` or `brew install python` |
+| pip | any | Comes with Python |
+| Node.js | 18+ | `sudo dnf install nodejs` or `brew install node` |
+| npm | 9+ | Comes with Node.js |
+| OpenSpec CLI | 1.4+ | `npm install -g @fission-ai/openspec` |
+| Cursor IDE | any | Required for `/opsx-*` commands |
+
+Verify:
 
 ```bash
-# 1. Install Python dependencies
+python3 --version   # 3.10+
+node --version       # 18+
+npm --version        # 9+
+openspec --version   # 1.4+
+```
+
+### 2. Install dependencies
+
+```bash
+# From the repo root:
 pip install -r requirements.txt
 
-# 2. Install frontend dependencies
 cd web && npm install && cd ..
-
-# 3. Start backend (Terminal 1)
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-
-# 4. Start frontend (Terminal 2)
-cd web && npm run dev
-
-# 5. Open http://localhost:5173 in your browser
 ```
+
+### 3. Start the dashboard
+
+You need **two terminal tabs** (or use `make`):
+
+```bash
+# Terminal 1 — Backend API (port 8000)
+make backend
+# or: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2 — Frontend UI (port 5173)
+make frontend
+# or: cd web && npm run dev
+```
+
+### 4. Open the dashboard
+
+Go to **http://localhost:5173** in your browser. You'll see an empty dashboard.
+
+### 5. Run the pipeline in Cursor
+
+In Cursor IDE (with this repo open as workspace):
+
+```
+/opsx-new CM-830              # Create a new change from a Jira ticket
+/opsx-continue                # Create next artifact (repeat 5-6 times)
+/opsx-apply                   # Implement tasks one by one
+```
+
+The dashboard updates automatically as you work through each stage. The `FileEventPoller` background task picks up new events from disk every 3 seconds and pushes them via SSE to the frontend.
+
+### 6. Seed from existing artifacts (skip the pipeline)
+
+If you already have artifacts on disk (e.g. from a previous run) and just want to see them in the dashboard:
+
+```bash
+# Clean old state
+rm -f data/dashboard.db openspec/changes/<name>/.dashboard.json
+
+# Restart backend (Terminal 1), then:
+python -m src.telemetry.auto on-new --change <name> --jira-key <JIRA-KEY>
+python -m src.telemetry.auto sync --change <name>
+
+# Populate per-task data for Token Burn chart:
+for tid in T1_1 T1_2 T1_3; do
+  python -m src.telemetry.auto on-task-start --change <name> --task-id "$tid" --title "$tid" --agent "Agent_$tid"
+  python -m src.telemetry.auto on-task-complete --change <name> --task-id "$tid" --status passed
+done
+```
+
+### 7. Verify via API
+
+```bash
+# List runs
+curl -s http://localhost:8000/api/v1/runs | python -m json.tool
+
+# Get phases for a run
+RUN_ID=$(python -c "import json; print(json.load(open('openspec/changes/<name>/.dashboard.json'))['run_id'])")
+curl -s "http://localhost:8000/api/v1/runs/$RUN_ID/phases" | python -m json.tool
+curl -s "http://localhost:8000/api/v1/metrics/global/$RUN_ID" | python -m json.tool
+curl -s "http://localhost:8000/api/v1/metrics/token-burn/$RUN_ID" | python -m json.tool
+curl -s "http://localhost:8000/api/v1/metrics/artifact-edits/$RUN_ID" | python -m json.tool
+```
+
+---
 
 ## How It Works
 
-### The Wrapper (Option B)
+### Telemetry Flow (Filesystem-First)
 
-The SKILL.md files call `python -m src.telemetry.openspec_wrapper` instead of bare `openspec`. This wrapper:
-
-1. Runs the real `openspec` CLI via `subprocess`
-2. Prints the CLI output to stdout **unchanged** (the agent processes it normally)
-3. Parses the JSON output as a side-effect
-4. Detects lifecycle transitions (artifact done, phase completed, tasks finished)
-5. Pushes telemetry to the dashboard backend via HTTP
-
-If the backend is down, step 3-5 fail silently. The CLI output in step 2 is always correct.
+1. **Event emission**: When the SKILL.md workflow calls `auto.py` hooks (e.g. `on-artifact-start`, `on-artifact-created`, `on-artifact-complete`), the `TelemetryClient` writes each event as a JSON line to `openspec/changes/<name>/telemetry/events.jsonl`.
+2. **Background ingestion**: The `FileEventPoller` (started as an asyncio task in `src/main.py`) polls all `events.jsonl` files every 3 seconds, ingests new events into the SQLite database, and publishes them via the SSE broker.
+3. **Frontend display**: The React SPA subscribes to SSE for live updates and polls REST endpoints for global metrics, phase data, and artifact edit counts.
 
 ### Token Estimation (tiktoken)
 
@@ -77,15 +161,28 @@ Since Cursor doesn't expose actual LLM token usage, we estimate tokens from the 
 
 ### Phase Detection
 
-| Phase | Name | Detected When |
-|-------|------|---------------|
-| 1 | spec_understanding | `specs.md` exists and has status "done" |
-| 2 | repo_assessment | `constitution.md` exists and has status "done" |
-| 3 | arch_planning | `plan.md` exists and has status "done" |
-| 4 | subtask_creation | `tasks.md` exists and has status "done" |
-| 5 | code_generation | Task reports exist under `implementation/task-reports/` (closes as **passed** with partial label e.g. `15/23 tasks approved`, or when `implementation-report.md` exists — see `config.json > metrics.phase5_close_on`) |
+| Phase | Name | Completes When |
+|-------|------|----------------|
+| 1 | spec_understanding | `specs.md` approved (last artifact in phase) |
+| 2 | repo_assessment | `repo-assessment.md` approved (last artifact in phase) |
+| 3 | arch_planning | `plan.md` approved |
+| 4 | subtask_creation | `tasks.md` approved |
+| 5 | code_generation | Task reports exist under `implementation/task-reports/` |
 
-### Iteration and edit metrics
+### Telemetry Event Types
+
+The `auto.py` module emits the following lifecycle events visible in the Worker Logs panel:
+
+| CLI Hook | Event | Description |
+|----------|-------|-------------|
+| `on-artifact-start` | Phase started | Signals artifact creation began, starts phase if needed |
+| `on-artifact-created` | Artifact created | Artifact file written to disk, awaiting eval gate |
+| `on-waiting-approval` | Waiting for approval | Eval passed, artifact presented for human decision |
+| `on-artifact-complete` | Human approved/rejected | User approves or rejects, phase ends if last artifact |
+| `on-task-start` | Task started | Individual task execution begins |
+| `on-task-complete` | Task completed | Task approved or failed |
+
+### Iteration and Edit Metrics
 
 The dashboard reads refinement data from disk:
 
@@ -97,42 +194,14 @@ The dashboard reads refinement data from disk:
 
 Global Health exposes **Gate Passing Rate** (first-pass phases), **Refinement Iterations** (sum of extra passes), and **Human Rejection Rate** (refinement proxy).
 
-## Testing From Zero
+### Per-Artifact Edit Counts
 
-### Option A: Seed from existing artifacts (fast, recommended)
+The **Per-Artifact Edit Counts** panel shows a breakdown for each generated artifact:
+- **Eval refinements**: How many eval gate passes the artifact went through
+- **User feedback rounds**: How many times the user rejected and requested refinement
+- **Total edits**: Sum of both (higher values indicate artifacts that needed more iteration)
 
-```bash
-# Clean old state
-rm -f data/dashboard.db openspec/changes/<name>/.dashboard.json
-
-# Start backend + frontend (two terminals)
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-cd web && npm run dev
-
-# One command seeds everything from disk
-python -m src.telemetry.openspec_wrapper status --change <name> --json
-```
-
-### Option B: Full pipeline re-run (slow, tests real-time flow)
-
-```bash
-# Delete everything
-rm -rf openspec/changes/<name>
-rm -f data/dashboard.db
-
-# Start backend + frontend, then run the pipeline in Cursor:
-# /opsx-new <JIRA-KEY>
-# /opsx-continue  (repeat until all artifacts done)
-# /opsx-apply
-```
-
-### Populating per-task data (Token Burn chart + Agent Success Rate)
-
-```bash
-# For each completed task:
-python -m src.telemetry.auto on-task-start --change <name> --task-id T1_1 --title "Task title" --agent Agent_Name
-python -m src.telemetry.auto on-task-complete --change <name> --task-id T1_1 --status passed
-```
+---
 
 ## File Structure
 
@@ -147,20 +216,18 @@ python -m src.telemetry.auto on-task-complete --change <name> --task-id T1_1 --s
 | `src/db/` | SQLAlchemy engine, base, seed |
 | `src/models/` | ORM models (PipelineRun, PhaseExecution, TaskExecution, AgentEvent) |
 | `src/schemas/` | Pydantic request/response schemas |
-| `src/services/metrics_service.py` | Global health + token burn computation |
-| `src/services/pipeline_scanner.py` | Filesystem scanner for eval results |
-| `src/services/telemetry_service.py` | Event ingestion + SSE publish |
+| `src/services/change_metrics.py` | Parse iteration/edit metrics from eval YAML |
+| `src/services/metrics_service.py` | Global health + token burn + artifact edits computation |
+| `src/services/file_event_poller.py` | Background poller: `events.jsonl` → DB + SSE |
 
 ### Telemetry (`src/telemetry/`)
 
 | Path | Purpose |
 |------|---------|
-| `src/telemetry/client.py` | HTTP client SDK for the dashboard API |
-| `src/telemetry/cli.py` | CLI for manual telemetry commands |
-| `src/telemetry/auto.py` | Auto-telemetry lifecycle hooks |
-| `src/telemetry/openspec_wrapper.py` | Drop-in wrapper for `openspec` CLI |
+| `src/telemetry/client.py` | Dual-mode client: writes NDJSON to disk + optional HTTP |
+| `src/telemetry/auto.py` | Auto-telemetry lifecycle hooks (artifact_created, waiting_approval, etc.) |
+| `src/telemetry/openspec_wrapper.py` | Drop-in wrapper for `openspec` CLI (with disk fallback) |
 | `src/telemetry/tokens.py` | tiktoken-based token estimation |
-| `src/telemetry/decorators.py` | Python decorators for tracking |
 
 ### Frontend (`web/`)
 
@@ -169,15 +236,15 @@ python -m src.telemetry.auto on-task-complete --change <name> --task-id T1_1 --s
 | `web/src/App.tsx` | Main app, merges REST + SSE data |
 | `web/src/hooks/useRun.ts` | React-query hooks for runs, phases, tasks, events |
 | `web/src/hooks/useSSE.ts` | SSE stream hook for live events |
-| `web/src/hooks/useMetrics.ts` | Metrics polling hooks |
+| `web/src/hooks/useMetrics.ts` | Metrics polling hooks (global, token burn, artifact edits) |
 | `web/src/services/api.ts` | REST API client |
-| `web/src/components/` | UI components (waterfall, metrics, logs, charts) |
+| `web/src/components/` | UI components (waterfall, metrics, artifact edits, logs, charts) |
 
 ### Configuration
 
 | Path | Purpose |
 |------|---------|
-| `config.json` | Dashboard config (DB URL, SSE, token pricing, fallbacks) |
+| `config.json` | Dashboard config (DB URL, SSE, token pricing, telemetry polling) |
 | `requirements.txt` | Python dependencies |
 | `bin/opsx` | Shell alias for the wrapper |
 
@@ -187,6 +254,9 @@ python -m src.telemetry.auto on-task-complete --change <name> --task-id T1_1 --s
 |------|---------|
 | `data/dashboard.db` | SQLite database (created on first backend start) |
 | `openspec/changes/<name>/.dashboard.json` | Per-change tracking state (run_id, phase_ids) |
+| `openspec/changes/<name>/telemetry/events.jsonl` | NDJSON telemetry event log |
+
+---
 
 ## Configuration Reference (`config.json`)
 
@@ -195,19 +265,26 @@ python -m src.telemetry.auto on-task-complete --change <name> --task-id T1_1 --s
   "server": { "port": 8000, "cors_origins": ["http://localhost:5173"] },
   "database": { "url": "sqlite+aiosqlite:///data/dashboard.db" },
   "sse": { "retry_ms": 3000, "heartbeat_interval_s": 15 },
-  "telemetry": { "endpoint": "http://localhost:8000/api/v1/events" },
+  "telemetry": {
+    "endpoint": "http://localhost:8000/api/v1/events",
+    "bus_dir": "openspec/changes",
+    "poll_interval_s": 3.0
+  },
   "metrics": {
     "token_cost_per_million": {
       "claude-sonnet-4": { "input": 3.00, "output": 15.00 },
       "gemini-2.5-pro": { "input": 1.25, "output": 5.00 },
       "default": { "input": 2.00, "output": 8.00 }
-    }
+    },
+    "phase5_close_on": "implementation_report"
   },
-  "vertex_ai": { "enabled": false }  // Optional LLM-as-judge
+  "vertex_ai": { "enabled": false }
 }
 ```
 
 No LLM provider configuration is needed. Token estimation uses tiktoken (local, no API calls). Cost is derived by multiplying token counts by the pricing table above.
+
+---
 
 ## Isolation Guarantees
 
@@ -217,20 +294,11 @@ No LLM provider configuration is needed. Token estimation uses tiktoken (local, 
 - Deleting `src/`, `web/`, `data/`, `config.json` has zero impact on the pipeline
 - The SKILL.md modifications are backward-compatible (wrapper runs the real CLI underneath)
 
-## Troubleshooting
+---
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| Empty dashboard | Backend not running or DB deleted | Start backend, run wrapper command |
-| Phase 5 stuck on RUNNING | Not all task reports exist | Complete remaining tasks, or manually close with `python -m src.telemetry.cli end-phase --change <name> --phase 5 --status passed` |
-| Tokens/Cost = 0 | Existing run created before tiktoken integration | Delete DB + `.dashboard.json`, re-run wrapper |
-| Logs vanish on refresh | Old frontend without REST hydration | Rebuild: `cd web && npm run build` |
-| Token Burn empty | No TaskExecution records | Run `on-task-start` / `on-task-complete` for each task |
-| Phase 5 shows partial label | Expected when not all tasks done | Configure `metrics.phase5_close_on` in `config.json` |
+## Real-Time End-to-End Testing
 
-## Real-Time End-to-End Validation
-
-Use this after pushing the dashboard to verify live telemetry during a new change (e.g. `CM-831`):
+Use this to verify live telemetry during a new change:
 
 ```bash
 # Terminal 1 — backend
@@ -245,22 +313,19 @@ cd web && npm run dev
 # /opsx-apply      (task loop)
 
 # Verify after each stage:
-python -m src.telemetry.openspec_wrapper status --change cm-831 --json
 curl -s http://localhost:8000/api/v1/runs | python -m json.tool
-curl -s http://localhost:8000/api/v1/metrics/global/<run_id> | python -m json.tool
 ```
 
-**Acceptance checklist (real-time):**
+**Acceptance checklist:**
 
-- Run appears after first `status --json` or `instructions` call
-- Phases 1–4 close with non-default iteration counts when eval YAML has `refinement_round > 1`
-- Phase 5 closes with partial or full task label; run status becomes `completed`
-- SSE worker logs stream during `/opsx-apply`; logs persist after browser refresh (REST hydration)
-- Token burn chart populates as tasks complete (`on-task-start` / `on-task-complete` in apply skill)
-
-**Retroactive validation (cm-830 example, verified):**
-
-- Phase 2 shows **2 iterations** (`repo-assessment.yaml` has `refinement_round: 2`)
-- Phase 5 **passed** with label `15/23 tasks approved`
-- Gate passing rate **80%** (4/5 first-pass phases), refinement iterations **1**
-| Wrapper hangs | Backend process crashed | Restart: `uvicorn src.main:app --port 8000 --reload` |
+- [ ] Run appears after first `/opsx-new` or `/opsx-continue`
+- [ ] Phases 1–4 close with correct iteration counts
+- [ ] Phase 2 closes when `repo-assessment.md` is approved
+- [ ] Phase 5 closes with partial or full task label; run status becomes `completed`
+- [ ] Global Health shows Gate Passing Rate, Refinement Iterations, Agent Success Rate
+- [ ] Per-Artifact Edit Counts table populates as artifacts are approved
+- [ ] Token burn chart populates as tasks complete
+- [ ] Worker logs show artifact_created, waiting_approval, and human_approved events
+- [ ] SSE worker logs stream during `/opsx-apply`
+- [ ] Logs persist after browser refresh (REST hydration)
+- [ ] Cumulative Wall Time is non-zero

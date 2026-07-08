@@ -47,8 +47,8 @@ STATE_FILE = ".dashboard.json"
 ARTIFACT_PHASE_MAP: dict[str, tuple[int, str, bool]] = {
     "validation":      (1, "spec_understanding", False),
     "specs":           (1, "spec_understanding", True),
-    "repo-assessment": (2, "repo_assessment",    False),
-    "constitution":    (2, "repo_assessment",    True),
+    "repo-assessment": (2, "repo_assessment",    True),
+    "constitution":    (2, "repo_assessment",    False),
     "plan":            (3, "arch_planning",      True),
     "tasks":           (4, "subtask_creation",   True),
 }
@@ -79,9 +79,9 @@ def _save_state(change: str, state: dict[str, Any]) -> None:
     p.write_text(json.dumps(state, indent=2) + "\n")
 
 
-def _client():
+def _client(change: str | None = None):
     from src.telemetry.client import TelemetryClient
-    return TelemetryClient()
+    return TelemetryClient(change=change)
 
 
 def _estimate_artifact(change: str, artifact_id: str) -> tuple[int, int]:
@@ -157,7 +157,7 @@ def _ensure_run(change: str, jira_key: str = "") -> dict[str, Any]:
         else:
             jira_key = change.upper()
 
-    client = _client()
+    client = _client(change)
     try:
         run_id = client.create_run(
             change_name=f"{jira_key} — {change}",
@@ -207,7 +207,7 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
 
         if artifact_status == "done":
             if key not in phases:
-                client = _client()
+                client = _client(change)
                 try:
                     phase_id = client.start_phase(state["run_id"], phase_number, phase_name)
                     phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
@@ -235,7 +235,7 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
                 iteration_count = phase_iteration_count(change_dir, phase_number)
                 duration_s = phase_duration_s(change_dir, phase_number)
 
-                client = _client()
+                client = _client(change)
                 try:
                     client.end_phase(
                         phases[key]["id"],
@@ -263,7 +263,7 @@ def _sync_artifact_phases(change: str, status_data: dict[str, Any]) -> None:
 
         elif artifact_status in ("ready", "in-progress"):
             if key not in phases:
-                client = _client()
+                client = _client(change)
                 try:
                     phase_id = client.start_phase(state["run_id"], phase_number, phase_name)
                     phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
@@ -299,7 +299,7 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
 
     if not should_close:
         if "5" not in phases:
-            client = _client()
+            client = _client(change)
             try:
                 phase_id = client.start_phase(state["run_id"], 5, "code_generation")
                 phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
@@ -321,7 +321,7 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
         total_out += to
 
     if "5" not in phases:
-        client = _client()
+        client = _client(change)
         try:
             phase_id = client.start_phase(state["run_id"], 5, "code_generation")
             phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
@@ -333,7 +333,7 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
 
     iteration_count = phase5_iteration_count(change_dir)
 
-    client = _client()
+    client = _client(change)
     try:
         client.end_phase(
             phases["5"]["id"],
@@ -364,41 +364,40 @@ def _sync_phase5(change: str, status_data: dict[str, Any]) -> None:
 
 
 def _on_instructions(change: str, artifact_id: str | None) -> None:
-    """When `openspec instructions <artifact>` is called, start the phase."""
+    """Ensure a run exists when instructions are fetched.
+
+    Phase start is handled by ``python -m src.telemetry.auto on-artifact-start``,
+    not here — calling start_phase from both paths created duplicate RUNNING rows.
+    """
     if not artifact_id:
         return
+    _ensure_run(change)
 
-    mapping = ARTIFACT_PHASE_MAP.get(artifact_id)
-    if not mapping:
+
+def _fallback_sync(change: str) -> None:
+    """Disk-based telemetry sync when the CLI is unavailable or fails."""
+    change_dir = CHANGES_DIR / change
+    if not change_dir.is_dir():
         return
 
     state = _ensure_run(change)
     if not state.get("run_id"):
         return
 
-    phase_number, phase_name, _ = mapping
-    key = str(phase_number)
-    phases = state.setdefault("phases", {})
+    _sync_artifact_phases(change, {"artifacts": _detect_artifacts_from_disk(change)})
+    _sync_phase5(change, {})
 
-    if key in phases:
-        return
 
-    client = _client()
-    try:
-        phase_id = client.start_phase(state["run_id"], phase_number, phase_name)
-        phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
-        _save_state(change, state)
-
-        client.log_event(
-            run_id=state["run_id"],
-            agent_id="Pipeline",
-            event_type="state_machine",
-            message=f"Phase {phase_number} ({phase_name}) started — creating artifact '{artifact_id}'",
-        )
-    except Exception as exc:
-        _telem_warning(f"start_phase({phase_name})", exc)
-    finally:
-        client.close()
+def _detect_artifacts_from_disk(change: str) -> list[dict[str, str]]:
+    """Build a synthetic artifact list from files on disk for fallback sync."""
+    change_dir = CHANGES_DIR / change
+    artifacts = []
+    for artifact_id in ARTIFACT_PHASE_MAP:
+        for ext in (".md", ".json"):
+            if (change_dir / f"{artifact_id}{ext}").exists():
+                artifacts.append({"id": artifact_id, "status": "done"})
+                break
+    return artifacts
 
 
 def main() -> None:
@@ -406,41 +405,59 @@ def main() -> None:
     cli_args = sys.argv[1:]
 
     if not cli_args:
-        stdout, code = run_openspec(["--help"])
-        print(stdout, end="")
+        try:
+            stdout, code = run_openspec(["--help"])
+            print(stdout, end="")
+        except FileNotFoundError:
+            print("openspec CLI not found. Install with: npm install -g @fission-ai/openspec", file=sys.stderr)
+            code = 1
         sys.exit(code)
-
-    stdout, exit_code = run_openspec(cli_args)
-    print(stdout, end="")
-
-    if exit_code != 0:
-        sys.exit(exit_code)
 
     command = cli_args[0] if cli_args else ""
     change = _extract_change_name(cli_args)
     has_json = "--json" in cli_args
 
     try:
-        if command == "status" and change and has_json:
-            data = _parse_status_json(stdout)
-            if data:
-                _sync_artifact_phases(change, data)
-                _sync_phase5(change, data)
+        stdout, exit_code = run_openspec(cli_args)
+        print(stdout, end="")
+    except FileNotFoundError:
+        print(
+            json.dumps({"error": "openspec CLI not found — telemetry will sync from disk"}),
+            file=sys.stderr,
+        )
+        stdout, exit_code = "", 1
 
-        elif command == "instructions" and change:
-            artifact_id = _extract_artifact_id(cli_args[1:])
-            _on_instructions(change, artifact_id)
+    if exit_code == 0:
+        try:
+            if command == "status" and change and has_json:
+                data = _parse_status_json(stdout)
+                if data:
+                    _sync_artifact_phases(change, data)
+                    _sync_phase5(change, data)
 
-        elif command == "list" and has_json:
-            data = _parse_status_json(stdout)
-            if data and data.get("changes"):
-                for ch in data["changes"]:
-                    ch_name = ch.get("name", "")
-                    if ch_name:
-                        _ensure_run(ch_name)
+            elif command == "instructions" and change:
+                artifact_id = _extract_artifact_id(cli_args[1:])
+                _on_instructions(change, artifact_id)
 
-    except Exception as exc:
-        _telem_warning("wrapper_hook", exc)
+            elif command == "list" and has_json:
+                data = _parse_status_json(stdout)
+                if data and data.get("changes"):
+                    for ch in data["changes"]:
+                        ch_name = ch.get("name", "")
+                        if ch_name:
+                            _ensure_run(ch_name)
+        except Exception as exc:
+            _telem_warning("wrapper_hook", exc)
+    else:
+        try:
+            if command in ("status", "instructions") and change:
+                _fallback_sync(change)
+            elif command == "list":
+                for d in sorted(CHANGES_DIR.iterdir()) if CHANGES_DIR.is_dir() else []:
+                    if d.is_dir():
+                        _ensure_run(d.name)
+        except Exception as exc:
+            _telem_warning("fallback_sync", exc)
 
     sys.exit(exit_code)
 

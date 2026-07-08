@@ -41,6 +41,8 @@ class TelemetryConfig(BaseModel):
     endpoint: str = "http://localhost:8000/api/v1/events"
     batch_size: int = 10
     flush_interval_s: int = 5
+    bus_dir: str = "openspec/changes"
+    poll_interval_s: float = 3.0
 
 
 class TokenCost(BaseModel):

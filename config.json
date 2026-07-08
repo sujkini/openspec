@@ -30,7 +30,9 @@
   "telemetry": {
     "endpoint": "http://localhost:8000/api/v1/events",
     "batch_size": 10,
-    "flush_interval_s": 5
+    "flush_interval_s": 5,
+    "bus_dir": "openspec/changes",
+    "poll_interval_s": 3.0
   },
 
   "metrics": {

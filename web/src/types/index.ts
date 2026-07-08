@@ -111,6 +111,30 @@ export interface TokenBurnOut {
   total_cost_usd: number;
 }
 
+export interface ArtifactEditEntry {
+  artifact_id: string;
+  phase_name: string;
+  eval_refinements: number;
+  feedback_rounds: number;
+  total_edits: number;
+}
+
+export interface ArtifactEditsOut {
+  artifacts: ArtifactEditEntry[];
+  total_edits: number;
+}
+
+export interface RunReportOut {
+  exported_at: string;
+  run: PipelineRun;
+  phases: PhaseExecution[];
+  tasks: TaskExecution[];
+  events: AgentEvent[];
+  global_health: GlobalHealthMetrics;
+  token_burn: TokenBurnOut;
+  artifact_edits: ArtifactEditsOut;
+}
+
 export interface SSEEvent {
   event: string;
   data: Record<string, unknown>;

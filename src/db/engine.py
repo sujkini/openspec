@@ -13,10 +13,15 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def _ensure_data_dir(url: str) -> None:
-    """Create the parent directory for SQLite file URLs."""
+    """Create the parent directory for SQLite file URLs with proper permissions."""
     if url.startswith("sqlite"):
         db_path = url.split("///")[-1]
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        parent = Path(db_path).parent
+        parent.mkdir(parents=True, exist_ok=True)
+        try:
+            parent.chmod(0o777)
+        except OSError:
+            pass
 
 
 def get_engine():

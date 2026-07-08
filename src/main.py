@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -11,13 +12,28 @@ from src.core.config import get_settings
 from src.core.sse import sse_broker
 from src.db.engine import init_db
 from src.api.v1.router import v1_router
+from src.services.file_event_poller import FileEventPoller
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    cfg = get_settings()
     await init_db()
     await sse_broker.start()
+
+    poller = FileEventPoller(
+        changes_dir=cfg.openspec.changes_dir,
+        poll_interval_s=cfg.telemetry.poll_interval_s,
+    )
+    poller_task = asyncio.create_task(poller.run())
+
     yield
+
+    poller_task.cancel()
+    try:
+        await poller_task
+    except asyncio.CancelledError:
+        pass
     await sse_broker.stop()
 
 

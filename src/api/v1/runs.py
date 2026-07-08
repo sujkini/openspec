@@ -5,8 +5,10 @@ from sqlalchemy import select, func
 
 from src.core.dependencies import DBSession, Settings
 from src.models.run import PipelineRun
+from src.schemas.report import RunReportOut
 from src.schemas.run import RunCreate, RunUpdate, RunOut, RunListOut
 from src.services.pipeline_scanner import scan_changes
+from src.services.report_service import build_run_report
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -31,6 +33,11 @@ async def get_run(run_id: str, db: DBSession):
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return RunOut.model_validate(run)
+
+
+@router.get("/{run_id}/report", response_model=RunReportOut)
+async def export_run_report(run_id: str, db: DBSession, cfg: Settings):
+    return await build_run_report(db, run_id, cfg)
 
 
 @router.post("", response_model=RunOut, status_code=201)

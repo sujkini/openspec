@@ -1,13 +1,39 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from pathlib import Path
 
 from src.core.config import AppConfig
 from src.models.phase import PhaseExecution, PhaseStatus
 from src.models.run import PipelineRun
 from src.models.task import TaskExecution, TaskStatus
-from src.schemas.metrics import GlobalHealthMetrics, TokenBurnEntry, TokenBurnOut
+from src.schemas.metrics import (
+    ArtifactEditEntry,
+    ArtifactEditsOut,
+    GlobalHealthMetrics,
+    TokenBurnEntry,
+    TokenBurnOut,
+)
+from src.services.change_metrics import (
+    ARTIFACT_PHASE_MAP,
+    count_feedback_rounds,
+    read_eval_refinement_round,
+)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Treat naive DB timestamps as UTC (SQLite stores UTC without tzinfo)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 async def compute_global_health(
@@ -32,8 +58,9 @@ async def compute_global_health(
 
     wall_time = 0.0
     if run.started_at:
-        end = run.completed_at or run.started_at.__class__.now(run.started_at.tzinfo)
-        wall_time = (end - run.started_at).total_seconds()
+        start = _as_utc(run.started_at)
+        end = _as_utc(run.completed_at) if run.completed_at else _utc_now()
+        wall_time = max(0.0, (end - start).total_seconds())
 
     phases_q = await db.execute(
         select(PhaseExecution).where(PhaseExecution.run_id == run_id)
@@ -114,3 +141,42 @@ async def compute_token_burn(
     total_cost = sum(e.cost_usd for e in entries)
 
     return TokenBurnOut(entries=entries, total_tokens=total_tokens, total_cost_usd=total_cost)
+
+
+async def compute_artifact_edits(
+    db: AsyncSession,
+    run_id: str,
+    cfg: AppConfig,
+) -> ArtifactEditsOut:
+    run = await db.get(PipelineRun, run_id)
+    if run is None:
+        return ArtifactEditsOut(artifacts=[], total_edits=0)
+
+    change_slug = run.change_name.split(" — ", 1)[-1] if " — " in run.change_name else run.change_name
+    change_dir = Path(cfg.openspec.changes_dir) / change_slug
+    if not change_dir.is_dir():
+        return ArtifactEditsOut(artifacts=[], total_edits=0)
+
+    entries: list[ArtifactEditEntry] = []
+    for artifact_id, (_phase_num, phase_name, _is_last) in ARTIFACT_PHASE_MAP.items():
+        artifact_path = change_dir / f"{artifact_id}.md"
+        if not artifact_path.exists():
+            artifact_path = change_dir / f"{artifact_id}.json"
+        if not artifact_path.exists():
+            continue
+        eval_ref = read_eval_refinement_round(change_dir, artifact_id)
+        fb = count_feedback_rounds(change_dir, artifact_id)
+        entries.append(
+            ArtifactEditEntry(
+                artifact_id=artifact_id,
+                phase_name=phase_name,
+                eval_refinements=eval_ref,
+                feedback_rounds=fb,
+                total_edits=eval_ref + fb,
+            )
+        )
+
+    return ArtifactEditsOut(
+        artifacts=entries,
+        total_edits=sum(e.total_edits for e in entries),
+    )
