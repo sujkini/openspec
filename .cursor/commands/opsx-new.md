@@ -38,8 +38,12 @@ If no Jira key, ask once. Do **not** proceed without it.
 4. Fetch ticket → `inputs/jira-spec.md`:
    - Use Jira MCP if configured, **or**
    - Ask the user to paste ticket content into `inputs/jira-spec.md`.
-5. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
-6. **STOP** — do not create artifacts yet.
+5. **Telemetry — register run** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-new --change "<name>" --jira-key "<JIRA-KEY>"
+   ```
+6. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
+7. **STOP** — do not create artifacts yet.
 
 Prompt: `/opsx-continue` to create `validation.json`.
 

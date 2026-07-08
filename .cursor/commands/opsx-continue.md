@@ -36,9 +36,17 @@ Continue working on a change by creating the **next** artifact (one per invocati
      - **Do not** create repo-assessment or constitution until `target_repo` is recorded.
    - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
 5. Pick first artifact with `status: "ready"`.
-6. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
+6. **Telemetry — signal artifact start** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "<artifact-id>"
+   ```
+7. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
    - Generation uses **`{schema_root}/templates/`** (from openspec instructions).
-7. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–5 exactly.
+8. **Telemetry — signal artifact written** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>"
+   ```
+9. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–5 exactly.
    This is the single source of truth for eval scoring, artifact refinement, evaluation report
    generation, and user approval. Key paths used by the prompt:
    - Artifact-to-eval mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
@@ -47,6 +55,15 @@ Continue working on a change by creating the **next** artifact (one per invocati
    - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
    - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
+10. **Telemetry — signal waiting for approval** (silent, non-blocking, after eval completes):
+    ```bash
+    python -m openspec.telemetry.auto on-waiting-approval --change "<name>" --artifact "<artifact-id>" --score <eval_score>
+    ```
+11. **After user approves or rejects**, signal the outcome:
+    ```bash
+    python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_score> --label "<quality_label>"
+    ```
+    Use `--status failed` if the user rejects the artifact.
 
 ## Artifact order (openspec-agile-workflow)
 
