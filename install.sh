@@ -75,6 +75,13 @@ add_if_missing "eval-generation/eval-generation-workflow/refined-templates/"
 add_if_missing "eval-generation/eval-generation-workflow/round-state.yaml"
 add_if_missing "openspec/changes/"
 
+echo "==> Configuring dashboard workspace..."
+DASHBOARD_CONFIG="$SCRIPT_DIR/dashboard/config.json"
+if [ -f "$DASHBOARD_CONFIG" ]; then
+  sed -i "s|\"workspace\":.*|\"workspace\": \"$TARGET_DIR\",|" "$DASHBOARD_CONFIG"
+  echo "    dashboard/config.json workspace set to: $TARGET_DIR"
+fi
+
 echo ""
 echo "=== Installation complete ==="
 echo ""
@@ -82,6 +89,7 @@ echo "Next steps:"
 echo "  1. Edit openspec/inputs/agents.md      — define your operator's architecture & agent routing"
 echo "  2. Edit openspec/inputs/constitution.md — define coding guardrails & CI gates"
 echo "  3. Restart Cursor so slash commands load from .cursor/commands/"
-echo "  4. (Optional) Run /eval-loop to generate quality evals from a completed feature"
-echo "  5. Run /opsx-new <JIRA-KEY> to start your first change"
+echo "  4. (Optional) Start the dashboard: $SCRIPT_DIR/dashboard/start.sh"
+echo "  5. (Optional) Run /eval-loop to generate quality evals from a completed feature"
+echo "  6. Run /opsx-new <JIRA-KEY> to start your first change"
 echo ""

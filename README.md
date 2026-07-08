@@ -23,10 +23,16 @@ This installs the OpenSpec CLI, runs `openspec init`, and copies `.cursor/`, `op
 
 The dashboard provides real-time pipeline metrics, token burn charts, and live event streaming.
 
+The `install.sh` script automatically configures the dashboard to point at your operator repo. Just run:
+
 ```bash
-cd /tmp/openspec-workflow/dashboard
-pip install -r requirements.txt
-./start.sh
+/tmp/openspec-workflow/dashboard/start.sh
+```
+
+Or pass the workspace explicitly:
+
+```bash
+/tmp/openspec-workflow/dashboard/start.sh /path/to/your-operator-repo
 ```
 
 Opens at **http://localhost:5173**. Uses Docker if available, otherwise sets up a local Python venv + Node.js.

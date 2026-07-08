@@ -4,7 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-export OPSX_WORKSPACE="${1:-${OPSX_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
+# Resolve workspace: arg > env var > config.json > parent dir
+if [ -n "${1:-}" ]; then
+  export OPSX_WORKSPACE="$1"
+elif [ -n "${OPSX_WORKSPACE:-}" ]; then
+  export OPSX_WORKSPACE
+elif [ -f "config.json" ]; then
+  CFG_WORKSPACE="$(grep '"workspace"' config.json | sed 's/.*: *"\(.*\)".*/\1/' | sed 's/,$//')"
+  if [ -n "$CFG_WORKSPACE" ] && [[ "$CFG_WORKSPACE" != *'${'* ]]; then
+    export OPSX_WORKSPACE="$CFG_WORKSPACE"
+  else
+    export OPSX_WORKSPACE="$(cd "$SCRIPT_DIR/.." && pwd)"
+  fi
+else
+  export OPSX_WORKSPACE="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 echo "==> OpenSpec Observability Dashboard"
 echo "    Workspace: $OPSX_WORKSPACE"
