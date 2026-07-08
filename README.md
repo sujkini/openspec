@@ -1,6 +1,6 @@
 # openspec-agile-workflow
 
-Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation.
+Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two code-generation strategies: **ai-helpers** (OAPE command routing + eval gate) and **direct** (plain agent implementation).
 
 ---
 
@@ -9,7 +9,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 ### 1. Clone & Install
 
 ```bash
-git clone -b openspec-ai-helpers https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-project
 ```
 
@@ -147,7 +147,9 @@ If you **reject**, the agent refines and re-runs evals until you approve. Previo
 /opsx-apply                 → task T1 [approve] → task T2 [approve] → … → done
 ```
 
-For each pending task:
+The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
+
+**ai-helpers mode** (`codegen_mode: ai-helpers`):
 1. Compose `design-bundle.md` scoped to that task
 2. Resolve one OAPE command (or manual work)
 3. Run in fork working copy (or project cwd in working-folder mode)
@@ -155,6 +157,13 @@ For each pending task:
 5. Run code-generation evals → refine code (max 2 passes)
 6. Present task summary + scorecard → user approval
 7. On approve: mark task complete, next task
+
+**direct mode** (`codegen_mode: direct`):
+1. Read context files (agents.md, constitution.md, specs, plan, repo-assessment)
+2. Implement code directly via FILE OPERATIONS
+3. Verify against acceptance criteria
+4. Present task summary → user approval
+5. On approve: mark task complete, next task
 
 ### Archive
 
@@ -196,7 +205,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-explore` | Explore ideas without creating artifacts |
 
-### OAPE commands (during `/opsx-apply`)
+### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
 
 | Command | When |
 |---------|------|
@@ -204,6 +213,8 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/oape:api-generate-tests` | API_Agent verification task |
 | `/oape:api-implement` | OperatorController_Agent task |
 | `/oape:e2e-generate` | E2E / Testing_Agent task |
+
+These commands are **not used** when `codegen_mode: direct`.
 
 ### Retrospective eval loop
 
@@ -266,14 +277,22 @@ Key flags you can tune:
 
 ```yaml
 flags:
+  codegen_mode: ai-helpers       # "ai-helpers" or "direct"
   max_feedback_rounds: 3
   exit_on_all_tasks_complete: true
 ```
 
 | Flag | Default | What it does |
 |------|---------|--------------|
+| `codegen_mode` | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
 | `max_feedback_rounds` | 3 | Max rejection + refinement loops per artifact before halting |
 | `exit_on_all_tasks_complete` | true | Auto-exit implementation when all tasks marked `[x]` |
+
+### Code generation modes
+
+**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
+
+**`direct`** — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
 
 ---
 
@@ -290,7 +309,7 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 | **Constitution (input)** | `constitution.md` (resolved) | Non-negotiable guardrails |
 | **Planning** | `plan.md` | Phased implementation plan |
 | **Task creation** | `tasks.md` | Executable task manifest with agents |
-| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval |
+| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval (ai-helpers or direct mode) |
 | **Archive** | archived change | Close out |
 
 ---

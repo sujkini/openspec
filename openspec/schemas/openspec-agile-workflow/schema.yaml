@@ -6,7 +6,9 @@ description: >-
   repo-assessment.md, plan.md, tasks.md, and (during implementation)
   implementation-report.md and optional deviation-observed.md.
   constitution.md is an INPUT (resolved from target repo or schema inputs/).
-  Implementation uses OAPE command orchestration (/opsx:apply).
+  Implementation mode is controlled by config.yaml flags.codegen_mode:
+    "ai-helpers" — OAPE command orchestration with code-generation eval gate
+    "direct"     — plain agent implementation (no OAPE, no code eval gate).
   Templates from templates/.
 
 templates_dir: templates
@@ -51,12 +53,15 @@ agents_md:
         otherwise use provisional agent IDs from constitution/tasks template.
     - id: implementation
       required: false
-      when: task-by-task OAPE command orchestration within each phase
+      when: task-by-task code generation within each phase
       effect: >-
-        Route Assigned Agent values from tasks.md §3 to OAPE commands per
-        schema oape_routing — one task at a time. Compose design-bundle.md per
-        task. Manual agents use task payloads directly. User approval after every
-        task before advancing. See oape-ai-e2e/AGENTS.md for command flow.
+        ai-helpers mode (codegen_mode = ai-helpers): Route Assigned Agent values
+        from tasks.md §3 to OAPE commands per schema oape_routing — one task at
+        a time. Compose design-bundle.md per task. Manual agents use task payloads
+        directly. User approval after every task before advancing.
+        direct mode (codegen_mode = direct): Agent reads context files and implements
+        code directly using FILE OPERATIONS. No OAPE command routing. User approval
+        after every task before advancing.
   not_used_in_stages:
     - spec-understanding
   lookup_order:
@@ -102,8 +107,10 @@ constitution_md:
       effect: Enforces coding conventions and testing requirements in task payloads.
     - id: implementation
       required: true
-      when: OAPE command execution and code generation
-      effect: Code must follow constitution principles; verified during code eval gate.
+      when: code generation (both ai-helpers and direct modes)
+      effect: >-
+        Code must follow constitution principles. ai-helpers mode: verified during
+        code eval gate. direct mode: verified via acceptance criteria tests.
   not_used_in_stages:
     - spec-understanding
   template_for_generation: templates/constitution-template.md
@@ -184,8 +191,9 @@ working_folder_repo:
       Resolve AGENTS.md from the working folder first, then change inputs/.
   implementation:
     working_copy: >-
-      Same as working_folder_path / project root. All OAPE commands and code edits
-      apply in this directory — not a cloned fork.
+      Same as working_folder_path / project root. All code edits (OAPE commands
+      in ai-helpers mode, direct FILE OPERATIONS in direct mode) apply in this
+      directory — not a cloned fork.
     cwd: project root (working folder)
     skip_fork_setup: true
     do_not:
@@ -249,13 +257,15 @@ stage_eval_gate:
 
 # ---------------------------------------------------------------------------
 # code_generation_eval_gate — per-task code evals during /opsx-apply
+# applies_when: codegen_mode = ai-helpers (skipped entirely in direct mode)
 # ---------------------------------------------------------------------------
 code_generation_eval_gate:
+  applies_when: "codegen_mode = ai-helpers"
   description: >-
     After each task's OAPE command (or manual agent work) and verification,
     score generated code in the fork against code-generation evals before user
     task approval. Cases are authored retrospectively by /eval-loop from EPs,
-    PRs, and bug postmortems.
+    PRs, and bug postmortems. This gate is SKIPPED when codegen_mode = direct.
   runs_during: implementation
   runs_after:
     - oape_command_or_manual_work
@@ -441,14 +451,19 @@ user_approval_feedback_gate:
       specs rejection does not use on_reject steps above.
   per_task_implementation_variant:
     description: >-
-      Implementation runs OAPE commands task-by-task. User approval is required
-      after every task before advancing to the next. On reject, append feedback
-      to design-bundle.md and re-run the current task only — upstream approved
-      artifacts and already-approved tasks remain immutable.
-    feedback_target: implementation/design-bundle.md
+      Implementation runs task-by-task. ai-helpers mode uses OAPE commands;
+      direct mode implements code directly. User approval is required after
+      every task before advancing to the next. On reject, incorporate feedback
+      and re-run the current task only — upstream approved artifacts and
+      already-approved tasks remain immutable.
+    feedback_target:
+      ai-helpers: implementation/design-bundle.md
+      direct: implementation approach (in-context)
     on_reject: >-
-      Append user feedback to REVISION FEEDBACK in design-bundle.md; re-run OAPE
-      commands for the current task only; do not mark the task complete, do not
+      ai-helpers mode: Append user feedback to REVISION FEEDBACK in
+      design-bundle.md; re-run OAPE commands for the current task only.
+      direct mode: Incorporate feedback into implementation approach; re-run
+      current task only. Both modes: do not mark the task complete, do not
       advance to the next task, and do not edit approved upstream artifacts.
   exit_on_reject:
     description: >-
@@ -551,13 +566,16 @@ fork_repo:
 
 # ---------------------------------------------------------------------------
 # oape_routing — OAPE command orchestration for /opsx:apply
+# applies_when: codegen_mode = ai-helpers (ignored entirely in direct mode)
 # ---------------------------------------------------------------------------
 oape_routing:
+  applies_when: "codegen_mode = ai-helpers"
   description: >-
     Maps tasks.md Assigned Agent values to OAPE cursor commands. Implementation
     runs task-by-task: compose a design bundle scoped to one task, invoke exactly
     one allowed OAPE command for that task (see command_resolution), verify,
-    then request user approval before advancing.
+    then request user approval before advancing. This routing is IGNORED when
+    codegen_mode = direct — the agent implements code directly.
   code_generation_prompt: templates/code-generation-template.md
   reference: oape-ai-e2e/AGENTS.md
   commands_dir: .cursor/commands
@@ -774,8 +792,11 @@ workflow:
     name: Implementation Stage
     description: >-
       Final pipeline stage. Begins after Task Creation (tasks.md) is approved.
+      Code generation strategy is determined by config.yaml flags.codegen_mode:
+      ai-helpers uses OAPE command routing and code eval gate; direct uses plain
+      agent implementation.
       **Default:** The agent asks for fork_repo_url, clones the fork, and drives
-      OAPE task-by-task; when complete, pushes and opens a draft PR.
+      tasks task-by-task; when complete, pushes and opens a draft PR.
       **Working-folder mode:** Uses the current project checkout (see schema
       working_folder_repo) — no fork, no draft PR.
       User approval is required after every task. Closes with implementation-report.md
@@ -1144,8 +1165,10 @@ artifacts:
     generates: implementation/design-bundle.md
     template: design-bundle-template.md
     description: >-
-      OAPE orchestration — task-by-task execution into the fork using composed
-      design-bundle.md (tasks.md + upstream artifacts) and /oape:* cursor commands.
+      Task-by-task execution into the fork (or working folder). Mode depends on
+      config.yaml flags.codegen_mode:
+        ai-helpers — composed design-bundle.md + /oape:* cursor commands + code eval gate.
+        direct — agent reads context files, implements code directly, no OAPE.
       User approval after every task before advancing.
     outputs:
       - code changes in user's fork (or project working folder when use_working_folder_as_repo)
@@ -1168,14 +1191,25 @@ artifacts:
         - AGENTS.md
         - agents.md
     instruction: |
-      You are the OAPE Implementation Orchestrator.
+      You are the Implementation Orchestrator.
+
+      ## Mode
+      Read config.yaml → flags.codegen_mode (default: "direct"):
+      - **ai-helpers**: OAPE command routing + code-generation eval gate
+      - **direct**: plain agent implementation, no OAPE commands, no code eval gate
 
       ## Mission
-      Execute approved tasks.md **task-by-task** in §2 Linear Execution Order. For
-      each task, compose a design bundle scoped to that Task ID, invoke applicable
-      OAPE cursor commands (see schema oape_routing and oape-ai-e2e/AGENTS.md),
+      Execute approved tasks.md **task-by-task** in §2 Linear Execution Order.
+
+      **ai-helpers mode**: For each task, compose a design bundle scoped to that
+      Task ID, invoke applicable OAPE cursor commands (see schema oape_routing),
       verify, run **code-generation evals**, refine code until evals pass, then
       **request user approval of the code** before advancing to the next task.
+
+      **direct mode**: For each task, read context files (agents.md, constitution.md,
+      specs.md, plan.md, repo-assessment.md, task §4 payload), implement code
+      directly, verify, then **request user approval** before advancing.
+
       Work in the user's fork working copy, **or the project working folder when
       use_working_folder_as_repo is true** (see schema working_folder_repo). Push
       and open draft PR when all tasks are approved and complete — **unless
@@ -1184,10 +1218,10 @@ artifacts:
       ## Prerequisites
       Confirm in openspec/changes/<change>/:
       - tasks.md, constitution.md, specs.md, plan.md (approved)
-      - OAPE commands in .cursor/commands/ (api-generate.md, api-implement.md, etc.)
+      - **ai-helpers mode**: OAPE commands in .cursor/commands/ (api-generate.md, api-implement.md, etc.)
       - gh, go, git, make available; gh authenticated (gh optional in working-folder mode)
 
-      ## Repo / fork setup (REQUIRED — before any OAPE command)
+      ## Repo / fork setup (REQUIRED — before any code generation)
       Read inputs/jira.yaml for use_working_folder_as_repo (see schema working_folder_repo).
 
       **Working-folder mode** (use_working_folder_as_repo true or user directed):
@@ -1195,14 +1229,14 @@ artifacts:
       2. Record working_folder_path in jira.yaml if not already set.
       3. Do NOT ask for fork_repo_url; do NOT clone a fork; do NOT create a feature
          branch unless the user explicitly requests one.
-      4. All OAPE commands and code edits apply in cwd.
+      4. All code edits apply in cwd.
 
       **Default mode:**
       1. Read inputs/jira.yaml for fork_repo_url (see schema fork_repo).
       2. If fork_repo_url is absent, ASK once for the fork URL; persist to jira.yaml.
       3. Clone or verify fork checkout; record jira_key for branch naming.
       4. Create feature branch (see fork_repo.feature_branch). All work on this branch.
-      5. Set cwd to fork root for every OAPE command.
+      5. Set cwd to fork root.
 
       ## Task and phase parsing
       From tasks.md:
@@ -1213,7 +1247,9 @@ artifacts:
       5. Skip phases whose tasks are all complete.
       6. If §4 absent, treat backlog as single "All Tasks" phase.
 
-      ## Design bundle (each task)
+      ## Task execution loop — ai-helpers mode (codegen_mode = ai-helpers)
+
+      ### Design bundle (each task)
       1. Create openspec/changes/<change>/implementation/ if missing.
       2. Write implementation/design-bundle.md using templates/design-bundle-template.md.
       3. Include constitution, specs, plan, repo-assessment excerpts + §4 payload
@@ -1223,7 +1259,7 @@ artifacts:
       5. On task rejection, add REVISION FEEDBACK and regenerate bundle when
          re-running the current task.
 
-      ## Task execution loop
+      ### Per-task steps (ai-helpers)
       FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
 
       1. **Compose** design-bundle.md scoped to this Task ID.
@@ -1265,20 +1301,41 @@ artifacts:
       api-generate-tests path: derive from current task §4 Target file(s) or repo-assessment.
       Base branch for e2e-generate: fork default (main/master).
 
+      ## Task execution loop — direct mode (codegen_mode = direct)
+
+      FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
+
+      1. **Read context**: agents.md, constitution.md, specs.md, plan.md,
+         repo-assessment.md, tasks.md §4 payload for **current Task ID only**.
+         Include REVISION FEEDBACK if retrying after rejection.
+      2. **Implement code directly**: Apply code changes in the working copy following
+         agents.md patterns, constitution.md guardrails, task payload instructions,
+         and acceptance criteria.
+      3. **Verify**: Run Acceptance criteria for this task; record pass/fail.
+      4. **Present** task summary and files touched.
+      5. **ASK**: "Approve the code changes for task {task_id} ({task_title})?"
+      6. **ON REJECT**: Incorporate feedback into implementation approach; re-run
+         **this task only** from step 1.
+      7. **ON APPROVE**:
+         - Write `implementation/task-reports/<task-id>.md`
+         - Mark task `- [x]` in tasks.md
+         - Advance to next task in §2 order
+
       ## Task response format (presented after each task, before approval)
       ### ## TASK SUMMARY
-      Task ID, title, phase, Assigned Agent, OAPE commands run, files touched.
+      Task ID, title, phase, Assigned Agent, files touched.
+      ai-helpers mode: include OAPE commands run.
 
-      ### ## OAPE COMMANDS EXECUTED
+      ### ## OAPE COMMANDS EXECUTED (ai-helpers mode only)
       | Command | Args | Outcome |
       |---------|------|---------|
 
       ### ## TEST RESULTS
       | Test | Result | Notes |
 
-      ### ## CODE GENERATION EVAL SCORECARD
+      ### ## CODE GENERATION EVAL SCORECARD (ai-helpers mode only)
       Overall score, cases pass/fail, refinement rounds, eval-driven fixes applied.
-      Omit section when no applicable eval cases.
+      Omit section when no applicable eval cases or when codegen_mode = direct.
 
       ### ## APPROVAL
       Ask user to approve **code changes** for this task (not just the plan).
@@ -1288,11 +1345,11 @@ artifacts:
 
       ## Error handling
       - fork_repo_url missing → halt and ask user (**skip when use_working_folder_as_repo**).
-      - OAPE precheck failure → report, suggest fix, wait for user.
+      - ai-helpers mode: OAPE precheck failure → report, suggest fix, wait for user.
       - Test failure on a task → report; do not advance to next task without user decision.
       - Never skip task approval gate.
-      - Invoke exactly one allowed OAPE command per task; never predict-regressions,
-        review, or any command outside allowed_commands.
+      - ai-helpers mode: Invoke exactly one allowed OAPE command per task; never
+        predict-regressions, review, or any command outside allowed_commands.
 
       ## Post-loop (all tasks approved)
       0. **Exit check:** When `exit_on_all_tasks_complete` is true (config.yaml flags,
@@ -1309,15 +1366,21 @@ artifacts:
       type: per_task_approval
       evaluated_by: user
       feedback_gate: user_approval_feedback_gate
-      prompt: see schema oape_routing.task_approval_prompt
+      prompt: >-
+        ai-helpers mode: see schema oape_routing.task_approval_prompt (includes eval score).
+        direct mode: "Approve the code changes for task {task_id} ({task_title})?"
       on_reject: >-
-        Run user_approval_feedback_gate per_task_implementation_variant: append
-        user feedback to design-bundle.md REVISION FEEDBACK; re-run OAPE commands
-        for the current task only; do not mark the task complete, do not advance
-        to the next task, and do not modify approved upstream artifacts.
+        ai-helpers mode: Run user_approval_feedback_gate per_task_implementation_variant:
+        append user feedback to design-bundle.md REVISION FEEDBACK; re-run OAPE commands
+        for the current task only.
+        direct mode: Incorporate feedback into implementation approach; re-run current
+        task only.
+        Both modes: do not mark the task complete, do not advance to the next task,
+        and do not modify approved upstream artifacts.
       on_command_failure: >-
-        Report OAPE precheck or execution failure; do not advance until resolved
-        or user directs otherwise.
+        ai-helpers mode: Report OAPE precheck or execution failure; do not advance
+        until resolved or user directs otherwise.
+        direct mode: Report verification or test failure; do not advance until resolved.
     requires:
       - tasks
 
@@ -1403,20 +1466,25 @@ apply:
     {working_folder_path from inputs/jira.yaml when use_working_folder_as_repo is true}
   upstream_repo: "{target_repo from inputs/jira.yaml — reference only}"
   tracks: tasks.md
-  oape_routing: true
+  codegen_mode: "config.yaml → flags.codegen_mode (ai-helpers | direct)"
+  oape_routing: "applies when codegen_mode = ai-helpers"
   instruction: |
-    Execute the Implementation Stage via OAPE orchestration. Follow the
-    `implementation` artifact instruction and schema `oape_routing` exactly.
+    Execute the Implementation Stage. Read config.yaml → flags.codegen_mode to
+    determine the code generation strategy. Follow the `implementation` artifact
+    instruction. When codegen_mode = ai-helpers, also follow schema `oape_routing`.
 
     Entry: /opsx:apply on a change where tasks.md and upstream artifacts are approved.
 
-    FIRST STEP: Read inputs/jira.yaml for use_working_folder_as_repo.
+    FIRST STEP: Read inputs/jira.yaml for use_working_folder_as_repo. Read
+    config.yaml → flags.codegen_mode (default: "direct").
     - **Working-folder mode:** Set cwd to project root; do not ask for fork_repo_url;
       do not clone or open draft PR (see schema working_folder_repo).
     - **Default mode:** Ask for fork_repo_url if missing. Clone fork, create feature
       branch, set cwd to fork root.
 
     FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
+
+      **ai-helpers mode (codegen_mode = ai-helpers):**
       1. Compose implementation/design-bundle.md scoped to current Task ID only.
       2. Resolve ONE OAPE command per oape_routing.command_resolution (allowed only:
          api-generate, api-generate-tests, api-implement, e2e-generate if e2e task).
@@ -1430,6 +1498,15 @@ apply:
          next task.
       8. On reject: REVISION FEEDBACK in design bundle; re-run current task only.
 
+      **direct mode (codegen_mode = direct):**
+      1. Read context files (agents.md, constitution.md, specs.md, plan.md,
+         repo-assessment.md, tasks.md §4 payload for current Task ID only).
+      2. Implement code directly in the working copy.
+      3. Verify per task Acceptance criteria.
+      4. Present task summary; ask user to approve code changes.
+      5. On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
+         next task.
+      6. On reject: incorporate feedback; re-run current task only.
+
     After all tasks: write implementation-report.md aggregating all task-reports/.
-    per task. Do not use predict-regressions, review, or any other OAPE command.
     Do not advance to the next task until the user approves the code for the current task.

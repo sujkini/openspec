@@ -5,19 +5,34 @@
 **Task Title**: [TASK_TITLE]
 **Phase**: [PHASE_NAME]
 **Assigned Agent**: [ASSIGNED_AGENT]
-**OAPE Command**: [OAPE_COMMAND or manual]
 **Approved**: [ISO8601_DATE]
 **User approved by**: [user confirmation]
 
+<!-- [ai-helpers mode — codegen_mode: ai-helpers] -->
+
+**OAPE Command**: [OAPE_COMMAND or manual]
+
+<!-- [END mode-specific] -->
+
 ## Summary
 
-[2–4 sentences: what this task implemented, outcome of OAPE command, eval gate result, and test status.]
+[2–4 sentences: what this task implemented, outcome, and test status.]
+
+<!-- [ai-helpers mode — codegen_mode: ai-helpers] -->
+
+[Include OAPE command outcome and eval gate result.]
+
+<!-- [END mode-specific] -->
+
+<!-- [ai-helpers mode — codegen_mode: ai-helpers] -->
 
 ## OAPE Commands Executed
 
 | Command | Args | Outcome |
 |---------|------|---------|
 | /oape:… | … | Success / Failed |
+
+<!-- [END mode-specific] -->
 
 ## Code Changes
 
@@ -40,6 +55,8 @@
 | Task acceptance criteria | PASSED / FAILED | |
 | make targets | PASSED / FAILED | |
 
+<!-- [ai-helpers mode — codegen_mode: ai-helpers] -->
+
 ## Code Generation Eval Gate
 
 **Eval results**: `eval-results/code-generation-[TASK_ID].yaml`
@@ -60,10 +77,16 @@
 
 - [List fixes made to pass eval cases — or "None; all cases passed on first score"]
 
+<!-- [END mode-specific] -->
+
 ## Deviations
 
 [None — or describe deviation from task payload / constitution and rationale]
 
+<!-- [ai-helpers mode — codegen_mode: ai-helpers] -->
+
 ## Links
 
 - Design bundle: `implementation/design-bundle.md` (snapshot at approval time)
+
+<!-- [END mode-specific] -->
