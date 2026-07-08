@@ -47,7 +47,7 @@ rules:
     - "Working-folder mode: use project cwd; no fork, no draft PR (schema working_folder_repo)"
     - "Default mode: Ask user for fork_repo_url at stage start; persist to inputs/jira.yaml"
     - "Clone fork, create feature branch, apply FILE OPERATIONS to fork working copy (not upstream)"
-    - "Task-by-task execution with per-task user approval gate (one OAPE command per task)"
+    - "Task-by-task execution with per-task user approval gate"
     - "Execute unit test block per task (real go test); controller tasks must co-generate _test.go files following agents.md exemplar"
     - "After all phases: commit, push feature branch, open draft PR on fork (head = feature branch, base = master/main)"
     - "Close with implementation-report.md, optional deviation-observed.md"

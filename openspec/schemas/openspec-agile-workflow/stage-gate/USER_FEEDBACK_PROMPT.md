@@ -177,10 +177,9 @@ Single joint approval covers both. On reject:
 
 ## Implementation task approval variant
 
-Implementation runs OAPE **task-by-task**. User approval is required **after every
-task** before advancing to the next. On reject, append feedback to
-`implementation/design-bundle.md` **REVISION FEEDBACK** and re-run OAPE commands for
-the **current task only** — do not use this artifact feedback loop for per-task code.
+Implementation runs **task-by-task**. User approval is required **after every
+task** before advancing to the next. On reject, incorporate feedback and
+re-implement the **current task only** — do not use this artifact feedback loop for per-task code.
 
 ---
 

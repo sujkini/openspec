@@ -148,13 +148,11 @@ If you **reject**, the agent refines and re-runs evals until you approve. Previo
 ```
 
 For each pending task:
-1. Compose `design-bundle.md` scoped to that task
-2. Resolve one OAPE command (or manual work)
-3. Run in fork working copy (or project cwd in working-folder mode)
-4. Verify against acceptance criteria
-5. Run code-generation evals → refine code (max 2 passes)
-6. Present task summary + scorecard → user approval
-7. On approve: mark task complete, next task
+1. Read task payload and context files (agents.md, constitution.md, specs, plan)
+2. Implement code directly in the working copy
+3. Verify against acceptance criteria
+4. Present task summary → user approval
+5. On approve: mark task complete, next task
 
 ### Archive
 
@@ -191,19 +189,10 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | Command | Purpose |
 |---------|---------|
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
-| `/opsx-continue` | Create next artifact; eval gate; approval |
+| `/opsx-continue` | Create next artifact; stage eval; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-explore` | Explore ideas without creating artifacts |
-
-### OAPE commands (during `/opsx-apply`)
-
-| Command | When |
-|---------|------|
-| `/oape:api-generate` | API_Agent task |
-| `/oape:api-generate-tests` | API_Agent verification task |
-| `/oape:api-implement` | OperatorController_Agent task |
-| `/oape:e2e-generate` | E2E / Testing_Agent task |
 
 ### Retrospective eval loop
 
@@ -239,7 +228,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 │   │   ├── schema.yaml                    # Workflow definition
 │   │   ├── templates/                     # Generic artifact templates (*-template.md)
 │   │   ├── evals/                         # Stage eval cases (quality gates)
-│   │   ├── stage-gate/                    # Eval gate prompts and artifact map
+│   │   ├── stage-gate/                    # Stage eval prompts and artifact map
 │   │   └── feedback_stage_artifacts/      # Format spec for rejection rounds
 │   └── changes/                           # Active changes (created per /opsx-new)
 ├── .cursor/                               # Pre-built — Cursor loads immediately
@@ -290,7 +279,7 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 | **Constitution (input)** | `constitution.md` (resolved) | Non-negotiable guardrails |
 | **Planning** | `plan.md` | Phased implementation plan |
 | **Task creation** | `tasks.md` | Executable task manifest with agents |
-| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval |
+| **Implementation** | code + `implementation-report.md` | Direct task-by-task execution with per-task approval |
 | **Archive** | archived change | Close out |
 
 ---

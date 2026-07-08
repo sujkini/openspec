@@ -2,22 +2,20 @@
 name: /opsx:apply
 id: opsx-apply
 category: Workflow
-description: Implement tasks via OAPE command orchestration (one task per invocation, state machine driven)
+description: Implement tasks directly — one task per invocation, state machine driven
 ---
 
-Implement an OpenSpec change using OAPE commands. **ONE task per invocation.**
+Implement an OpenSpec change by directly coding each task. **ONE task per invocation.**
 State-machine driven with externalized state at `implementation/state.yaml`.
 
-**Per-task flow:** OAPE → verify → tests → eval gate → refine → present → YIELD → wait for next invocation.
-
-**Reference:** schema `oape_routing`, `code_generation_eval_gate`, `{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`
+**Per-task flow:** implement → verify → present → YIELD → wait for next invocation.
 
 **Input**: Optionally specify a change name (e.g., `/opsx:apply cm-830`). If omitted, infer from context or prompt.
 
 ## Architecture: State Machine
 
 ```
-States: IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+States: IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
 ```
 
 The orchestrator reads state, executes ONE task, writes state, and YIELDS.
@@ -34,7 +32,7 @@ Initialize from template on first invocation if missing.
 
 1. **Read `state.yaml` FIRST** — before any other action, every single invocation
 2. **ONE task per invocation** — you MUST NOT execute more than one task in a single response. When you finish presenting a task for approval, your response is DONE. Period.
-3. **YIELD = END YOUR RESPONSE** — after the approval question, you MUST stop generating text. Do not read the next task. Do not compose the next design bundle. Do not think about what comes next. YOUR RESPONSE ENDS.
+3. **YIELD = END YOUR RESPONSE** — after the approval question, you MUST stop generating text. Do not read the next task. Do not think about what comes next. YOUR RESPONSE ENDS.
 4. **On user "approve"** — write task report, mark complete, update state to IDLE, then STOP. Tell the user to run `/opsx-apply` again. Do NOT start the next task.
 5. **Context windowing** — only load §4 payload for `current_task_id`, not all tasks
 6. **Write state after every transition** — state must survive agent crashes
@@ -73,13 +71,13 @@ If file doesn't exist, initialize from template.
 - Clear `current_task_result` and `rejections`
 - Set state: `IDLE`
 - Check if all tasks done → set `COMPLETE` if yes
-- Output EXACTLY: "✓ Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
+- Output EXACTLY: "Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
 - **>>> STOP. END RESPONSE. DO NOT CONTINUE. <<<**
 
 **On reject** (from AWAITING_APPROVAL):
 - Append feedback to `rejections[]`
 - Set state: `EXECUTING_TASK`
-- Add REVISION FEEDBACK to design-bundle
+- Incorporate feedback into implementation approach
 - Continue to step 3 (re-execute current task)
 
 ### 3. Select change and verify (first invocation only)
@@ -87,7 +85,7 @@ If file doesn't exist, initialize from template.
 On first run (no state.yaml):
 1. Select change (`openspec list --json` if name not given)
 2. `openspec status --change "<name>" --json`
-3. Verify prerequisites: OAPE commands, artifacts, gh/go/git/make
+3. Verify prerequisites: artifacts approved, go/git/make available
 4. Fork setup: read `inputs/jira.yaml`, clone fork, create feature branch
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
@@ -101,20 +99,24 @@ Do NOT read payloads for other tasks.
 
 Set state: `EXECUTING_TASK`. Write state.yaml.
 
-#### 4a. Compose design bundle
+#### 4a. Read context files
 
-Write `implementation/design-bundle.md`:
-- constitution, specs, plan, repo-assessment excerpts
-- §4 payload **ONLY for current Task ID**
+Read the following for architecture patterns, guardrails, and task-specific guidance:
+- agents.md — architecture patterns, test exemplars, coding conventions
+- constitution.md — guardrails and verification requirements
+- specs.md — requirements traced by this task
+- plan.md — phase goals and verification hooks
+- repo-assessment.md — target files, reusable assets
+- tasks.md §4 payload for **current Task ID only**
 - REVISION FEEDBACK if retrying after rejection
 
-#### 4b. Run OAPE command (exactly one)
+#### 4b. Implement code directly
 
-1. **IF e2e task** → `/oape:e2e-generate <fork-default-branch>`
-2. **ELIF** `API_Agent` verification-only → `/oape:api-generate-tests <api-path>`
-3. **ELIF** `API_Agent` → `/oape:api-generate --design-doc <bundle>` + `make update && make verify`
-4. **ELIF** `OperatorController_Agent` → `/oape:api-implement --design-doc <bundle>`
-5. **ELIF** manual agent → implement task payload directly
+Apply code changes in the working copy following:
+- agents.md patterns and conventions
+- constitution.md guardrails
+- Task payload instructions (objective, target files, implementation notes)
+- Acceptance criteria from the task
 
 #### 4c. Verify and test
 
@@ -125,34 +127,17 @@ Run Makefile targets from this task's Acceptance criteria.
 - API tasks: `go build` + `go vet`
 - E2E tasks: `go build`
 
-#### 4d. Code eval gate
-
-Set state: `EVAL_GATE`. Write state.yaml.
-
-Read and follow **`{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`** Steps 1–7 exactly.
-This is the single source of truth for per-task code eval scoring, verification, test execution,
-refinement, and result recording. Key paths used by the prompt:
-- Eval cases: `{schema_root}/evals/code-generation_eval.yaml` (filter by oape_command)
-- Eval results output: `openspec/changes/<name>/eval-results/code-generation-<task-id>.yaml`
-- Task report template: `{schema_root}/templates/implementation-task-report-template.md`
-- Max refinement passes: 2
-
-#### 4e. Write result
+#### 4d. Write result
 
 Write `current_task_result` to state.yaml:
 ```yaml
 current_task_result:
   task_id: <id>
-  oape_command: <command>
   files_changed: [...]
   verification_pass: true/false
   test_command: "..."
   test_result: PASS/FAIL
   test_output_summary: "..."
-  eval_score: <N>
-  eval_cases_pass: <N>
-  eval_cases_total: <N>
-  refinement_rounds: <N>
 ```
 
 ### 5. Present and YIELD
@@ -164,29 +149,20 @@ Present task summary:
 ## Task: <TASK_ID> — <title>
 Phase: <phase> | Task <index>/<total>
 
-### OAPE Commands Executed
-| Command | Args | Outcome |
-
 ### Files Changed
 - path/to/file — brief description
 
 ### Test Results
 | Test | Command | Result |
 
-### Code Eval Scorecard
-Score: N% (pass/total cases) | Refinement rounds: N
-
 ### Deviations (if any)
 ```
 
-ASK: **"Code eval score: {N}% ({pass}/{total} cases pass). Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
+ASK: **"Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
 
-**╔══════════════════════════════════════════════════════════════╗**
-**║  >>> YIELD — STOP GENERATING. END YOUR RESPONSE NOW. <<<   ║**
-**║  Do NOT read the next task. Do NOT compose another bundle.  ║**
-**║  Do NOT continue with any other action.                     ║**
-**║  The user must send a new message to proceed.               ║**
-**╚══════════════════════════════════════════════════════════════╝**
+**>>> YIELD — STOP GENERATING. END YOUR RESPONSE NOW. <<<**
+**Do NOT read the next task. Do NOT continue with any other action.**
+**The user must send a new message to proceed.**
 
 ### 6. Post-loop (state = COMPLETE)
 
@@ -208,14 +184,12 @@ When all tasks are marked complete:
 - **Mandatory test execution** — never skip verification or tests
 - **Never advance without a fresh invocation** — even if user says "approve", you stop after recording it
 - On reject: re-run current task only (full loop)
-- One OAPE command per task; OAPE in fork/working-folder cwd only
 
 ## Anti-Batching Contract
 
 You are PROHIBITED from:
 - Executing task N+1 in the same response where task N was approved
 - Reading §4 payload for any task other than current_task_id
-- Composing a design bundle for the next task after an approval
 - Writing "now moving to..." or "let me start the next task..."
 - Any action that advances the workflow after presenting an approval question or processing an approval
 

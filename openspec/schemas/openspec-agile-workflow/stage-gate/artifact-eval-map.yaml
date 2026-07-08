@@ -58,7 +58,7 @@ artifacts:
     stage_eval_file: evals/implementation_eval.yaml
     eval_spec: eval-generation/eval-generation-workflow/stages/implementation-eval-spec.yaml
     gate: stage_evals
-    note: Score implementation task reports during code-generation eval gate
+    note: Score implementation task reports during stage eval gate
 
   implementation-report:
     gate: skip

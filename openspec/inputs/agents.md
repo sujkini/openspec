@@ -203,9 +203,9 @@ Per addon: `<NAME>_VERSION ?= <ver>` + `RELATED_IMAGE_CERT_MANAGER_<NAME>` + `<N
 
 ---
 
-## Per-task testing during `/opsx-apply` (code generation eval gate)
+## Per-task verification during `/opsx-apply`
 
-During implementation, each code generation task is verified with **real command execution** (not agent assertions). See **[`stage-gate/CODE_GENERATION_EVAL_PROMPT.md`](stage-gate/CODE_GENERATION_EVAL_PROMPT.md)** for the full protocol and **[`unit-tests-code-gen.md`](../../unit-tests-code-gen.md)** for design rationale.
+During implementation, each task is verified with **real command execution** (not agent assertions).
 
 | Task type | Verification | Test strategy |
 |-----------|-------------|--------------|
@@ -222,16 +222,16 @@ During implementation, each code generation task is verified with **real command
 
 Use these **Assigned Agent** IDs in `tasks.md` §3 when **`AgentRoutingMode: PROVIDED`**. Each task gets exactly one primary agent. Map work to paths below; split mixed tasks.
 
-| Agent ID | Scope | Route when task touches | OAPE / execution |
-|----------|-------|-------------------------|------------------|
-| **API_Agent** | CRD/API types, markers, `.testsuite.yaml` | `api/operator/v1alpha1/`, `test/apis/` | `api-generate` (implementation) or `api-generate-tests` (verification-only) |
-| **OperatorController_Agent** | Reconciliation, deployments, operator wiring | `pkg/controller/certmanager/`, `pkg/controller/istiocsr/`, `pkg/controller/trustmanager/`, `pkg/operator/starter.go`, `pkg/operator/setup_manager.go` | `api-implement` |
-| **ManifestsBindata_Agent** | Operand YAML, CRDs in bindata, version pins | `bindata/`, `hack/update-cert-manager-manifests.sh`, `Makefile` operand version vars | Manual — `make update` / `make update-manifests` |
-| **WebhookTLS_Agent** | Webhook TLS, CA bundles, serving certs | Webhook deployments, trusted CA ConfigMap wiring | Manual |
-| **RBACSecurity_Agent** | RBAC, SCC, CredentialsRequest, network policies | `config/rbac/`, `pkg/controller/*/credentials`, NP controllers | Manual |
-| **OLMRelease_Agent** | OLM bundle, CSV, relatedImages, catalog | `config/`, `bundle/`, `deploy/` | Manual — `make bundle`, `make deploy` |
-| **Testing_Agent** | E2E and integration test authoring | `test/e2e/`, `make test-e2e` | `e2e-generate` when task is e2e |
-| **Docs_Agent** | User-facing docs | `README.md`, `docs/` | Manual |
+| Agent ID | Scope | Route when task touches |
+|----------|-------|-------------------------|
+| **API_Agent** | CRD/API types, markers, `.testsuite.yaml` | `api/operator/v1alpha1/`, `test/apis/` |
+| **OperatorController_Agent** | Reconciliation, deployments, operator wiring | `pkg/controller/certmanager/`, `pkg/controller/istiocsr/`, `pkg/controller/trustmanager/`, `pkg/operator/starter.go`, `pkg/operator/setup_manager.go` |
+| **ManifestsBindata_Agent** | Operand YAML, CRDs in bindata, version pins | `bindata/`, `hack/update-cert-manager-manifests.sh`, `Makefile` operand version vars |
+| **WebhookTLS_Agent** | Webhook TLS, CA bundles, serving certs | Webhook deployments, trusted CA ConfigMap wiring |
+| **RBACSecurity_Agent** | RBAC, SCC, CredentialsRequest, network policies | `config/rbac/`, `pkg/controller/*/credentials`, NP controllers |
+| **OLMRelease_Agent** | OLM bundle, CSV, relatedImages, catalog | `config/`, `bundle/`, `deploy/` |
+| **Testing_Agent** | E2E and integration test authoring | `test/e2e/`, `make test-e2e` |
+| **Docs_Agent** | User-facing docs | `README.md`, `docs/` |
 
 ### Controller routing rules
 
