@@ -4,7 +4,7 @@ description: >-
   Gated spec-driven workflow: Spec Understanding → Repo Understanding → Planning →
   Task Creation → Implementation. Produces validation.json, specs.md,
   repo-assessment.md, plan.md, tasks.md, and (during implementation)
-  implementation-report.md and optional adrs.md.
+  implementation-report.md and optional deviation-observed.md.
   constitution.md is an INPUT (resolved from target repo or schema inputs/).
   Implementation uses OAPE command orchestration (/opsx:apply).
   Templates from templates/.
@@ -195,7 +195,7 @@ working_folder_repo:
       - Push commits to a remote
       - Open a draft pull request
     post_all_tasks: >-
-      Write implementation-report.md and optional adrs.md. Summarize local file
+      Write implementation-report.md and optional deviation-observed.md. Summarize local file
       changes and git status. Do not push or open a PR. Set PR URL to N/A —
       working-folder mode.
   precedence: >-
@@ -222,7 +222,7 @@ stage_eval_gate:
     tasks: evals/tasks_eval.yaml
     implementation: evals/implementation_eval.yaml
   eval_specs_dir: eval-generation/eval-generation-workflow/stages
-  system_prompt: stage-gate/SYSTEM_PROMPT.md
+  system_prompt: stage-gate/STAGE_EVAL_GATE_PROMPT.md
   artifact_map: stage-gate/artifact-eval-map.yaml
   generation_templates: templates/
   eval_results: openspec/changes/<change>/eval-results/<artifact-id>.yaml
@@ -779,7 +779,7 @@ workflow:
       **Working-folder mode:** Uses the current project checkout (see schema
       working_folder_repo) — no fork, no draft PR.
       User approval is required after every task. Closes with implementation-report.md
-      and optional adrs.md.
+      and optional deviation-observed.md.
     inputs:
       - tasks.md (required — Task Creation complete)
       - constitution.md (required)
@@ -793,7 +793,7 @@ workflow:
       - code changes in user's fork (or project working folder in working-folder mode)
       - draft pull request on fork_repo_url (skipped in working-folder mode)
       - implementation-report.md
-      - adrs.md (optional — only when deviations are logged)
+      - deviation-observed.md (optional — only when deviations are logged)
     gate: user_approval_per_task
     feedback_gate: user_approval_feedback_gate
 
@@ -1141,6 +1141,8 @@ artifacts:
 
   - id: implementation
     workflow_stage: implementation
+    generates: implementation/design-bundle.md
+    template: design-bundle-template.md
     description: >-
       OAPE orchestration — task-by-task execution into the fork using composed
       design-bundle.md (tasks.md + upstream artifacts) and /oape:* cursor commands.
@@ -1151,7 +1153,7 @@ artifacts:
       - implementation/design-bundle.md (per task, regenerated)
       - implementation/task-reports/<task-id>.md (per approved task)
       - implementation-report.md
-      - adrs.md (conditional)
+      - deviation-observed.md (conditional)
     inputs:
       required:
         - tasks.md
@@ -1298,7 +1300,7 @@ artifacts:
          complete, proceed to closing artifacts below and then EXIT the implementation
          stage. Do not prompt for additional work.
       1. Write implementation-report.md — aggregate all `implementation/task-reports/*.md`
-      2. Write adrs.md ONLY if any task logged DEVIATIONS.
+      2. Write deviation-observed.md ONLY if any task logged DEVIATIONS.
       3. **Default mode:** Push and draft PR (see schema fork_repo.draft_pr).
       4. **Working-folder mode:** Do not push or open draft PR; record local changes
          and git status in implementation-report.md (PR URL = N/A).
@@ -1351,17 +1353,17 @@ artifacts:
     requires:
       - tasks
 
-  - id: adrs
+  - id: deviation-observed
     workflow_stage: implementation
-    generates: adrs.md
-    template: adrs-template.md
+    generates: deviation-observed.md
+    template: deviation-observed-template.md
     format: markdown
     description: >-
-      Architectural Decision Records — deviation log written only when one or more
+      Deviations Observed — deviation log written only when one or more
       phases reported DEVIATIONS during implementation.
     optional: true
     instruction: |
-      Write adrs.md ONLY when at least one task logged a ## Deviations section in its task report.
+      Write deviation-observed.md ONLY when at least one task logged a ## Deviations section in its task report.
 
       ## Format
       ```

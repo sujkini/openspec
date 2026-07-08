@@ -50,4 +50,4 @@ rules:
     - "Task-by-task execution with per-task user approval gate (one OAPE command per task)"
     - "Execute unit test block per task (real go test); controller tasks must co-generate _test.go files following agents.md exemplar"
     - "After all phases: commit, push feature branch, open draft PR on fork (head = feature branch, base = master/main)"
-    - "Close with implementation-report.md, optional adrs.md"
+    - "Close with implementation-report.md, optional deviation-observed.md"

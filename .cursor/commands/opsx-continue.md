@@ -15,7 +15,7 @@ Continue working on a change by creating the **next** artifact (one per invocati
 |------|-----------|--------------|
 | Schema root | `openspec/schemas/openspec-agile-workflow/` |
 | Stage gate | `{schema_root}/stage-gate/` | same |
-| Stage evals | `{schema_root}/eval-generation/<stage>_eval.yaml` | same |
+| Stage evals | `{schema_root}/evals/<stage>_eval.yaml` | same |
 | Templates | `{schema_root}/templates/` | same |
 
 ## Steps
@@ -38,29 +38,15 @@ Continue working on a change by creating the **next** artifact (one per invocati
 5. Pick first artifact with `status: "ready"`.
 6. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
    - Generation uses **`{schema_root}/templates/`** (from openspec instructions).
-7. **Stage eval gate** — read **`{schema_root}/stage-gate/SYSTEM_PROMPT.md`** in full:
-   - Load mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
-   - **Run evals** from `{schema_root}/eval-generation/<stage>_eval.yaml` (when `gate: stage_evals`)
-   - Write `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
-   - If any case fails: **refine the artifact** at `outputPath` (v2) using the **refinement context bundle** (v1 text + eval failures + openspec instructions + dependencies + inputs + failed case prompts)
-   - Re-score after refinement
-   - **Do NOT** modify `{schema_root}/templates/` or `eval-generation/output-refined-templates/`
-8. **STOP** — present eval scorecard + artifact summary. Ask:
-
-   > Eval score: **X%** (N/M cases pass). Approve this artifact? **(Approve / Reject with feedback)**
-
-   - **Approve** → artifact gate satisfied; next `/opsx-continue` may create the next ready artifact
-   - **Reject** → if artifact is **`specs`**: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate specs; STOP
-   - **Reject** (other artifacts) → run feedback loop (same invocation, repeat until Approve):
-     1. Capture user feedback verbatim
-     2. Load context: prior approved artifacts (read-only), current artifact, `{schema_root}/templates/<name>.md`, eval results, openspec instructions
-     3. Update template if feedback requires structural/guidance changes
-     4. Regenerate refined artifact at `outputPath`
-     5. Write round summary → `openspec/changes/<name>/feedback_stage_artifacts/<artifact-id>/round-<N>.yaml`
-     6. Re-run eval gate when applicable
-     7. Re-present scorecard + feedback addressed → ask approval again
-     - Read **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`** for full steps
-     - **Do not** use `prompts/<artifact-id>.yaml`
+7. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–5 exactly.
+   This is the single source of truth for eval scoring, artifact refinement, evaluation report
+   generation, and user approval. Key paths used by the prompt:
+   - Artifact-to-eval mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
+   - Stage eval cases: `{schema_root}/evals/<stage>_eval.yaml`
+   - Eval results output: `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
+   - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
+   - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
+   - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
 
 ## Artifact order (openspec-agile-workflow)
 
@@ -73,10 +59,10 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 | validation | Rubric in `templates/validation-template.md` only |
 | specs | Skip (no stage eval) |
 | repo-assessment | `evals/repo-assessment_eval.yaml` |
-| constitution | `evals/constitution_eval.yaml` |
+| constitution | Skip (input, not evaluated) |
 | plan | `evals/plan_eval.yaml` |
 | tasks | `evals/tasks_eval.yaml` |
-| implementation | `evals/implementation_eval.yaml` |
+
 
 ## Guardrails
 
