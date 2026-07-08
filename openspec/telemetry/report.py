@@ -1,14 +1,13 @@
 """Generate metrics-report.json from events.jsonl and filesystem artifacts.
 
-Reconstructs run, phases, tasks, events, global_health, token_burn, and
-artifact_edits entirely from local files — no database, no server.
+Reconstructs run, phases, tasks, events, global_health, and artifact_edits
+entirely from local files — no database, no server.
 """
 from __future__ import annotations
 
 import json
 import logging
 import subprocess
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +26,22 @@ from .change_metrics import (
 logger = logging.getLogger(__name__)
 
 CHANGES_DIR = Path("openspec/changes")
+
+# Approximate per-token pricing (USD per 1M tokens).
+# Uses Claude Sonnet-class rates as the default since Cursor primarily routes
+# through Claude. Override by editing this table if your setup differs.
+PRICE_TABLE: dict[str, dict[str, float]] = {
+    "default": {"input": 3.0, "output": 15.0},
+    "claude-sonnet": {"input": 3.0, "output": 15.0},
+    "claude-opus": {"input": 15.0, "output": 75.0},
+    "gpt-4o": {"input": 2.5, "output": 10.0},
+}
+
+
+def _estimate_cost(tokens_in: int, tokens_out: int, model: str = "default") -> float:
+    """Estimate USD cost from token counts using the price table."""
+    rates = PRICE_TABLE.get(model, PRICE_TABLE["default"])
+    return (tokens_in * rates["input"] + tokens_out * rates["output"]) / 1_000_000
 
 
 def _detect_operator_name() -> str:
@@ -77,7 +92,6 @@ def _reconstruct_run(events: list[dict[str, Any]]) -> dict[str, Any]:
                 "completed_at": None,
                 "total_tokens_in": 0,
                 "total_tokens_out": 0,
-                "total_cost_usd": 0.0,
             }
             break
     else:
@@ -166,7 +180,6 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "completed_at": None,
                 "tokens_in": 0,
                 "tokens_out": 0,
-                "cost_usd": 0.0,
                 "self_correction_loops": 0,
             }
         elif etype == "task_end":
@@ -177,7 +190,6 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "completed_at": ev.get("ts"),
                     "tokens_in": ev.get("tokens_in", 0),
                     "tokens_out": ev.get("tokens_out", 0),
-                    "cost_usd": ev.get("cost_usd", 0.0),
                     "self_correction_loops": ev.get("self_correction_loops", 0),
                 })
 
@@ -248,12 +260,17 @@ def _compute_global_health(
     tasks_passed = sum(1 for t in tasks if t.get("status") == "passed")
     success_rate = (tasks_passed / tasks_total * 100) if tasks_total > 0 else 100.0
 
-    task_tokens = sum(t.get("tokens_in", 0) + t.get("tokens_out", 0) for t in tasks)
-    total_tokens += task_tokens
+    task_tokens_in = sum(t.get("tokens_in", 0) for t in tasks)
+    task_tokens_out = sum(t.get("tokens_out", 0) for t in tasks)
+    total_tokens += task_tokens_in + task_tokens_out
+
+    total_in = phase_tokens_in + task_tokens_in
+    total_out = phase_tokens_out + task_tokens_out
+    estimated_cost = _estimate_cost(total_in, total_out)
 
     return {
         "total_tokens_consumed": total_tokens,
-        "total_run_cost_usd": 0.0,
+        "estimated_cost_usd": round(estimated_cost, 4),
         "cumulative_wall_time_s": round(wall_time, 1),
         "compliance_index": round(compliance, 1),
         "gate_passing_rate": round(gate_passing, 1),
@@ -262,26 +279,6 @@ def _compute_global_health(
         "agent_success_rate": round(success_rate, 1),
         "tasks_passed": tasks_passed,
         "tasks_total": tasks_total,
-    }
-
-
-def _compute_token_burn(tasks: list[dict[str, Any]]) -> dict[str, Any]:
-    """Group task tokens by agent_id."""
-    by_agent: dict[str, dict[str, Any]] = defaultdict(lambda: {"tokens": 0, "cost_usd": 0.0})
-
-    for t in tasks:
-        agent = t.get("agent_id", "") or "unknown"
-        by_agent[agent]["tokens"] += t.get("tokens_in", 0) + t.get("tokens_out", 0)
-        by_agent[agent]["cost_usd"] += t.get("cost_usd", 0.0)
-
-    entries = [
-        {"agent_id": agent, "tokens": data["tokens"], "cost_usd": round(data["cost_usd"], 4)}
-        for agent, data in sorted(by_agent.items(), key=lambda x: -x[1]["tokens"])
-    ]
-    return {
-        "entries": entries,
-        "total_tokens": sum(e["tokens"] for e in entries),
-        "total_cost_usd": round(sum(e["cost_usd"] for e in entries), 4),
     }
 
 
@@ -326,7 +323,7 @@ def generate_report(change: str) -> Path:
 
     global_health = _compute_global_health(run, phases, tasks, change_dir) if run else {
         "total_tokens_consumed": 0,
-        "total_run_cost_usd": 0.0,
+        "estimated_cost_usd": 0.0,
         "cumulative_wall_time_s": 0.0,
         "compliance_index": 100.0,
         "gate_passing_rate": 100.0,
@@ -336,7 +333,6 @@ def generate_report(change: str) -> Path:
         "tasks_passed": 0,
         "tasks_total": 0,
     }
-    token_burn = _compute_token_burn(tasks)
     artifact_edits = _compute_artifact_edits(change_dir)
 
     report: dict[str, Any] = {
@@ -347,7 +343,6 @@ def generate_report(change: str) -> Path:
         "tasks": tasks,
         "events": log_events,
         "global_health": global_health,
-        "token_burn": token_burn,
         "artifact_edits": artifact_edits,
     }
 

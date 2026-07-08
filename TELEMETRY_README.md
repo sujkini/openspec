@@ -121,6 +121,7 @@ The generated `metrics-report.json` contains:
   "events": [...],
   "global_health": {
     "total_tokens_consumed": 25000,
+    "estimated_cost_usd": 0.105,
     "compliance_index": 100.0,
     "gate_passing_rate": 100.0,
     "human_rejection_rate": 0.0,
@@ -128,13 +129,6 @@ The generated `metrics-report.json` contains:
     "agent_success_rate": 100.0,
     "tasks_passed": 2,
     "tasks_total": 2
-  },
-  "token_burn": {
-    "entries": [
-      {"agent_id": "API_Agent", "tokens": 7000, "cost_usd": 0.0}
-    ],
-    "total_tokens": 7000,
-    "total_cost_usd": 0.0
   },
   "artifact_edits": {
     "artifacts": [
@@ -159,7 +153,7 @@ The generated `metrics-report.json` contains:
 | `gate_passing_rate` | % of eval gates passed without refinement |
 | `human_rejection_rate` | % of phases with user-requested revisions |
 | `agent_success_rate` | % of code-generation tasks that passed |
-| `token_burn` | Token consumption grouped by agent |
+| `estimated_cost_usd` | Approximate cost based on Claude Sonnet pricing ($3/M in, $15/M out) |
 | `artifact_edits` | Eval refinements + feedback rounds per artifact |
 
 ### Operator Name Detection
