@@ -154,11 +154,55 @@ def _reconstruct_phases(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if ev.get("duration_s") is not None:
                     phases[pid]["duration_s"] = ev["duration_s"]
 
-    return [phases[pid] for pid in order if pid in phases]
+    result = [phases[pid] for pid in order if pid in phases]
+
+    # Fix #3: Compute duration_s from event timestamps when the filesystem
+    # fallback returned 0 or a placeholder.
+    for p in result:
+        if p.get("started_at") and p.get("completed_at"):
+            try:
+                t0 = datetime.fromisoformat(str(p["started_at"]).replace("Z", "+00:00"))
+                t1 = datetime.fromisoformat(str(p["completed_at"]).replace("Z", "+00:00"))
+                event_dur = max(0.0, (t1 - t0).total_seconds())
+                if p["duration_s"] in (0.0, 60.0, 300.0) or event_dur > p["duration_s"]:
+                    p["duration_s"] = round(event_dur, 1)
+            except (TypeError, ValueError):
+                pass
+
+    # Fix #5: Auto-close orphan "running" phases when later phases are already
+    # passed (the on-artifact-complete hook was likely skipped).
+    max_passed = max(
+        (p["phase_number"] for p in result if p.get("status") == "passed"),
+        default=0,
+    )
+    for p in result:
+        if p.get("status") == "running" and p["phase_number"] < max_passed:
+            p["status"] = "passed"
+            if not p.get("completed_at"):
+                next_phases = [
+                    q for q in result
+                    if q["phase_number"] > p["phase_number"] and q.get("started_at")
+                ]
+                if next_phases:
+                    p["completed_at"] = next_phases[0]["started_at"]
+                    try:
+                        t0 = datetime.fromisoformat(str(p["started_at"]).replace("Z", "+00:00"))
+                        t1 = datetime.fromisoformat(str(p["completed_at"]).replace("Z", "+00:00"))
+                        p["duration_s"] = round(max(0.0, (t1 - t0).total_seconds()), 1)
+                    except (TypeError, ValueError):
+                        pass
+
+    return result
 
 
 def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Build task objects from task_start / task_end events."""
+    """Build task objects from task_start / task_end events.
+
+    Deduplicates by ``task_id``: when a task is started multiple times (e.g.
+    agent retry), keep the entry that reached ``passed`` or, failing that,
+    the latest one.  This prevents stale "running" duplicates from inflating
+    ``tasks_total``.
+    """
     tasks: dict[str, dict[str, Any]] = {}
     order: list[str] = []
 
@@ -193,7 +237,28 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "self_correction_loops": ev.get("self_correction_loops", 0),
                 })
 
-    return [tasks[tid] for tid in order if tid in tasks]
+    all_tasks = [tasks[tid] for tid in order if tid in tasks]
+    return _dedupe_tasks(all_tasks)
+
+
+def _dedupe_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one entry per ``task_id``, preferring passed > completed > latest."""
+    by_task_id: dict[str, list[dict[str, Any]]] = {}
+    for t in tasks:
+        by_task_id.setdefault(t["task_id"], []).append(t)
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for t in tasks:
+        tid = t["task_id"]
+        if tid in seen:
+            continue
+        seen.add(tid)
+        candidates = by_task_id[tid]
+        passed = [c for c in candidates if c["status"] == "passed"]
+        best = passed[-1] if passed else candidates[-1]
+        deduped.append(best)
+    return deduped
 
 
 def _collect_log_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -220,10 +285,15 @@ def _compute_global_health(
     tasks: list[dict[str, Any]],
     change_dir: Path,
 ) -> dict[str, Any]:
-    """Compute global health metrics from in-memory data."""
-    phase_tokens_in = sum(p.get("tokens_in", 0) for p in phases)
-    phase_tokens_out = sum(p.get("tokens_out", 0) for p in phases)
-    total_tokens = phase_tokens_in + phase_tokens_out
+    """Compute global health metrics from in-memory data.
+
+    Token counting uses **phase totals only**.  Phase 5 (code_generation)
+    already aggregates task-level tokens via ``on-apply-complete``, so adding
+    task tokens on top would double-count.
+    """
+    total_in = sum(p.get("tokens_in", 0) for p in phases)
+    total_out = sum(p.get("tokens_out", 0) for p in phases)
+    total_tokens = total_in + total_out
     if total_tokens == 0:
         total_tokens = run.get("total_tokens_in", 0) + run.get("total_tokens_out", 0)
 
@@ -260,13 +330,11 @@ def _compute_global_health(
     tasks_passed = sum(1 for t in tasks if t.get("status") == "passed")
     success_rate = (tasks_passed / tasks_total * 100) if tasks_total > 0 else 100.0
 
-    task_tokens_in = sum(t.get("tokens_in", 0) for t in tasks)
-    task_tokens_out = sum(t.get("tokens_out", 0) for t in tasks)
-    total_tokens += task_tokens_in + task_tokens_out
-
-    total_in = phase_tokens_in + task_tokens_in
-    total_out = phase_tokens_out + task_tokens_out
     estimated_cost = _estimate_cost(total_in, total_out)
+
+    # Fix #2: populate run.total_tokens_in/out so top-level summary is useful
+    run["total_tokens_in"] = total_in
+    run["total_tokens_out"] = total_out
 
     return {
         "total_tokens_consumed": total_tokens,
