@@ -16,7 +16,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["react", "react-dom"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]

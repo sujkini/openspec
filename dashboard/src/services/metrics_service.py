@@ -75,14 +75,8 @@ async def compute_global_health(
 
     total_phases = len(phases)
     first_pass = sum(1 for p in phases if p.iteration_count == 1 and p.status == PhaseStatus.passed)
+    compliance = (first_pass / total_phases * 100) if total_phases > 0 else cfg.fallbacks.default_compliance_index
     gate_passing = (first_pass / total_phases * 100) if total_phases > 0 else cfg.fallbacks.default_gate_pass_rate
-
-    scored_phases = [p for p in phases if p.quality_score > 0]
-    compliance = (
-        (sum(p.quality_score for p in scored_phases) / len(scored_phases))
-        if scored_phases
-        else cfg.fallbacks.default_compliance_index
-    )
     total_refinement = sum(max(0, p.iteration_count - 1) for p in phases)
     human_rejection = (total_refinement / total_phases * 100) if total_phases > 0 else 0.0
 
@@ -107,12 +101,6 @@ async def compute_global_health(
     task_cost = sum(t.cost_usd for t in tasks)
     if task_cost > cost:
         cost = task_cost
-
-    if run.total_tokens_in == 0 and total_tokens > 0:
-        run.total_tokens_in = phase_tokens_in
-        run.total_tokens_out = phase_tokens_out
-        run.total_cost_usd = cost
-        await db.commit()
 
     return GlobalHealthMetrics(
         total_tokens_consumed=total_tokens,
@@ -146,19 +134,9 @@ async def compute_token_burn(
     rows = result.all()
 
     entries = [
-        TokenBurnEntry(agent_id=row.agent_id or "Unknown Agent", tokens=int(row.tokens or 0), cost_usd=float(row.cost or 0.0))
+        TokenBurnEntry(agent_id=row.agent_id, tokens=int(row.tokens or 0), cost_usd=float(row.cost or 0.0))
         for row in rows
     ]
-
-    default_cost = cfg.metrics.cost_for_model("default")
-    for entry in entries:
-        if entry.cost_usd == 0 and entry.tokens > 0:
-            est_in = int(entry.tokens * 0.4)
-            est_out = entry.tokens - est_in
-            entry.cost_usd = round(
-                (est_in * default_cost.input + est_out * default_cost.output) / 1_000_000, 4
-            )
-
     total_tokens = sum(e.tokens for e in entries)
     total_cost = sum(e.cost_usd for e in entries)
 

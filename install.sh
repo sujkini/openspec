@@ -75,11 +75,50 @@ add_if_missing "eval-generation/eval-generation-workflow/refined-templates/"
 add_if_missing "eval-generation/eval-generation-workflow/round-state.yaml"
 add_if_missing "openspec/changes/"
 
-echo "==> Configuring dashboard workspace..."
-DASHBOARD_CONFIG="$SCRIPT_DIR/dashboard/config.json"
+echo "==> Configuring dashboard for $TARGET_DIR ..."
+DASHBOARD_DIR="$SCRIPT_DIR/dashboard"
+DASHBOARD_CONFIG="$DASHBOARD_DIR/config.json"
+DB_PATH="$DASHBOARD_DIR/data/dashboard.db"
+
 if [ -f "$DASHBOARD_CONFIG" ]; then
-  sed -i "s|\"workspace\":.*|\"workspace\": \"$TARGET_DIR\",|" "$DASHBOARD_CONFIG"
-  echo "    dashboard/config.json workspace set to: $TARGET_DIR"
+  PYTHON_BIN="$(command -v python3 || command -v python || true)"
+  if [ -n "$PYTHON_BIN" ]; then
+    "$PYTHON_BIN" - "$DASHBOARD_CONFIG" "$TARGET_DIR" "$DB_PATH" <<'PYEOF'
+import json, sys
+config_path, target_dir, db_path = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(config_path) as f:
+    cfg = json.load(f)
+cfg["openspec"]["changes_dir"] = target_dir + "/openspec/changes"
+cfg["database"]["url"] = "sqlite+aiosqlite:///" + db_path
+cfg["telemetry"]["bus_dir"] = target_dir + "/openspec/changes"
+with open(config_path, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PYEOF
+    echo "    config.json patched:"
+    echo "      changes_dir  = $TARGET_DIR/openspec/changes"
+    echo "      database.url = sqlite+aiosqlite:///$DB_PATH"
+  else
+    echo "    Warning: python3 not found — config.json not patched."
+    echo "    Set openspec.changes_dir manually in $DASHBOARD_CONFIG"
+  fi
+fi
+
+echo "==> Installing dashboard dependencies..."
+if [ -n "${PYTHON_BIN:-}" ] && [ -f "$DASHBOARD_DIR/requirements.txt" ]; then
+  "$PYTHON_BIN" -m pip install -r "$DASHBOARD_DIR/requirements.txt" -q && \
+    echo "    Python dependencies installed." || \
+    echo "    Warning: pip install failed. Run manually: pip install -r $DASHBOARD_DIR/requirements.txt"
+fi
+
+if command -v npm &>/dev/null && [ -f "$DASHBOARD_DIR/web/package.json" ]; then
+  if [ ! -d "$DASHBOARD_DIR/web/node_modules" ]; then
+    (cd "$DASHBOARD_DIR/web" && npm install --silent) && \
+      echo "    Frontend dependencies installed." || \
+      echo "    Warning: npm install failed. Run manually: cd $DASHBOARD_DIR/web && npm install"
+  else
+    echo "    Frontend dependencies already installed."
+  fi
 fi
 
 echo ""
@@ -89,7 +128,8 @@ echo "Next steps:"
 echo "  1. Edit openspec/inputs/agents.md      — define your operator's architecture & agent routing"
 echo "  2. Edit openspec/inputs/constitution.md — define coding guardrails & CI gates"
 echo "  3. Restart Cursor so slash commands load from .cursor/commands/"
-echo "  4. (Optional) Start the dashboard: $SCRIPT_DIR/dashboard/start.sh"
+echo "  4. (Optional) Start the dashboard:"
+echo "       $DASHBOARD_DIR/start.sh"
 echo "  5. (Optional) Run /eval-loop to generate quality evals from a completed feature"
 echo "  6. Run /opsx-new <JIRA-KEY> to start your first change"
 echo ""

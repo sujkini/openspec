@@ -8,6 +8,3 @@ sse-starlette>=2.0.0
 httpx>=0.27.0
 pyyaml>=6.0
 tiktoken>=0.7.0
-
-# Optional: install for Vertex AI LLM-as-judge (set vertex_ai.enabled=true in config.json)
-# pip install google-cloud-aiplatform>=1.60.0

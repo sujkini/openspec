@@ -32,7 +32,7 @@ export default function GlobalHealthMetrics({ metrics }: GlobalHealthMetricsProp
           <MetricCard label="Total Tokens Consumed" value="—" />
           <MetricCard label="Total Run Cost" value="—" />
           <MetricCard label="Cumulative Wall Time" value="—" />
-          <MetricCard label="Avg Quality Score" value="—" />
+          <MetricCard label="Compliance Index" value="—" />
           <MetricCard label="Gate Passing Rate" value="—" />
           <MetricCard label="Refinement Iterations" value="—" />
           <MetricCard label="Agent Success Rate" value="—" />
@@ -50,7 +50,6 @@ export default function GlobalHealthMetrics({ metrics }: GlobalHealthMetricsProp
         <MetricCard
           label="Total Tokens Consumed"
           value={`${formatTokens(metrics.total_tokens_consumed)} Tokens`}
-          subtext="Planning phases (1-4)"
         />
         <MetricCard
           label="Total Run Cost"
@@ -59,12 +58,11 @@ export default function GlobalHealthMetrics({ metrics }: GlobalHealthMetricsProp
         <MetricCard
           label="Cumulative Wall Time"
           value={formatTime(metrics.cumulative_wall_time_s)}
-          subtext="Since run start"
         />
         <MetricCard
-          label="Avg Quality Score"
+          label="Compliance Index"
           value={`${metrics.compliance_index}%`}
-          subtext="Across eval gates"
+          subtext="Const. Pass"
         />
         <MetricCard
           label="Gate Passing Rate"

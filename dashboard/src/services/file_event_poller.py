@@ -34,29 +34,6 @@ class FileEventPoller:
         self._poll_interval = poll_interval_s
         self._offsets: dict[str, int] = {}
         self._change_run_ids: dict[str, str] = {}
-        self._seen_event_ids: set[str] = set()
-        self._state_file = Path("data/.poller-state.json")
-        self._load_state()
-
-    def _load_state(self) -> None:
-        if self._state_file.exists():
-            try:
-                state = json.loads(self._state_file.read_text())
-                self._offsets = state.get("offsets", {})
-                self._seen_event_ids = set(state.get("seen_event_ids", []))
-            except Exception:
-                pass
-
-    def _save_state(self) -> None:
-        try:
-            self._state_file.parent.mkdir(parents=True, exist_ok=True)
-            state = {
-                "offsets": self._offsets,
-                "seen_event_ids": list(self._seen_event_ids)[-5000:],
-            }
-            self._state_file.write_text(json.dumps(state))
-        except Exception:
-            logger.debug("Failed to persist poller state")
 
     async def run(self) -> None:
         logger.info("FileEventPoller started — watching %s every %.1fs", self._changes_dir, self._poll_interval)
@@ -120,7 +97,6 @@ class FileEventPoller:
         self._offsets[file_key] = new_offset
         if ingested:
             logger.info("FileEventPoller: ingested %d events from %s", ingested, change)
-            self._save_state()
 
     async def _ingest_event(self, change: str, event: dict[str, Any]) -> None:
         event_type = event.get("type", "")
@@ -327,58 +303,22 @@ class FileEventPoller:
             task.cost_usd = event.get("cost_usd", 0)
             task.self_correction_loops = event.get("self_correction_loops", 0)
             task.completed_at = datetime.now(timezone.utc)
-
-            if task.cost_usd == 0 and (task.tokens_in + task.tokens_out) > 0:
-                from src.core.config import get_settings
-                cfg = get_settings()
-                default_cost = cfg.metrics.cost_for_model("default")
-                task.cost_usd = round(
-                    (task.tokens_in * default_cost.input + task.tokens_out * default_cost.output) / 1_000_000, 4
-                )
-
             await db.commit()
 
     async def _handle_log_event(self, change: str, event: dict[str, Any]) -> None:
         run_id = event.get("run_id") or await self._get_run_id(change)
         if not run_id:
             return
-
-        event_id = event.get("id", "")
-        if event_id and event_id in self._seen_event_ids:
-            return
-
         factory = get_session_factory()
         async with factory() as db:
             existing_run = await db.get(PipelineRun, run_id)
             if not existing_run:
                 return
-
-            from sqlalchemy import and_
-            msg = event.get("message", "")
-            agent = event.get("agent_id", "Pipeline")
-            dup_check = await db.execute(
-                select(AgentEvent.id).where(
-                    and_(
-                        AgentEvent.run_id == run_id,
-                        AgentEvent.message == msg,
-                        AgentEvent.agent_id == agent,
-                    )
-                ).limit(1)
-            )
-            if dup_check.scalar_one_or_none():
-                if event_id:
-                    self._seen_event_ids.add(event_id)
-                return
-
             from src.models.event import EventType
             try:
                 et = EventType(event.get("event_type", "state_machine"))
             except ValueError:
                 et = EventType.state_machine
-
-            if event_id:
-                self._seen_event_ids.add(event_id)
-
             agent_event = AgentEvent(
                 run_id=run_id,
                 task_id=event.get("task_id"),

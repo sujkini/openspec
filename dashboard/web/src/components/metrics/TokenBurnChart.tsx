@@ -45,7 +45,7 @@ export default function TokenBurnChart({ data }: TokenBurnChartProps) {
   }
 
   const chartData = data.entries.map((e) => ({
-    name: e.agent_id || "Unknown Agent",
+    name: e.agent_id,
     tokens: e.tokens,
     cost: e.cost_usd,
     label: `${formatTokens(e.tokens)} Tokens (Cost: $${e.cost_usd.toFixed(2)})`,
@@ -54,7 +54,7 @@ export default function TokenBurnChart({ data }: TokenBurnChartProps) {
   return (
     <section className="px-6 py-4 border-b border-terminal-border">
       <div className="text-terminal-muted text-xs uppercase tracking-wider mb-3 font-bold">
-        {`Token Burn — Implementation Tasks (${formatTokens(data.total_tokens)} total, $${data.total_cost_usd.toFixed(2)})`}
+        Token Burn per Worker Role (agents.md Tracking)
       </div>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">

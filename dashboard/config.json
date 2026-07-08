@@ -1,6 +1,4 @@
 {
-  "workspace": "${OPSX_WORKSPACE}",
-
   "server": {
     "host": "0.0.0.0",
     "port": 8000,
@@ -17,6 +15,16 @@
     "retry_ms": 3000,
     "heartbeat_interval_s": 15,
     "max_connections": 50
+  },
+
+  "vertex_ai": {
+    "enabled": false,
+    "project_id": "your-gcp-project",
+    "location": "us-central1",
+    "model_id": "gemini-2.5-pro",
+    "max_output_tokens": 2048,
+    "temperature": 0.1,
+    "credentials_path": null
   },
 
   "telemetry": {
@@ -51,7 +59,7 @@
 
   "openspec": {
     "changes_dir": "openspec/changes",
-    "schemas_dir": "openspec/schemas/openspec-agile-workflow",
+    "schemas_dir": "schemas/openspec-agile-workflow",
     "eval_results_pattern": "eval-results/*.yaml"
   }
 }

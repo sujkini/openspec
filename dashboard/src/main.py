@@ -10,12 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import get_settings
 from src.core.sse import sse_broker
-from src.db.engine import get_session_factory, init_db
+from src.db.engine import init_db
 from src.api.v1.router import v1_router
 from src.services.file_event_poller import FileEventPoller
-from src.services.pipeline_scanner import scan_changes
-
-logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -23,12 +20,6 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     cfg = get_settings()
     await init_db()
     await sse_broker.start()
-
-    factory = get_session_factory()
-    async with factory() as db:
-        imported = await scan_changes(db, cfg)
-        if imported:
-            logger.info("Auto-scan discovered new changes: %s", imported)
 
     poller = FileEventPoller(
         changes_dir=cfg.openspec.changes_dir,
@@ -48,6 +39,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app() -> FastAPI:
     cfg = get_settings()
+
     logging.basicConfig(level=cfg.server.log_level.upper())
 
     application = FastAPI(
@@ -66,6 +58,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(v1_router, prefix="/api/v1")
+
     return application
 
 
