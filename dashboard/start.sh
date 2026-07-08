@@ -4,11 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-export OPSX_WORKSPACE="${OPSX_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+export OPSX_WORKSPACE="${1:-${OPSX_WORKSPACE:-$(cd "$SCRIPT_DIR/.." && pwd)}}"
 
 echo "==> OpenSpec Observability Dashboard"
 echo "    Workspace: $OPSX_WORKSPACE"
+echo "    Changes:   $OPSX_WORKSPACE/openspec/changes"
 echo ""
+
+if [ ! -d "$OPSX_WORKSPACE/openspec" ]; then
+  echo "Warning: $OPSX_WORKSPACE/openspec/ not found. Dashboard may not find pipeline data."
+  echo ""
+fi
 
 if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; then
   echo "==> Docker detected. Starting dashboard with Docker Compose..."
@@ -17,8 +23,8 @@ if command -v docker &>/dev/null && docker compose version &>/dev/null 2>&1; the
   echo "Dashboard running at http://localhost:5173"
   echo "Backend API at http://localhost:8000"
   echo ""
-  echo "To stop:  cd dashboard && docker compose down"
-  echo "To logs:  cd dashboard && docker compose logs -f"
+  echo "To stop:  cd $SCRIPT_DIR && docker compose down"
+  echo "To logs:  cd $SCRIPT_DIR && docker compose logs -f"
 else
   echo "==> Docker not found. Setting up locally..."
   echo ""
