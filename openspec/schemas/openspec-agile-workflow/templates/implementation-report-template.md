@@ -44,9 +44,9 @@ Map every file touched during implementation to the requirement IDs from specs.m
 |------|---------|-----------------|--------|
 | `relative/path/to/file` | T1_1 | FR-01, SC-01 | [brief reason] |
 
-## Deviations / ADRs
+## Deviations Observed
 
-[None — or link to adrs.md and summarize deviation count.]
+[None — or link to deviation-observed.md and summarize deviation count.]
 
 ## Draft Pull Request
 

@@ -65,7 +65,6 @@ One YAML per stage — all cases in `evals:` list:
 | Stage | File |
 |-------|------|
 | repo-assessment | `eval-generation/output-evals/repo-assessment/repo-assessment_eval.yaml` |
-| constitution | `eval-generation/output-evals/constitution/constitution_eval.yaml` |
 | plan | `eval-generation/output-evals/plan/plan_eval.yaml` |
 | tasks | `eval-generation/output-evals/tasks/tasks_eval.yaml` |
 | implementation | `eval-generation/output-evals/implementation/implementation_eval.yaml` |

@@ -1,4 +1,4 @@
-# Architectural Decision Records (Deviations)
+# Deviations Observed
 
 **Change**: [CHANGE_NAME]
 **Jira**: [JIRA_KEY]

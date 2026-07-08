@@ -63,7 +63,7 @@ artifacts:
   implementation-report:
     gate: skip
 
-  adrs:
+  deviation-observed:
     gate: skip
 
 eval_results_dir: openspec/changes/<change-name>/eval-results/
