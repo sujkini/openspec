@@ -20,3 +20,10 @@ eval-generation/eval-generation-workflow/round-state.yaml
 # These are working artifacts for each change and should not be committed
 # to the operator repo after the workflow completes.
 openspec/changes/
+
+# ─── Dashboard runtime artifacts ───
+dashboard/data/
+dashboard/.venv/
+dashboard/web/node_modules/
+dashboard/web/dist/
+dashboard/web/tsconfig.tsbuildinfo

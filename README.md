@@ -14,7 +14,7 @@ git clone -b openspec-backend https://github.com/sujkini/openspec.git /tmp/opens
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
-This installs the OpenSpec CLI, runs `openspec init`, and copies `openspec/`, `.cursor/`, and `eval-generation/` into your project.
+This installs the OpenSpec CLI, runs `openspec init`, and copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project. Use `--no-dashboard` to skip the dashboard.
 
 ### 2. Restart Cursor
 
@@ -266,9 +266,29 @@ These commands are **not used** when `codegen_mode: direct`.
 │       ├── outputs/                       # Epic-bug-analysis + patches
 │       ├── rounds/                        # Round snapshots
 │       └── generation-phase/              # SYSTEM_PROMPT, template-inventory
+├── dashboard/                             # Observability dashboard (optional)
+│   ├── config.json                        # Dashboard configuration
+│   ├── start.sh                           # One-command launcher
+│   ├── src/                               # FastAPI backend (ingest + UI)
+│   └── web/                               # React + TypeScript SPA
 ├── install.sh                             # Installer script
 └── README.md
 ```
+
+---
+
+## Observability Dashboard (Optional)
+
+The dashboard provides real-time visibility into the OpenSpec pipeline: phase waterfall, token burn, quality scores, and live agent logs.
+
+```bash
+cd /path/to/your-operator-repo
+./dashboard/start.sh
+```
+
+Open http://localhost:5173. The backend runs on port 8000, polling `openspec/changes/` for telemetry data written by `/opsx-*` commands.
+
+Telemetry events are emitted by `python -m openspec.telemetry.auto` (called from slash-command hooks) and consumed by the dashboard's `FileEventPoller`. See `dashboard/README.md` for full details.
 
 ---
 
