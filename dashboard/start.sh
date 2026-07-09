@@ -67,15 +67,49 @@ else
   echo "    Installing frontend dependencies..."
   cd web && npm install && cd ..
 
+  BACKEND_PORT=8000
+  FRONTEND_PORT=5173
+
+  port_in_use() {
+    if command -v ss &>/dev/null; then
+      ss -tlnH "sport = :$1" 2>/dev/null | grep -q .
+    elif command -v lsof &>/dev/null; then
+      lsof -iTCP:"$1" -sTCP:LISTEN -t &>/dev/null
+    else
+      : # can't check, let the process fail naturally
+      return 1
+    fi
+  }
+
+  if port_in_use "$BACKEND_PORT"; then
+    echo "Error: port $BACKEND_PORT is already in use. Stop the existing process first."
+    echo "       lsof -i :$BACKEND_PORT   # find the process"
+    echo "       kill \$(lsof -t -i :$BACKEND_PORT)   # kill it"
+    exit 1
+  fi
+  if port_in_use "$FRONTEND_PORT"; then
+    echo "Error: port $FRONTEND_PORT is already in use. Stop the existing process first."
+    echo "       lsof -i :$FRONTEND_PORT   # find the process"
+    echo "       kill \$(lsof -t -i :$FRONTEND_PORT)   # kill it"
+    exit 1
+  fi
+
   echo ""
   echo "==> Starting dashboard (backend + frontend)..."
-  echo "    Backend: http://localhost:8000"
-  echo "    Frontend: http://localhost:5173"
+  echo "    Backend: http://localhost:$BACKEND_PORT"
+  echo "    Frontend: http://localhost:$FRONTEND_PORT"
   echo ""
 
   OPSX_WORKSPACE="$OPSX_WORKSPACE" PYTHONPATH="$PYTHONPATH" \
-    .venv/bin/uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 &
+    .venv/bin/uvicorn src.main:app --reload --host 0.0.0.0 --port "$BACKEND_PORT" &
   BACKEND_PID=$!
+
+  sleep 1
+  if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+    echo "Error: backend failed to start. Check the output above."
+    exit 1
+  fi
+
   cd web && npm run dev &
   FRONTEND_PID=$!
   cd ..
