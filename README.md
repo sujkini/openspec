@@ -16,7 +16,24 @@ git clone -b openspec-backend https://github.com/sujkini/openspec.git /tmp/opens
 
 This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
-### 2. Start the Dashboard
+### 2. Choose code generation mode (`openspec/config.yaml`)
+
+Set `flags.codegen_mode` before you start implementing tasks:
+
+```yaml
+# openspec/config.yaml
+flags:
+  codegen_mode: ai-helpers   # or: direct
+```
+
+| Mode | When to use | What `/opsx-apply` does |
+|------|-------------|-------------------------|
+| **`ai-helpers`** (default) | API/controller/e2e work that benefits from specialized OAPE Cursor commands and a code eval gate | design-bundle → OAPE command → verify → code eval → refine → approve |
+| **`direct`** | Straightforward tasks; simpler/faster path | agent reads context → FILE OPERATIONS → verify → approve (no OAPE, no code eval) |
+
+Change the flag anytime; `/opsx-apply` reads it on each invocation. Details below under [Configuration](#configuration-openspecconfigyaml).
+
+### 3. Start the Dashboard
 
 ```bash
 cd /path/to/your-operator-repo
@@ -25,11 +42,11 @@ cd /path/to/your-operator-repo
 
 Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
-### 3. Restart Cursor
+### 4. Restart Cursor
 
 Restart Cursor so slash commands load from `.cursor/commands/`.
 
-### 4. Run your first change
+### 5. Run your first change
 
 ```
 /opsx-new PROJ-123
