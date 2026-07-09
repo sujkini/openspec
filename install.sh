@@ -69,7 +69,7 @@ fi
 
 echo "==> Running 'openspec init' in $TARGET_DIR..."
 cd "$TARGET_DIR"
-openspec init || true
+openspec init --tools cursor || true
 
 echo "==> Copying openspec/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/openspec" "$TARGET_DIR/"
