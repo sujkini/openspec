@@ -321,7 +321,12 @@ def _compute_global_health(
         if p.get("iteration_count", 1) == 1 and p.get("status") == "passed"
     )
 
-    compliance = (first_pass / total_phases * 100) if total_phases > 0 else 100.0
+    scored_phases = [p for p in phases if p.get("quality_score", 0) > 0]
+    compliance = (
+        sum(p["quality_score"] for p in scored_phases) / len(scored_phases)
+        if scored_phases
+        else 0.0
+    )
     gate_passing = (first_pass / total_phases * 100) if total_phases > 0 else 100.0
     total_refinement = sum(max(0, p.get("iteration_count", 1) - 1) for p in phases)
     human_rejection = (total_refinement / total_phases * 100) if total_phases > 0 else 0.0
@@ -402,7 +407,7 @@ def generate_report(change: str) -> Path:
         "total_tokens_consumed": 0,
         "estimated_cost_usd": 0.0,
         "cumulative_wall_time_s": 0.0,
-        "compliance_index": 100.0,
+        "compliance_index": 0.0,
         "gate_passing_rate": 100.0,
         "human_rejection_rate": 0.0,
         "total_refinement_iterations": 0,

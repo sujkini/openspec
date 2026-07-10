@@ -215,8 +215,8 @@ The generated `metrics-report.json` contains:
 
 | Metric | Description |
 |--------|-------------|
-| `compliance_index` | % of phases that passed on first attempt |
-| `gate_passing_rate` | % of eval gates passed without refinement |
+| `compliance_index` | Average eval `quality_score` across phases with a score (> 0) |
+| `gate_passing_rate` | % of phases that passed on first attempt (no rework) |
 | `human_rejection_rate` | % of phases with user-requested revisions |
 | `agent_success_rate` | % of code-generation tasks that passed |
 | `estimated_cost_usd` | Approximate cost based on Claude Sonnet pricing ($3/M in, $15/M out) |
