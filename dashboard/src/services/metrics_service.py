@@ -141,6 +141,7 @@ async def compute_token_burn(
             func.sum(TaskExecution.cost_usd).label("cost"),
         )
         .where(TaskExecution.run_id == run_id)
+        .where(TaskExecution.token_attribution.is_(None))
         .group_by(TaskExecution.agent_id)
         .order_by(func.sum(TaskExecution.tokens_in + TaskExecution.tokens_out).desc())
     )

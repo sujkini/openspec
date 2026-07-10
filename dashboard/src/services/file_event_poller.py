@@ -69,6 +69,20 @@ class FileEventPoller:
                 logger.exception("FileEventPoller poll error")
             await asyncio.sleep(self._poll_interval)
 
+    async def _publish_metrics_update(self, run_id: str) -> None:
+        """Recompute and publish global health metrics via SSE."""
+        try:
+            from src.core.config import get_settings
+            from src.services.metrics_service import compute_global_health
+
+            cfg = get_settings()
+            factory = get_session_factory()
+            async with factory() as db:
+                metrics = await compute_global_health(db, run_id, cfg)
+            await sse_broker.publish("metrics_update", metrics.model_dump(), run_id=run_id)
+        except Exception:
+            logger.debug("Failed to publish metrics_update for run %s", run_id, exc_info=True)
+
     async def _poll_once(self) -> None:
         if not self._changes_dir.is_dir():
             return
@@ -190,6 +204,12 @@ class FileEventPoller:
             run.completed_at = datetime.now(timezone.utc)
             await db.commit()
 
+        await sse_broker.publish(
+            "pipeline_status",
+            {"run_id": run_id, "status": event.get("status", "completed")},
+            run_id=run_id,
+        )
+
     async def _handle_phase_start(self, change: str, event: dict[str, Any]) -> None:
         run_id = event.get("run_id") or await self._get_run_id(change)
         if not run_id:
@@ -219,6 +239,20 @@ class FileEventPoller:
             )
             db.add(phase)
             await db.commit()
+
+            await sse_broker.publish(
+                "phase_update",
+                {
+                    "phase_name": phase.phase_name.value,
+                    "status": phase.status.value,
+                    "iteration_count": phase.iteration_count,
+                    "tokens_in": phase.tokens_in,
+                    "tokens_out": phase.tokens_out,
+                    "quality_score": phase.quality_score,
+                    "quality_label": phase.quality_label,
+                },
+                run_id=run_id,
+            )
 
     async def _handle_phase_progress(self, change: str, event: dict[str, Any]) -> None:
         phase_id = event.get("phase_id", "")
@@ -255,6 +289,8 @@ class FileEventPoller:
                 run_id=phase.run_id,
             )
 
+            await self._publish_metrics_update(phase.run_id)
+
     async def _handle_phase_end(self, change: str, event: dict[str, Any]) -> None:
         phase_id = event.get("phase_id", "")
         if not phase_id:
@@ -288,6 +324,8 @@ class FileEventPoller:
                 },
                 run_id=phase.run_id,
             )
+
+            await self._publish_metrics_update(phase.run_id)
 
     async def _handle_task_start(self, change: str, event: dict[str, Any]) -> None:
         run_id = event.get("run_id") or await self._get_run_id(change)
@@ -326,9 +364,10 @@ class FileEventPoller:
             task.tokens_out = event.get("tokens_out", 0)
             task.cost_usd = event.get("cost_usd", 0)
             task.self_correction_loops = event.get("self_correction_loops", 0)
+            task.token_attribution = event.get("attribution")
             task.completed_at = datetime.now(timezone.utc)
 
-            if task.cost_usd == 0 and (task.tokens_in + task.tokens_out) > 0:
+            if task.token_attribution != "phase_aggregate" and task.cost_usd == 0 and (task.tokens_in + task.tokens_out) > 0:
                 from src.core.config import get_settings
                 cfg = get_settings()
                 default_cost = cfg.metrics.cost_for_model("default")
@@ -336,7 +375,10 @@ class FileEventPoller:
                     (task.tokens_in * default_cost.input + task.tokens_out * default_cost.output) / 1_000_000, 4
                 )
 
+            run_id = task.run_id
             await db.commit()
+
+        await self._publish_metrics_update(run_id)
 
     async def _handle_log_event(self, change: str, event: dict[str, Any]) -> None:
         run_id = event.get("run_id") or await self._get_run_id(change)

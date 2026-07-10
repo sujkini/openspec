@@ -175,12 +175,14 @@ The `auto.py` module emits the following lifecycle events visible in the Worker 
 
 | CLI Hook | Event | Description |
 |----------|-------|-------------|
-| `on-artifact-start` | Phase started | Signals artifact creation began, starts phase if needed |
-| `on-artifact-created` | Artifact created | Artifact file written to disk, awaiting eval gate |
+| `on-artifact-start` | Phase started | Signals artifact creation began, starts phase if needed. `--batch` sets batch mode. |
+| `on-artifact-created` | Artifact created | Artifact file written to disk, awaiting eval gate. `--batch` skips token-bearing phase_progress. |
 | `on-waiting-approval` | Waiting for approval | Eval passed, artifact presented for human decision |
-| `on-artifact-complete` | Human approved/rejected | User approves or rejects, phase ends if last artifact |
+| `on-artifact-complete` | Human approved/rejected | User approves or rejects, phase ends if last artifact. `--batch` uses phase-level token estimate. |
+| `on-apply-start` | Phase 5 started | Signals task loop began. `--batch` sets batch mode for all tasks. |
 | `on-task-start` | Task started | Individual task execution begins |
-| `on-task-complete` | Task completed | Task approved or failed |
+| `on-task-complete` | Task completed | Task approved or failed. `--batch` emits zero tokens with `attribution: "phase_aggregate"`. |
+| `on-apply-complete` | Phase 5 + run ended | All tasks done. Auto-detects batch mode if not explicitly set. |
 
 ### Iteration and Edit Metrics
 

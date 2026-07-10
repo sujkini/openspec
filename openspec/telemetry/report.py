@@ -225,17 +225,21 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "tokens_in": 0,
                 "tokens_out": 0,
                 "self_correction_loops": 0,
+                "attribution": None,
             }
         elif etype == "task_end":
             tpk = ev.get("task_pk", "")
             if tpk in tasks:
-                tasks[tpk].update({
+                update: dict[str, Any] = {
                     "status": ev.get("status", "passed"),
                     "completed_at": ev.get("ts"),
                     "tokens_in": ev.get("tokens_in", 0),
                     "tokens_out": ev.get("tokens_out", 0),
                     "self_correction_loops": ev.get("self_correction_loops", 0),
-                })
+                }
+                if ev.get("attribution"):
+                    update["attribution"] = ev["attribution"]
+                tasks[tpk].update(update)
 
     all_tasks = [tasks[tid] for tid in order if tid in tasks]
     return _dedupe_tasks(all_tasks)
@@ -381,6 +385,8 @@ def generate_report(change: str) -> Path:
 
     Returns the path to the written report.
     """
+    from .jira_metadata import enrich_run_metadata, read_jira_report_fields
+
     change_dir = CHANGES_DIR / change
     events = _read_events(change_dir)
 
@@ -388,6 +394,9 @@ def generate_report(change: str) -> Path:
     phases = _reconstruct_phases(events)
     tasks = _reconstruct_tasks(events)
     log_events = _collect_log_events(events)
+
+    if run:
+        enrich_run_metadata(run, change_dir)
 
     global_health = _compute_global_health(run, phases, tasks, change_dir) if run else {
         "total_tokens_consumed": 0,
@@ -403,9 +412,12 @@ def generate_report(change: str) -> Path:
     }
     artifact_edits = _compute_artifact_edits(change_dir)
 
+    jira_fields = read_jira_report_fields(change_dir)
+
     report: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "operator_name": _detect_operator_name(),
+        **jira_fields,
         "run": run,
         "phases": phases,
         "tasks": tasks,

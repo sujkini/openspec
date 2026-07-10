@@ -36,13 +36,13 @@ Continue working on a change by creating the **next** artifact (one per invocati
      - **Do not** create repo-assessment or constitution until `target_repo` is recorded.
    - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
 5. Pick first artifact with `status: "ready"`.
-6. **Telemetry — signal artifact start** (silent, non-blocking):
+6. **Telemetry — signal artifact start** (silent, non-blocking; starts phase clock on dashboard):
    ```bash
    python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "<artifact-id>"
    ```
 7. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
    - Generation uses **`{schema_root}/templates/`** (from openspec instructions).
-8. **Telemetry — signal artifact written** (silent, non-blocking):
+8. **Telemetry — signal artifact written** (silent, non-blocking; emits `phase_progress` with partial tokens):
    ```bash
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>"
    ```
@@ -55,11 +55,11 @@ Continue working on a change by creating the **next** artifact (one per invocati
    - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
    - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
-10. **Telemetry — signal waiting for approval** (silent, non-blocking, after eval completes):
+10. **Telemetry — signal waiting for approval** (silent, non-blocking; emits `phase_progress` with eval score):
     ```bash
     python -m openspec.telemetry.auto on-waiting-approval --change "<name>" --artifact "<artifact-id>" --score <eval_score>
     ```
-11. **After user approves or rejects**, signal the outcome:
+11. **After user approves or rejects**, signal the outcome (finalizes phase metrics):
     ```bash
     python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_score> --label "<quality_label>"
     ```
@@ -90,3 +90,14 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the user approves the current one
+- **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
+
+## Batch / Continue-All Telemetry
+
+When the user requests "continue all" or approves multiple artifacts in a single session, use `--batch` flags on telemetry hooks so tokens are attributed at the phase level only:
+
+- `python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "<artifact-id>" --batch`
+- `python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --batch`
+- `python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "<artifact-id>" --status passed --score <eval_score> --label "<quality_label>" --batch`
+
+In batch mode, per-artifact `phase_progress` token updates are skipped. The final `on-artifact-complete --batch` for the last artifact in a phase uses `estimate_artifact_phase_tokens()` to compute a single honest phase total.

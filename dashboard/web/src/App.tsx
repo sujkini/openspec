@@ -11,6 +11,7 @@ import { useRuns, useRun, usePhases, useEvents } from "@/hooks/useRun";
 import ArtifactEdits from "@/components/metrics/ArtifactEdits";
 import { useGlobalHealth, useTokenBurn, useArtifactEdits } from "@/hooks/useMetrics";
 import { useSSE } from "@/hooks/useSSE";
+import { useLiveTelemetry } from "@/hooks/useLiveTelemetry";
 import type { AgentEvent } from "@/types";
 
 export default function App() {
@@ -26,7 +27,9 @@ export default function App() {
   const { data: tokenBurn } = useTokenBurn(activeRunId);
   const { data: artifactEdits } = useArtifactEdits(activeRunId);
   const { data: historicalEvents } = useEvents(activeRunId);
-  const { logs: streamLogs } = useSSE(activeRunId);
+  const { logs: streamLogs, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus } = useSSE(activeRunId);
+
+  useLiveTelemetry(activeRunId, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus);
 
   const allLogs: AgentEvent[] = useMemo(() => {
     const seen = new Set<string>();

@@ -71,6 +71,7 @@ export interface TaskExecution {
   tokens_in: number;
   tokens_out: number;
   cost_usd: number;
+  token_attribution?: string | null;
   started_at: string | null;
   completed_at: string | null;
 }

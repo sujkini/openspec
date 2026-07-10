@@ -120,6 +120,43 @@ constitution_md:
     constitution is an INPUT — not a generated artifact.
 
 # ---------------------------------------------------------------------------
+# jira_metadata — enriched Jira fields fetched at /opsx-new via Jira MCP
+# ---------------------------------------------------------------------------
+jira_metadata:
+  description: >-
+    Optional enrichment fields populated by Jira MCP fetch during /opsx-new.
+    Used by telemetry (metrics-report.json) and dashboard for traceability.
+    Stored alongside existing fields in inputs/jira.yaml.
+  stored_in: openspec/changes/<change>/inputs/jira.yaml
+  populated_at: opsx-new
+  fields:
+    jira_summary:
+      type: string
+      description: Issue summary/title from Jira
+    jira_url:
+      type: string
+      description: "Full browse URL: https://issues.redhat.com/browse/<jira_key>"
+    epic_key:
+      type: string
+      description: Parent epic key (from parent.key or customfield_10014)
+      optional: true
+    epic_name:
+      type: string
+      description: Epic summary/title
+      optional: true
+    epic_url:
+      type: string
+      description: "Full browse URL for the epic: https://issues.redhat.com/browse/<epic_key>"
+      optional: true
+    jira_fetched_at:
+      type: string
+      description: ISO8601 timestamp of when Jira metadata was fetched
+  fallback: >-
+    When Jira MCP is unavailable, jira_key and created_at are still written.
+    Other fields remain absent. The telemetry system constructs URLs from
+    jira_key/epic_key when explicit URLs are missing.
+
+# ---------------------------------------------------------------------------
 # target_repo — upstream GitHub repo for assessment and planning
 # ---------------------------------------------------------------------------
 target_repo:

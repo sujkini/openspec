@@ -20,6 +20,7 @@ class TaskUpdate(BaseModel):
     tokens_in: int | None = None
     tokens_out: int | None = None
     cost_usd: float | None = None
+    token_attribution: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -36,6 +37,7 @@ class TaskOut(BaseModel):
     tokens_in: int
     tokens_out: int
     cost_usd: float
+    token_attribution: str | None = None
     started_at: datetime | None
     completed_at: datetime | None
 

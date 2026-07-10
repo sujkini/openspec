@@ -120,3 +120,96 @@ def estimate_task_tokens(change_dir: Path, task_id: str, fork_dir: Path | None =
         tokens_out = max(500, tokens_in // 10)
 
     return tokens_in, tokens_out
+
+
+def estimate_phase5_tokens(change_dir: Path) -> tuple[int, int]:
+    """Batch-safe token estimate for the entire code_generation phase.
+
+    Counts shared context (specs, plan, etc.) exactly once as input, and sums
+    all task reports + eval results as output.  Use this instead of summing
+    per-task estimates when multiple tasks were completed in a single session.
+    """
+    input_files: list[Path] = []
+    output_files: list[Path] = []
+
+    for ctx_file in ["specs.md", "plan.md", "constitution.md", "tasks.md", "repo-assessment.md"]:
+        p = change_dir / ctx_file
+        if p.exists():
+            input_files.append(p)
+
+    inputs_dir = change_dir / "inputs"
+    if inputs_dir.exists():
+        for f in inputs_dir.iterdir():
+            if f.is_file() and f.suffix in (".yaml", ".yml", ".md", ".txt", ".json"):
+                input_files.append(f)
+
+    design_bundle = change_dir / "implementation" / "design-bundle.md"
+    if design_bundle.exists():
+        input_files.append(design_bundle)
+
+    reports_dir = change_dir / "implementation" / "task-reports"
+    if reports_dir.exists():
+        for f in reports_dir.glob("*.md"):
+            output_files.append(f)
+
+    eval_dir = change_dir / "eval-results"
+    if eval_dir.exists():
+        for f in eval_dir.glob("code-generation-*.yaml"):
+            output_files.append(f)
+
+    tokens_in = estimate_tokens_for_files(input_files)
+    tokens_out = estimate_tokens_for_files(output_files)
+
+    if tokens_out == 0:
+        tokens_out = max(500, tokens_in // 10)
+
+    return tokens_in, tokens_out
+
+
+def estimate_artifact_phase_tokens(change_dir: Path, phase_number: int) -> tuple[int, int]:
+    """Batch-safe token estimate for an artifact phase (phases 1-4).
+
+    Like ``estimate_phase5_tokens`` but for artifact phases: counts shared
+    inputs once and sums all artifact outputs in the phase.
+    """
+    from .change_metrics import PHASE_ARTIFACTS
+
+    artifact_ids = PHASE_ARTIFACTS.get(phase_number, [])
+    if not artifact_ids:
+        return 0, 0
+
+    input_files: list[Path] = []
+    output_files: list[Path] = []
+
+    inputs_dir = change_dir / "inputs"
+    if inputs_dir.exists():
+        for f in inputs_dir.iterdir():
+            if f.is_file() and f.suffix in (".yaml", ".yml", ".md", ".txt", ".json"):
+                input_files.append(f)
+
+    dependency_map = {
+        "specs": ["validation.json"],
+        "repo-assessment": ["specs.md"],
+        "constitution": ["specs.md", "repo-assessment.md"],
+        "plan": ["specs.md", "repo-assessment.md", "constitution.md"],
+        "tasks": ["specs.md", "plan.md", "constitution.md"],
+    }
+    seen_deps: set[str] = set()
+    for artifact_id in artifact_ids:
+        for dep_name in dependency_map.get(artifact_id, []):
+            if dep_name not in seen_deps:
+                dep_path = change_dir / dep_name
+                if dep_path.exists():
+                    input_files.append(dep_path)
+                seen_deps.add(dep_name)
+
+        for ext in (".md", ".json"):
+            out_path = change_dir / f"{artifact_id}{ext}"
+            if out_path.exists():
+                output_files.append(out_path)
+                break
+
+    tokens_in = estimate_tokens_for_files(input_files)
+    tokens_out = estimate_tokens_for_files(output_files)
+
+    return tokens_in, tokens_out

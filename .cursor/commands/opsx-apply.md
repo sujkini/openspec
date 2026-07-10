@@ -45,6 +45,7 @@ Initialize from template on first invocation if missing.
 5. **On user "approve"** — write task report, mark complete, update state to IDLE, then STOP. Tell the user to run `/opsx-apply` again. Do NOT start the next task.
 6. **Context windowing** — only load §4 payload for `current_task_id`, not all tasks
 7. **Write state after every transition** — state must survive agent crashes
+8. **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-apply`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 
 ## YIELD BOUNDARY — CRITICAL
 
@@ -80,7 +81,7 @@ Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `di
 - Mark task `- [x]` in tasks.md
 - Move `current_task_result` to `completed[]`
 - Clear `current_task_result` and `rejections`
-- **Telemetry — signal task complete** (silent, non-blocking):
+- **Telemetry — signal task complete** (silent, non-blocking; rolls up phase-5 tokens incrementally):
   ```bash
   python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed
   ```
@@ -329,3 +330,14 @@ You are PROHIBITED from:
 - Any action that advances the workflow after presenting an approval question or processing an approval
 
 If you find yourself about to start a new task in the same response — STOP. You are violating the contract.
+
+## Batch / Apply-All Telemetry
+
+When the user requests "approve all", "continue all tasks", or similar batch execution that completes multiple tasks in a single session, per-task token estimation is unreliable (file-based estimation repeats the same shared context for every task). Use `--batch` flags on telemetry hooks so tokens are attributed at the phase level only:
+
+1. At batch start: `python -m openspec.telemetry.auto on-apply-start --change "<name>" --batch`
+2. Per task: still call `on-task-start` and `on-task-complete --batch` for each task (records status, agent, eval loops — but tokens_in/out = 0 with attribution = "phase_aggregate")
+3. At end: `python -m openspec.telemetry.auto on-apply-complete --change "<name>"` (phase-level tokens computed once, not summed per-task)
+4. Do **not** expect per-task token breakdown in metrics for batch runs
+
+**Auto-detect fallback:** If `--batch` is accidentally omitted, `on-apply-complete` auto-detects batch mode when 2+ tasks have near-identical token estimates and corrects to phase-level attribution.

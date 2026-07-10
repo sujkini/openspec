@@ -78,8 +78,59 @@ def _estimate_task(change: str, task_id: str) -> tuple[int, int]:
     return estimate_task_tokens(CHANGES_DIR / change, task_id)
 
 
+def _emit_phase_progress(
+    change: str,
+    state: dict[str, Any],
+    phase_key: str,
+    client,
+    *,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    quality_score: float = 0,
+    quality_label: str = "",
+    iteration_count: int = 1,
+    duration_s: float | None = None,
+) -> None:
+    """Emit a phase_progress event and update cumulative phase state."""
+    phases = state.get("phases", {})
+    phase_info = phases.get(phase_key)
+    if not phase_info or phase_info.get("ended"):
+        return
+
+    cum_in = phase_info.get("tokens_in", 0) + tokens_in
+    cum_out = phase_info.get("tokens_out", 0) + tokens_out
+    phase_info["tokens_in"] = cum_in
+    phase_info["tokens_out"] = cum_out
+
+    client.update_phase(
+        phase_info["id"],
+        tokens_in=cum_in,
+        tokens_out=cum_out,
+        quality_score=quality_score,
+        quality_label=quality_label,
+        iteration_count=iteration_count,
+        duration_s=duration_s,
+    )
+    _save_state(change, state)
+
+
 def _out(data: dict[str, Any]) -> None:
     print(json.dumps(data))
+
+
+def _is_batch_mode(state: dict[str, Any], phase_key: str) -> bool:
+    """Check if a phase is running in batch mode."""
+    phase_info = state.get("phases", {}).get(phase_key)
+    return bool(phase_info and phase_info.get("batch_mode"))
+
+
+def _set_batch_mode(state: dict[str, Any], phase_key: str) -> None:
+    """Mark a phase as running in batch mode."""
+    from datetime import datetime, timezone
+    phase_info = state.get("phases", {}).get(phase_key)
+    if phase_info:
+        phase_info["batch_mode"] = True
+        phase_info["batch_detected_at"] = datetime.now(timezone.utc).isoformat()
 
 
 def on_new(args: argparse.Namespace) -> None:
@@ -89,6 +140,11 @@ def on_new(args: argparse.Namespace) -> None:
         _out({"ok": True, "run_id": existing["run_id"], "already_exists": True})
         return
 
+    # Read jira metadata if available (enriched by MCP fetch in opsx-new)
+    from .jira_metadata import read_jira_metadata
+    change_dir = CHANGES_DIR / args.change
+    jira_meta = read_jira_metadata(change_dir)
+
     client = _client(args.change)
     try:
         change_label = f"{args.jira_key} — {args.change}"
@@ -96,6 +152,7 @@ def on_new(args: argparse.Namespace) -> None:
             change_name=change_label,
             jira_key=args.jira_key,
             branch=getattr(args, "branch", "") or f"feature/{args.change}",
+            metadata=jira_meta if jira_meta else None,
         )
         state: dict[str, Any] = {
             "run_id": run_id,
@@ -127,8 +184,12 @@ def on_artifact_start(args: argparse.Namespace) -> None:
     phase_number, phase_name, _ = mapping
     key = str(phase_number)
     phases = state.setdefault("phases", {})
+    batch = getattr(args, "batch", False)
 
     if key in phases and not phases[key].get("ended"):
+        if batch and not phases[key].get("batch_mode"):
+            _set_batch_mode(state, key)
+            _save_state(args.change, state)
         _out({"ok": True, "phase_id": phases[key]["id"], "already_running": True})
         return
 
@@ -136,6 +197,8 @@ def on_artifact_start(args: argparse.Namespace) -> None:
     try:
         phase_id = client.start_phase(run_id, phase_number, phase_name)
         phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
+        if batch:
+            _set_batch_mode(state, key)
         _save_state(args.change, state)
         _out({"ok": True, "phase_id": phase_id})
     finally:
@@ -151,6 +214,18 @@ def on_artifact_created(args: argparse.Namespace) -> None:
         _out({"skip": True, "reason": "no run_id"})
         return
 
+    mapping = ARTIFACT_PHASE_MAP.get(args.artifact)
+    phase_key = str(mapping[0]) if mapping else None
+    change_dir = CHANGES_DIR / args.change
+    batch = getattr(args, "batch", False) or (phase_key and _is_batch_mode(state, phase_key))
+
+    if batch and phase_key:
+        _set_batch_mode(state, phase_key)
+
+    tokens_in, tokens_out = _estimate_artifact(args.change, args.artifact)
+    iteration_count = phase_iteration_count(change_dir, mapping[0]) if mapping else 1
+    duration_s = phase_duration_s(change_dir, mapping[0]) if mapping else None
+
     client = _client(args.change)
     try:
         client.log_event(
@@ -159,7 +234,18 @@ def on_artifact_created(args: argparse.Namespace) -> None:
             event_type="state_machine",
             message=f"Artifact '{args.artifact}' created — awaiting eval gate",
         )
-        _out({"ok": True})
+        if phase_key and not batch:
+            _emit_phase_progress(
+                args.change, state, phase_key, client,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                quality_label="artifact_created",
+                iteration_count=iteration_count,
+                duration_s=duration_s,
+            )
+        if batch:
+            _save_state(args.change, state)
+        _out({"ok": True, "tokens_in": tokens_in, "tokens_out": tokens_out, "batch_mode": bool(batch)})
     finally:
         client.close()
     _regenerate_report(args.change)
@@ -173,6 +259,13 @@ def on_waiting_approval(args: argparse.Namespace) -> None:
         _out({"skip": True, "reason": "no run_id"})
         return
 
+    mapping = ARTIFACT_PHASE_MAP.get(args.artifact)
+    phase_key = str(mapping[0]) if mapping else None
+    change_dir = CHANGES_DIR / args.change
+
+    iteration_count = phase_iteration_count(change_dir, mapping[0]) if mapping else 1
+    duration_s = phase_duration_s(change_dir, mapping[0]) if mapping else None
+
     score_text = f" (eval score: {args.score}%)" if getattr(args, "score", 0) else ""
     client = _client(args.change)
     try:
@@ -182,6 +275,14 @@ def on_waiting_approval(args: argparse.Namespace) -> None:
             event_type="state_machine",
             message=f"Artifact '{args.artifact}' ready for approval{score_text} — waiting for human decision",
         )
+        if phase_key:
+            _emit_phase_progress(
+                args.change, state, phase_key, client,
+                quality_score=getattr(args, "score", 0) or 0,
+                quality_label="awaiting_approval",
+                iteration_count=iteration_count,
+                duration_s=duration_s,
+            )
         _out({"ok": True})
     finally:
         client.close()
@@ -207,11 +308,17 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
 
     run_id = state.get("run_id", "")
     change_dir = CHANGES_DIR / args.change
-    tokens_in, tokens_out = _estimate_artifact(args.change, args.artifact)
+    batch = getattr(args, "batch", False) or _is_batch_mode(state, key)
     iteration_count = phase_iteration_count(change_dir, phase_number)
     duration_s = phase_duration_s(change_dir, phase_number)
-    cum_in = phase_info.get("tokens_in", 0) + tokens_in
-    cum_out = phase_info.get("tokens_out", 0) + tokens_out
+
+    if batch:
+        from .tokens import estimate_artifact_phase_tokens
+        cum_in, cum_out = estimate_artifact_phase_tokens(change_dir, phase_number)
+    else:
+        tokens_in, tokens_out = _estimate_artifact(args.change, args.artifact)
+        cum_in = phase_info.get("tokens_in", 0) + tokens_in
+        cum_out = phase_info.get("tokens_out", 0) + tokens_out
 
     status_verb = "approved" if args.status == "passed" else "rejected"
     client = _client(args.change)
@@ -239,24 +346,26 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
                 tokens_out=cum_out,
                 iteration_count=iteration_count,
                 duration_s=duration_s,
+                batch_mode=batch,
             )
             phases[key]["ended"] = True
             _save_state(args.change, state)
-            _out({"ok": True, "phase_ended": True, "tokens_in": cum_in, "tokens_out": cum_out})
+            _out({"ok": True, "phase_ended": True, "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
         else:
-            phases[key]["tokens_in"] = cum_in
-            phases[key]["tokens_out"] = cum_out
-            client.update_phase(
-                phase_info["id"],
-                tokens_in=cum_in,
-                tokens_out=cum_out,
-                quality_score=getattr(args, "score", 0) or 0,
-                quality_label=getattr(args, "label", "") or "",
-                iteration_count=iteration_count,
-                duration_s=duration_s,
-            )
+            if not batch:
+                phases[key]["tokens_in"] = cum_in
+                phases[key]["tokens_out"] = cum_out
+                client.update_phase(
+                    phase_info["id"],
+                    tokens_in=cum_in,
+                    tokens_out=cum_out,
+                    quality_score=getattr(args, "score", 0) or 0,
+                    quality_label=getattr(args, "label", "") or "",
+                    iteration_count=iteration_count,
+                    duration_s=duration_s,
+                )
             _save_state(args.change, state)
-            _out({"ok": True, "phase_ended": False, "tokens_in": cum_in, "tokens_out": cum_out})
+            _out({"ok": True, "phase_ended": False, "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
     finally:
         client.close()
     _regenerate_report(args.change)
@@ -270,11 +379,15 @@ def on_apply_start(args: argparse.Namespace) -> None:
         _out({"skip": True, "reason": "no run_id"})
         return
 
+    batch = getattr(args, "batch", False)
     phases = state.setdefault("phases", {})
     if "5" in phases and phases["5"].get("ended"):
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_completed": True})
         return
     if "5" in phases and not phases["5"].get("ended"):
+        if batch and not phases["5"].get("batch_mode"):
+            _set_batch_mode(state, "5")
+            _save_state(args.change, state)
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_running": True})
         return
 
@@ -282,6 +395,8 @@ def on_apply_start(args: argparse.Namespace) -> None:
     try:
         phase_id = client.start_phase(run_id, 5, "code_generation")
         phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
+        if batch:
+            _set_batch_mode(state, "5")
         _save_state(args.change, state)
         _out({"ok": True, "phase_id": phase_id})
     finally:
@@ -328,23 +443,71 @@ def on_task_complete(args: argparse.Namespace) -> None:
         _out({"skip": True, "reason": f"task {args.task_id} not tracked"})
         return
 
-    tokens_in, tokens_out = _estimate_task(args.change, args.task_id)
+    batch = getattr(args, "batch", False) or _is_batch_mode(state, "5")
+    if batch:
+        _set_batch_mode(state, "5")
+
     loops = read_task_refinement_rounds(CHANGES_DIR / args.change, args.task_id)
 
     client = _client(args.change)
     try:
-        client.end_task(
-            task_pk,
-            status=args.status,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cost_usd=0,
-            self_correction_loops=loops,
-        )
-        _out({"ok": True, "task_pk": task_pk, "tokens_in": tokens_in, "tokens_out": tokens_out})
+        if batch:
+            client.end_task(
+                task_pk,
+                status=args.status,
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=0,
+                self_correction_loops=loops,
+                attribution="phase_aggregate",
+            )
+            run_id = state.get("run_id", "")
+            client.log_event(
+                run_id=run_id,
+                agent_id="Pipeline",
+                event_type="state_machine",
+                message=f"Task {args.task_id} completed (batch mode — tokens attributed at phase level)",
+            )
+            _save_state(args.change, state)
+            _out({"ok": True, "task_pk": task_pk, "tokens_in": 0, "tokens_out": 0, "batch_mode": True})
+        else:
+            tokens_in, tokens_out = _estimate_task(args.change, args.task_id)
+            client.end_task(
+                task_pk,
+                status=args.status,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_usd=0,
+                self_correction_loops=loops,
+            )
+            phase_info = state.get("phases", {}).get("5")
+            if phase_info and not phase_info.get("ended"):
+                _emit_phase_progress(
+                    args.change, state, "5", client,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    quality_label=f"task_{args.task_id}_{args.status}",
+                )
+            _out({"ok": True, "task_pk": task_pk, "tokens_in": tokens_in, "tokens_out": tokens_out})
     finally:
         client.close()
     _regenerate_report(args.change)
+
+
+def _detect_batch_from_tasks(change: str, state: dict[str, Any]) -> bool:
+    """Auto-detect batch mode when --batch was not passed explicitly.
+
+    If 2+ tasks were completed and all have near-identical per-task estimates
+    (within 5%), the tokens were almost certainly from a shared session.
+    """
+    task_ids = list(state.get("tasks", {}).keys())
+    if len(task_ids) < 2:
+        return False
+    estimates = [_estimate_task(change, tid)[0] for tid in task_ids]
+    if not estimates or estimates[0] == 0:
+        return False
+    ref = estimates[0]
+    return all(abs(e - ref) / ref <= 0.05 for e in estimates[1:])
 
 
 def on_apply_complete(args: argparse.Namespace) -> None:
@@ -358,20 +521,40 @@ def on_apply_complete(args: argparse.Namespace) -> None:
         return
 
     change_dir = CHANGES_DIR / args.change
-    total_tokens_in = 0
-    total_tokens_out = 0
-    for task_id in state.get("tasks", {}):
-        ti, to = _estimate_task(args.change, task_id)
-        total_tokens_in += ti
-        total_tokens_out += to
+    batch = _is_batch_mode(state, "5")
+
+    if not batch and _detect_batch_from_tasks(args.change, state):
+        batch = True
+        _set_batch_mode(state, "5")
+
+    if batch:
+        from .tokens import estimate_phase5_tokens
+        total_tokens_in, total_tokens_out = estimate_phase5_tokens(change_dir)
+    else:
+        total_tokens_in = phase_info.get("tokens_in", 0)
+        total_tokens_out = phase_info.get("tokens_out", 0)
+        if total_tokens_in == 0 and total_tokens_out == 0:
+            for task_id in state.get("tasks", {}):
+                ti, to = _estimate_task(args.change, task_id)
+                total_tokens_in += ti
+                total_tokens_out += to
 
     run_id = state.get("run_id", "")
     iteration_count = phase5_iteration_count(change_dir)
     should_close, label = phase5_should_close(change_dir)
     quality_label = getattr(args, "label", "") or (label if should_close else "all tasks approved")
+    if batch and "batch" not in quality_label:
+        quality_label = f"batch: {quality_label}"
 
     client = _client(args.change)
     try:
+        if batch:
+            client.log_event(
+                run_id=run_id,
+                agent_id="Pipeline",
+                event_type="state_machine",
+                message="Phase 5 completing in batch mode — tokens estimated at phase level",
+            )
         client.end_phase(
             phase_info["id"],
             status="passed",
@@ -379,12 +562,13 @@ def on_apply_complete(args: argparse.Namespace) -> None:
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,
             iteration_count=iteration_count,
+            batch_mode=batch,
         )
         phases["5"]["ended"] = True
 
         client.end_run(run_id, status="completed")
         _save_state(args.change, state)
-        _out({"ok": True, "tokens_in": total_tokens_in, "tokens_out": total_tokens_out})
+        _out({"ok": True, "tokens_in": total_tokens_in, "tokens_out": total_tokens_out, "batch_mode": batch})
     finally:
         client.close()
     _regenerate_report(args.change)
@@ -462,16 +646,9 @@ def sync(args: argparse.Namespace) -> None:
                     client.close()
 
             if should_close and "5" in phases and not phases["5"].get("ended"):
-                from .tokens import estimate_task_tokens
+                from .tokens import estimate_phase5_tokens
 
-                reports_dir = change_dir / "implementation" / "task-reports"
-                existing_reports = {f.stem for f in reports_dir.glob("*.md")} if reports_dir.exists() else set()
-                total_in, total_out = 0, 0
-                for tid in existing_reports:
-                    ti, to = estimate_task_tokens(change_dir, tid)
-                    total_in += ti
-                    total_out += to
-
+                total_in, total_out = estimate_phase5_tokens(change_dir)
                 iteration_count = phase5_iteration_count(change_dir)
 
                 client = _client(args.change)
@@ -521,10 +698,12 @@ def build_parser() -> argparse.ArgumentParser:
     sa = sub.add_parser("on-artifact-start", help="Signal artifact creation started")
     sa.add_argument("--change", required=True)
     sa.add_argument("--artifact", required=True)
+    sa.add_argument("--batch", action="store_true", help="Batch mode — skip per-artifact token attribution")
 
     acr = sub.add_parser("on-artifact-created", help="Signal artifact file written to disk")
     acr.add_argument("--change", required=True)
     acr.add_argument("--artifact", required=True)
+    acr.add_argument("--batch", action="store_true", help="Batch mode — skip token-bearing phase_progress")
 
     wa = sub.add_parser("on-waiting-approval", help="Signal artifact presented for user approval")
     wa.add_argument("--change", required=True)
@@ -538,9 +717,11 @@ def build_parser() -> argparse.ArgumentParser:
     ac.add_argument("--score", type=float, default=0)
     ac.add_argument("--label", default="")
     ac.add_argument("--iterations", type=int, default=1)
+    ac.add_argument("--batch", action="store_true", help="Batch mode — use phase-level token estimate")
 
     ap = sub.add_parser("on-apply-start", help="Signal task loop started")
     ap.add_argument("--change", required=True)
+    ap.add_argument("--batch", action="store_true", help="Batch mode — skip per-task token attribution")
 
     ts = sub.add_parser("on-task-start", help="Signal task execution started")
     ts.add_argument("--change", required=True)
@@ -553,6 +734,7 @@ def build_parser() -> argparse.ArgumentParser:
     tc.add_argument("--task-id", required=True)
     tc.add_argument("--status", required=True, choices=["passed", "failed"])
     tc.add_argument("--loops", type=int, default=0)
+    tc.add_argument("--batch", action="store_true", help="Batch mode — zero-token task end, phase-level attribution")
 
     apc = sub.add_parser("on-apply-complete", help="Signal all tasks done, end phase 5 + run")
     apc.add_argument("--change", required=True)
