@@ -2,11 +2,16 @@
 
 Generate §0 through §3 ONLY. Do NOT generate §4 or §5.
 
+### Phase scope
+When `phase_scope` metadata is present, generate §0-§3 for the specified plan
+phase ONLY. §0 maps only that phase's spec goals. §1-§3 contain only that
+phase's tasks. Task IDs use the phase prefix (T{N}_*).
+
 ### Completeness rules
 - **Generation priority when space-constrained:** §0 coverage checklist → §3 manifest (all tasks) →
   §2 linear order → §1 DAG.
-- Verification tasks: pair substantive implementation tasks with test tasks when constitution requires.
-  Use actual Makefile targets from repo_assessment (e.g., `make test`, not `make test-unit` unless evidenced).
+- Unit test co-generation: every Go implementation task MUST include test co-generation in its
+  Acceptance criteria (not separate tasks). Use actual Makefile targets from repo_assessment.
 
 ### Output sections — use these EXACT headings
 
@@ -81,3 +86,8 @@ Output structure:
 - [ ] §2 linear order is a valid topological sort of §1 DAG
 - [ ] Assigned Agent values exist in agents.md (when PROVIDED) or match provisional IDs exactly
 - [ ] §3 manifest row count matches tasks_index.json entry count
+
+### Task sizing
+If user message metadata contains `task_sizing`, apply **Task consolidation rules**
+from the base tasks-template.md after generating §3. Verify §3 row count is within
+[min, max]. Do NOT prompt the user — sizing was already collected.

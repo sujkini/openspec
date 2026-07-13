@@ -293,6 +293,91 @@ stage_eval_gate:
     - user_rejection_feedback
 
 # ---------------------------------------------------------------------------
+# task_sizing — user-controlled task count range and consolidation rules
+# ---------------------------------------------------------------------------
+task_sizing:
+  description: >-
+    Controls total task count via a user-specified range and mandatory
+    consolidation rules. The user is prompted ONCE by /opsx-continue
+    (step 5b) before task generation begins. This schema block defines
+    the rules — it does NOT trigger a prompt.
+  config_key: flags.task_sizing
+  prompted_by: "/opsx-continue step 5b (single prompt, before generation)"
+  do_not_prompt_again: true
+  metadata_key: task_sizing
+  metadata_schema:
+    min: integer
+    max: integer
+    consolidation_threshold: integer
+  enforcement:
+    - >-
+      Generation templates read task_sizing from user message metadata.
+      If absent, no consolidation is applied (normal flow).
+    - >-
+      After skeleton generation, if §3 row count > max, apply
+      consolidation rules and regenerate skeleton (internal — no user prompt).
+  consolidation_rules:
+    merge_when_all_true:
+      - complexity <= consolidation_threshold
+      - same Assigned Agent as adjacent task in §2 order
+      - same Phase
+      - no tasks outside this phase depend solely on this task
+      - merged complexity does not exceed 5
+    merge_action: >-
+      Combine objectives, target files, and acceptance criteria into the
+      host task. Remove merged ID from §1, §2, §3. Update Depends On refs.
+
+# ---------------------------------------------------------------------------
+# phase_iterative — phase-by-phase task generation and implementation
+# ---------------------------------------------------------------------------
+phase_iterative:
+  description: >-
+    After plan.md approval, tasks are generated and implemented one plan phase
+    at a time. Each phase cycle: generate tasks → eval gate → user approval →
+    implement (task-by-task with co-gen tests) → optional PR → next phase.
+    tasks.md uses append strategy: completed phase tasks stay marked [x].
+  config_key: flags.phase_iterative
+  enabled_by_default: true
+  tasks_file_strategy: append
+  pr_between_phases: optional
+  phase_approval_gate: full
+  phase_tracking:
+    stored_in: openspec/changes/<change>/implementation/state.yaml
+    fields:
+      current_plan_phase: integer
+      total_plan_phases: integer
+      completed_phases: "array of integer"
+      phase_pr_urls: "map of phase_number to url"
+  flow: >-
+    plan.md approved →
+    generate tasks for Phase 1 → eval gate → user approval →
+    /opsx-apply Phase 1 tasks (task-by-task) →
+    phase complete → optional PR →
+    generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
+    /opsx-apply Phase 2 tasks →
+    ... repeat for all phases →
+    final implementation-report.md → archive
+  phase_boundary:
+    on_all_phase_tasks_complete:
+      - Present phase summary (tasks completed, files changed, test results)
+      - >-
+        ASK: "All Phase {N} tasks complete. Raise a draft PR for Phase {N}?
+        (Yes / No, continue to Phase {N+1})"
+      - If yes: commit, push, open draft PR; record URL in state.yaml phase_pr_urls
+      - Update state.yaml: current_plan_phase = N+1
+      - >-
+        If current_plan_phase > total_plan_phases: all phases done →
+        write implementation-report.md, set COMPLETE
+      - >-
+        If phases remain: set state IDLE, tell user to run /opsx-continue
+        for Phase N+1 task generation
+  telemetry:
+    per_phase:
+      task_creation: "on-artifact-start/complete --artifact tasks --phase <N>"
+      implementation: "on-apply-start --phase <N>, on-task-start/complete per task"
+      phase_complete: "on-phase-complete --phase <N> --pr-raised <true|false>"
+
+# ---------------------------------------------------------------------------
 # code_generation_eval_gate — per-task code evals during /opsx-apply
 # applies_when: codegen_mode = ai-helpers (skipped entirely in direct mode)
 # ---------------------------------------------------------------------------
@@ -811,9 +896,11 @@ workflow:
   - id: task-creation
     name: Task Creation Stage
     description: >-
-      Decompose the approved plan into an execution backlog (tasks.md) with
-      dependency DAG, agent routing, per-task payloads, and orchestration notes.
-      Evaluated by the user before implementation.
+      Decompose the approved plan into an execution backlog (tasks.md) one plan
+      phase at a time (see schema phase_iterative). Each phase cycle: generate
+      tasks for Phase N → eval gate → user approval → implement Phase N →
+      optional PR → generate Phase N+1 tasks (appended to tasks.md).
+      tasks.md grows incrementally; completed phase tasks stay marked [x].
     inputs:
       - specs.md
       - constitution.md (input — resolved via constitution_md.lookup_order)
@@ -828,16 +915,18 @@ workflow:
   - id: implementation
     name: Implementation Stage
     description: >-
-      Final pipeline stage. Begins after Task Creation (tasks.md) is approved.
-      Code generation strategy is determined by config.yaml flags.codegen_mode:
-      ai-helpers uses OAPE command routing and code eval gate; direct uses plain
-      agent implementation.
+      Begins after each phase's tasks in tasks.md are approved (see schema
+      phase_iterative). Implements the current phase's tasks task-by-task, then
+      offers an optional draft PR before cycling back to task-creation for the
+      next phase. Code generation strategy is determined by config.yaml
+      flags.codegen_mode: ai-helpers uses OAPE command routing and code eval
+      gate; direct uses plain agent implementation.
       **Default:** The agent asks for fork_repo_url, clones the fork, and drives
-      tasks task-by-task; when complete, pushes and opens a draft PR.
+      tasks task-by-task; when the phase completes, optionally pushes a draft PR.
       **Working-folder mode:** Uses the current project checkout (see schema
       working_folder_repo) — no fork, no draft PR.
-      User approval is required after every task. Closes with implementation-report.md
-      and optional deviation-observed.md.
+      User approval is required after every task. After all phases complete,
+      closes with implementation-report.md and optional deviation-observed.md.
     inputs:
       - tasks.md (required — Task Creation complete)
       - constitution.md (required)
@@ -1068,6 +1157,23 @@ artifacts:
       plus mode-specific instructions in templates/tasks-modes/ when generating
       in passes (see stage4_tasks.py multipass modes).
 
+      ## Phase-scoped generation (phase_iterative mode)
+      When `phase_scope` metadata is present in the user message (default when
+      flags.phase_iterative is true), generate tasks for ONE plan phase at a time:
+      - Read `phase_scope: N` to determine which plan.md phase to expand
+      - §0 coverage checklist maps ONLY Phase N spec goals and plan section
+      - §1–§3 contain ONLY Phase N tasks
+      - §4 payloads for Phase N tasks only
+      - §5 orchestration notes for Phase N only
+      - Task IDs use the phase prefix: Phase 1 = T1_*, Phase 2 = T2_*, etc.
+
+      When appending to existing tasks.md (Phase N > 1):
+      - Prior phase tasks (marked [x]) are READ-ONLY context — do not re-emit
+      - New phase tasks are appended below a `---` separator and phase header
+      - Depends On may reference completed tasks from prior phases
+
+      When `phase_scope` is absent: generate all phases (legacy single-shot mode).
+
       ## AGENTS.md
       If AGENTS.md is not in the target repo or change inputs/, ask the user once to
       provide it (see schema agents_md.when_missing). Respect AgentRoutingMode from
@@ -1132,24 +1238,27 @@ artifacts:
       - Do NOT write production code, patches, or diffs.
       - Do NOT invent file paths not in repo-assessment.md or plan.md.
       - Mark Evidence: PARTIAL when repo-assessment confidence is low.
-      - Pair implementation tasks with verification tasks when constitution requires.
+      - Unit tests are co-generated WITH each implementation task (not separate tasks).
+        Only create separate tasks for e2e/integration tests requiring a live cluster.
       - Complexity: Fibonacci 1, 2, 3, 5, 8.
 
-      ## APPROVAL GATE
-      After merged tasks.md:
-      0. **Eval gate** (see schema stage_eval_gate): score tasks.md against
-         evals/tasks_eval.yaml; refine artifact if cases fail;
-         write eval-results/tasks.yaml. Do not edit schema templates.
-      1. SUMMARIZE: total tasks, complexity points, high-risk count, parallelisable count,
-         agent distribution, manifest preview (first 5 rows), eval score.
-      2. Optional per-phase gates when phase_feedback is enabled (review each phase's
-         manifest rows and payload preview before continuing).
-      3. ASK: see schema user_approval_feedback_gate.approval_prompt
-      4. ON REJECT: Run user_approval_feedback_gate — update template if required;
-         regenerate tasks.md only (multipass or phase-level per impact assessment);
-         write round summary to feedback_stage_artifacts; approved upstream artifacts
-         remain immutable. Re-run eval gate; re-ask approval.
-      5. ON APPROVE: Lock tasks.md as immutable; unlock Implementation Stage.
+      ## APPROVAL GATE (per phase)
+      After generating this phase's tasks (or full tasks.md in legacy mode):
+      0. **Eval gate** (see schema stage_eval_gate): score the NEW phase's tasks
+         against evals/tasks_eval.yaml; refine artifact if cases fail;
+         write eval-results/tasks-phase-<N>.yaml. Do not edit schema templates.
+      1. SUMMARIZE: phase number, total tasks for this phase, complexity points,
+         high-risk count, parallelisable count, agent distribution, manifest
+         preview (first 5 rows), eval score.
+      2. ASK: "Approve Phase {N} tasks and proceed to implementation?
+         (Approve / Reject with feedback)"
+      3. ON REJECT: Run user_approval_feedback_gate — update template if required;
+         regenerate this phase's tasks only; write round summary to
+         feedback_stage_artifacts; approved upstream artifacts and prior phase
+         tasks remain immutable. Re-run eval gate; re-ask approval.
+      4. ON APPROVE: Lock this phase's tasks; unlock Implementation Stage for
+         Phase N. After Phase N implementation completes, /opsx-continue
+         generates Phase N+1 tasks (see schema phase_iterative).
     gate:
       type: approval
       evaluated_by: user
@@ -1309,6 +1418,11 @@ artifacts:
          in the fork cwd. Pass --design-doc with absolute path to design-bundle.md
          for api-generate and api-implement only.
       5. **Follow-up**: Run follow_up make targets when defined (make update, etc.).
+      5b. **Co-generate unit tests** (Tier 1 tasks): Every task producing Go source
+          files with testable logic (controller, webhook/validation, helper functions)
+          MUST co-generate corresponding _test.go files. API struct-only tasks (Tier 3)
+          use go build + go vet. Non-Go tasks (Tier 4) use make verify. Run go test
+          on co-generated tests and record results.
       6. **Manual agents**: For ManifestsBindata_Agent, OLMRelease_Agent,
          RBACSecurity_Agent, WebhookTLS_Agent, Docs_Agent — read
          templates/code-generation-template.md for FILE OPERATIONS format; implement this
@@ -1348,6 +1462,12 @@ artifacts:
       2. **Implement code directly**: Apply code changes in the working copy following
          agents.md patterns, constitution.md guardrails, task payload instructions,
          and acceptance criteria.
+      2b. **Co-generate unit tests** (Tier 1 tasks): Alongside implementation code,
+          co-generate _test.go files for every new/modified Go source file with
+          testable logic. Follow agents.md test exemplar patterns. Scan files_changed
+          to verify _test.go exists for each production .go file; generate if missing.
+          Run go test ./<package>/... -v -count=1. If tests fail: fix code/tests and
+          re-run (up to 2 attempts). Record test file paths + pass/fail.
       3. **Verify**: Run Acceptance criteria for this task; record pass/fail.
       4. **Present** task summary and files touched.
       5. **ASK**: "Approve the code changes for task {task_id} ({task_title})?"
@@ -1367,8 +1487,13 @@ artifacts:
       | Command | Args | Outcome |
       |---------|------|---------|
 
+      ### ## UNIT TESTS CO-GENERATED (Tier 1 tasks only)
+      | Test File | Tests | Passed | Failed |
+      |-----------|-------|--------|--------|
+
       ### ## TEST RESULTS
-      | Test | Result | Notes |
+      | Command | Exit Code | Result |
+      |---------|-----------|--------|
 
       ### ## CODE GENERATION EVAL SCORECARD (ai-helpers mode only)
       Overall score, cases pass/fail, refinement rounds, eval-driven fixes applied.
@@ -1388,17 +1513,21 @@ artifacts:
       - ai-helpers mode: Invoke exactly one allowed OAPE command per task; never
         predict-regressions, review, or any command outside allowed_commands.
 
-      ## Post-loop (all tasks approved)
-      0. **Exit check:** When `exit_on_all_tasks_complete` is true (config.yaml flags,
-         default true), verify all tasks in tasks.md §3 are marked `- [x]`. If all
-         complete, proceed to closing artifacts below and then EXIT the implementation
-         stage. Do not prompt for additional work.
-      1. Write implementation-report.md — aggregate all `implementation/task-reports/*.md`
-      2. Write deviation-observed.md ONLY if any task logged DEVIATIONS.
-      3. **Default mode:** Push and draft PR (see schema fork_repo.draft_pr).
-      4. **Working-folder mode:** Do not push or open draft PR; record local changes
-         and git status in implementation-report.md (PR URL = N/A).
-      5. Final summary: phases, tasks, files, tests, deviations; draft PR URL when applicable.
+      ## Post-loop (all current-phase tasks approved)
+      0. **Phase check** (phase_iterative mode): Verify all tasks for the current
+         plan phase in tasks.md §3 are marked `- [x]`.
+      1. Present phase summary: tasks completed, files changed, test results.
+      2. ASK: "All Phase {N} tasks complete. Raise a draft PR for Phase {N}?
+         (Yes / No, continue to Phase {N+1})"
+      3. If yes: commit, push, open draft PR for this phase. Record URL in
+         state.yaml → phase_pr_urls. **Working-folder mode:** skip push/PR.
+      4. Check if current_plan_phase >= total_plan_phases:
+         - **All phases done:** Write implementation-report.md aggregating all
+           task-reports/. Write deviation-observed.md if any deviations. Set COMPLETE.
+         - **Phases remain:** Update state.yaml: current_plan_phase = N+1, state = IDLE.
+           Tell user: "Run `/opsx-continue` to generate Phase {N+1} tasks."
+      5. Final summary when COMPLETE: all phases, tasks, files, tests, deviations;
+         draft PR URLs when applicable.
     gate:
       type: per_task_approval
       evaluated_by: user

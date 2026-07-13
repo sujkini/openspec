@@ -2,6 +2,11 @@
 
 Generate the complete tasks.md (§0 through §5) in a single response.
 
+### Phase scope
+When `phase_scope` metadata is present, generate §0-§5 for the specified plan
+phase ONLY. §0 maps only that phase's spec goals. §1-§5 contain only that
+phase's tasks. Task IDs use the phase prefix (T{N}_*).
+
 ### Completeness rules
 - **§5 Orchestration notes is MANDATORY** — never omit. Include Retry Boundaries, Merge Conflict
   Hotspots (bindata, zz_generated, vendor), and Open Questions blocking specific Task IDs.
@@ -9,8 +14,8 @@ Generate the complete tasks.md (§0 through §5) in a single response.
   constrained, shorten Implementation notes and Acceptance criteria bullets — do NOT skip tasks.
 - **Generation priority when space-constrained:** §0 coverage checklist → §3 manifest (all tasks) →
   §2 linear order → §1 DAG → §4 payloads (all tasks, brief) → §5 orchestration notes.
-- Verification tasks: pair substantive implementation tasks with test tasks when constitution requires.
-  Use actual Makefile targets from repo_assessment (e.g., `make test`, not `make test-unit` unless evidenced).
+- Unit test co-generation: every Go implementation task MUST include test co-generation in its
+  §4 Acceptance criteria (not separate tasks). Use actual Makefile targets from repo_assessment.
 
 ### Output sections — use these EXACT `##` headings in your response
 
@@ -61,3 +66,8 @@ graph TD
 - [ ] Target file(s) in each payload trace to repo_assessment.md or plan.md (marked PARTIAL if uncertain)
 - [ ] §5 present with Retry Boundaries, Merge Conflict Hotspots, and Open Questions
 - [ ] No truncated mid-task payloads; document ends cleanly after §5
+
+### Task sizing
+If user message metadata contains `task_sizing`, apply **Task consolidation rules**
+from the base tasks-template.md after generating §3–§4. Verify §3 row count is within
+[min, max]. Do NOT prompt the user — sizing was already collected.

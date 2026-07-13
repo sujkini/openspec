@@ -128,10 +128,10 @@ For each filtered case in `evals:`:
 | `files_must_not_exist` | Paths absent |
 | `must_follow_constitution` | No constitution violations in generated code |
 | `must_follow_effective_go` | Follow `.cursor/skills/effective-go/SKILL.md` |
-| `must_include_tests` | Task-appropriate tests present (co-generated `_test.go` for controller tasks) |
+| `must_include_tests` | Task-appropriate tests present (co-generated `_test.go` for all Tier 1 tasks) |
 | `must_not_violate_non_goals` | Non-goals from task/spec not violated |
 | `must_execute_verification` | Verification commands from step 2 all passed (exit code 0) |
-| `must_co_generate_tests` | Controller tasks produced `_test.go` files following the exemplar pattern defined in `agents.md` |
+| `must_co_generate_tests` | All Tier 1 tasks (controller, API with webhooks/validation, manual Go with logic) produced `_test.go` files following the exemplar pattern defined in `agents.md` |
 
 **`must_pass_make_targets` is now enforced by real execution.** The agent MUST have
 actually run the listed make target in step 2 and it MUST have returned exit code 0.
@@ -146,20 +146,22 @@ Overall task code score: average of applicable case scores. Pass if all cases �
 After eval scoring, run the **test execution block**. The test strategy depends on
 the task type. Tests are **real `go test` executions** — not agent assertions.
 
-### 4a. Classify the task
+### 4a. Classify the task (tiered)
 
-| Task type | Condition | Test strategy |
-|-----------|-----------|--------------|
-| **Controller logic** | `oape_command` is `api-implement` AND task modifies `pkg/controller/<name>/` | Co-generate `_test.go` files → run `go test` |
-| **API types** | `oape_command` is `api-generate` AND task creates/modifies `*_types.go` | Run `go build` + `go vet` (sufficient; CRD tests deferred to codegen task) |
-| **API tests** | `oape_command` is `api-generate-tests` | Task itself produces tests → run `go test` on generated test package |
-| **Feature gate** | Task modifies `features.go` | Run existing feature gate tests |
-| **Codegen / verify** | Task runs `make generate`, `make manifests` | Run `make verify` (checks generated files match) |
-| **Bindata / manifests** | `oape_command` is `manual` AND task creates YAML/scripts | Run `make verify` or `bash -n` (no Go tests needed) |
-| **OLM bundle** | Task modifies bundle/ or CSV | Run `make bundle && hack/verify-bundle.sh` |
-| **E2E** | `oape_command` is `e2e-generate` | Run `go build` on test package (full e2e needs live cluster) |
+| Task type | Condition | Test tier | Action |
+|-----------|-----------|-----------|--------|
+| **Controller logic** | `api-implement` + `pkg/controller/` | Tier 1 | Co-generate `_test.go` + `go test` |
+| **API with logic** | `api-generate` + webhook/validation/defaulting code | Tier 1 | Co-generate `_test.go` for validation + `go test` |
+| **API structs only** | `api-generate` + pure `*_types.go` definitions | Tier 3 | `go build` + `go vet` |
+| **API tests** | `api-generate-tests` | (task IS tests) | `go test` |
+| **Manual Go with logic** | manual + creates Go files with exported functions | Tier 1 | Co-generate `_test.go` + `go test` |
+| **Manual non-Go** | manual + YAML/scripts | Tier 4 | `make verify` / `bash -n` |
+| **Feature gate** | modifies `features.go` | Tier 2 | Run existing tests |
+| **Codegen / verify** | `make generate` | Tier 3 | `make verify` |
+| **OLM bundle** | modifies bundle/ or CSV | Tier 3 | `make bundle && hack/verify-bundle.sh` |
+| **E2E** | `e2e-generate` | Tier 3 | `go build` on test package |
 
-### 4b. Controller logic tasks — co-generate `_test.go`
+### 4b-i. Controller logic tasks — co-generate `_test.go` (Tier 1)
 
 When the task type is **controller logic** (`api-implement` modifying `pkg/controller/`):
 
@@ -182,6 +184,29 @@ When the task type is **controller logic** (`api-implement` modifying `pkg/contr
    new ones matching the file being added.
 
 5. Test files are **permanent parts of the codebase** — committed alongside production code.
+
+### 4b-ii. API logic tasks — co-generate `_test.go` (Tier 1)
+
+When the task produces **webhook, validation, or defaulting code** (not just struct definitions):
+
+1. **Co-generate test file(s)** in the same package directory. Follow agents.md test patterns.
+2. **Test structure** — table-driven validation tests:
+   - Valid input accepted
+   - Required field missing → rejected
+   - Invalid value → rejected with correct error message
+   - Defaulting applied when field absent
+   - Webhook admission response correct
+3. Run `go test ./<api-package>/... -v -count=1`
+
+### 4b-iii. Manual Go tasks — co-generate `_test.go` (Tier 1)
+
+When the task creates/modifies Go files with **exported functions or methods** (helper packages,
+utility functions, shared libraries):
+
+1. **Co-generate test file(s)** for every production `.go` file with exported logic.
+   Follow agents.md test patterns. Table-driven where applicable.
+2. **Test coverage**: every exported function must have at least one positive and one negative test case.
+3. Run `go test ./<package>/... -v -count=1`
 
 ### 4c. Execute tests
 

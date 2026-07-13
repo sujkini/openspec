@@ -33,14 +33,41 @@ Provisional agent IDs (use exactly these strings):
 `API_Agent`, `OperatorController_Agent`, `ManifestsBindata_Agent`, `WebhookTLS_Agent`,
 `RBACSecurity_Agent`, `OLMRelease_Agent`, `Testing_Agent`, `Docs_Agent`.
 
+## Phase-scoped generation (phase_iterative mode)
+
+When `phase_scope` metadata is present in the user message:
+- Generate tasks ONLY for the specified plan phase (Phase N)
+- §0 coverage checklist maps ONLY Phase N spec goals and plan section
+- §1 DAG contains ONLY Phase N tasks (cross-phase dependencies reference
+  completed task IDs from earlier phases as "done" — no re-emit)
+- §2 linear order contains ONLY Phase N tasks
+- §3 manifest contains ONLY Phase N tasks
+- §4 payloads for Phase N tasks only
+- §5 orchestration notes for Phase N only
+
+When appending to existing tasks.md (Phase N > 1):
+- Prior phase tasks (marked [x]) are READ-ONLY context
+- New phase tasks are appended below a `---` separator and phase header
+- Task IDs continue the numbering: Phase 1 = T1_*, Phase 2 = T2_*, etc.
+- Depends On may reference completed tasks from prior phases
+
+When `phase_scope` is absent: generate all phases (legacy single-shot mode).
+
 ## Core responsibilities
 1) **Granular decomposition:** expand each planning phase into discrete tasks at **file/package**
    granularity when possible (from repo_assessment.md / technical_plan.md).
 2) **Chronological + DAG:** produce a **strict partial order**; emit a Mermaid DAG; ALSO emit a
    **linear "execution order"** list for engines that do not run DAG schedulers.
 3) **Agent routing:** each task maps to exactly one primary agent (split if mixed concerns).
-4) **Verification pairing:** for substantive implementation tasks, include explicit follow-on tasks
-   for unit/integration/e2e verification where applicable (constitution may require this).
+4) **Unit test co-generation (mandatory):** Every implementation task that produces or modifies
+   Go source files MUST include unit test co-generation in its §4 Acceptance criteria — tests
+   are co-generated and run as part of the implementation task, NOT as separate tasks.
+   Test tier is determined by task type:
+   - Tier 1 (co-generate): Controller logic, webhook/validation code, helper functions
+   - Tier 2 (run existing): Packages with existing test coverage
+   - Tier 3 (build verify): Pure struct definitions, codegen output
+   - Tier 4 (non-Go): YAML, scripts, manifests — make verify only
+   **Exception:** Create separate tasks ONLY for e2e/integration tests requiring a live cluster.
 5) **Parallelism safety:** only mark tasks parallel if they touch **disjoint file sets** OR the plan
    explicitly provides stable contracts/mocks. Otherwise default to sequential.
 6) **No false precision:** if repo_assessment was partial, mark affected tasks `Evidence: PARTIAL`
@@ -59,8 +86,8 @@ Provisional agent IDs (use exactly these strings):
   §2 linear order → §1 DAG → §4 payloads (all tasks, brief) → §5 orchestration notes.
 - Read **AgentRoutingMode** and **ConstitutionVersion** from constitution.md header — do NOT hardcode
   PROVISIONAL when constitution says PROVIDED.
-- Verification tasks: pair substantive implementation tasks with test tasks when constitution requires.
-  Use actual Makefile targets from repo_assessment (e.g., `make test`, not `make test-unit` unless evidenced).
+- Unit test co-generation: every Go implementation task MUST include test co-generation in its
+  §4 Acceptance criteria (not separate tasks). Use actual Makefile targets from repo_assessment.
 
 ## Required markdown output schema (must match headings)
 
@@ -103,6 +130,36 @@ For EACH Task ID, emit a subsection:
 ## Complexity & sizing rules
 - Prefer smaller tasks than oversized ones; if a task is >1 day engineering risk in your org,
   split by vertical slice (API vs controller vs tests) while preserving dependencies.
+
+## Task consolidation rules (mandatory when task_sizing metadata is present)
+
+These rules are applied automatically after initial generation using task_sizing
+metadata injected by /opsx-continue. Do NOT prompt the user for sizing here — it
+was already collected.
+
+**Applied after initial generation:** Generate tasks normally first (full
+decomposition), then apply these consolidation rules to the result.
+
+**When task_sizing metadata is present** (fields: min, max, consolidation_threshold):
+
+1. **Merge trivial tasks:** Any task with complexity ≤ consolidation_threshold
+   sharing the SAME Assigned Agent AND Phase as an adjacent task in §2 order
+   MUST be merged — unless an external-phase task depends on it alone.
+2. **Merge mechanics:** Combine the smaller task's Objective, Target file(s), and
+   Acceptance criteria into the host task's §4 payload. Remove the merged Task ID
+   from §1, §2, §3. Update Depends On references.
+3. **Cap:** Merged task complexity must not exceed 5.
+4. **Range enforcement:**
+   - count > max → consolidate aggressively (raise threshold to 3 if needed)
+   - count < min → warn "Task count ({n}) below minimum ({min})" but proceed
+5. **Standalone task minimum bar** (a task MUST meet ≥2 of these):
+   - Touches ≥2 files OR introduces a new package/directory
+   - Requires its own verification step (distinct make target or test suite)
+   - Has acceptance criteria not testable as part of another task
+   - Represents ≥30 minutes of focused engineering effort
+   If <2 criteria met → merge into nearest qualifying same-agent/phase task.
+
+**When task_sizing metadata is absent:** skip consolidation, decompose normally.
 
 ## Mermaid constraints
 - Keep diagrams readable (< ~40 nodes); if larger, summarize phase-level DAG plus a second
@@ -300,7 +357,7 @@ Generate tasks.md / Execution Backlog exactly per the system schema.
 - If agents_md is NOT_PROVIDED AND constitution says PROVISIONAL, use provisional agent IDs only.
 - Pull Target file(s) primarily from repo_assessment.md; if NOT_PROVIDED, derive only from
   technical_plan.md and mark Evidence: PARTIAL where uncertain.
-- Include verification tasks paired to implementation tasks when constitution or spec demands tests.
+- Include unit test co-generation in §4 Acceptance criteria for Go implementation tasks (not separate tasks).
 - COMPLETE §4 payloads for EVERY Task ID in §3, then §5 — never stop mid-payload.
 - Do not write code.
 ```

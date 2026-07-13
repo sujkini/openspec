@@ -83,6 +83,9 @@ This section is **skipped entirely** when `codegen_mode = direct`.
    in the repository. Respect per-task Non-goals and forbidden edits.
 6. **One task:** Do not implement the next task in the same pass. Each invocation covers one
    Task ID only.
+7. **Unit test co-generation (mandatory for Tier 1):** Tasks classified as Tier 1 MUST
+   include `_test.go` files in FILE OPERATIONS. Co-generate tests BEFORE presenting for
+   verification. Test files are permanent — committed alongside production code.
 
 ## Required response format
 

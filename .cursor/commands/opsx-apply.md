@@ -22,8 +22,8 @@ State-machine driven with externalized state at `implementation/state.yaml`.
 ## Architecture: State Machine
 
 ```
-ai-helpers mode:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
-direct mode:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+ai-helpers mode:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+direct mode:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
 ```
 
 The orchestrator reads state, executes ONE task, writes state, and YIELDS.
@@ -73,6 +73,7 @@ Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `di
 |-------|--------|
 | `IDLE` | Pick next pending task → go to step 3 |
 | `AWAITING_APPROVAL` | Read user response (approve/reject) → handle |
+| `PHASE_COMPLETE` | Offer optional PR for this phase → advance to next phase or COMPLETE |
 | `COMPLETE` | Announce done, suggest `/opsx-archive` → STOP |
 | `EXECUTING_TASK` | Resume from crash — re-run current task |
 
@@ -83,7 +84,7 @@ Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `di
 - Clear `current_task_result` and `rejections`
 - **Telemetry — signal task complete** (silent, non-blocking; rolls up phase-5 tokens incrementally):
   ```bash
-  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed
+  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed --phase <N>
   ```
 - Set state: `IDLE`
 - Check if all tasks done → set `COMPLETE` if yes
@@ -111,9 +112,10 @@ On first run (no state.yaml):
 7. Initialize `state.yaml` with state: IDLE
 8. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
    ```bash
-   python -m openspec.telemetry.auto on-apply-start --change "<name>"
+   python -m openspec.telemetry.auto on-apply-start --change "<name>" --phase <N>
    ```
-9. Pick first pending task → continue to step 4
+   Where `<N>` is `current_plan_phase` from state.yaml.
+9. Pick first pending task for the current phase → continue to step 4
 
 ### 4. Execute ONE task
 
@@ -124,7 +126,7 @@ Set state: `EXECUTING_TASK`. Write state.yaml.
 
 **Telemetry — signal task start** (silent, non-blocking):
 ```bash
-python -m openspec.telemetry.auto on-task-start --change "<name>" --task-id "<TASK_ID>" --agent "<AGENT_ID>" --title "<task_title>"
+python -m openspec.telemetry.auto on-task-start --change "<name>" --task-id "<TASK_ID>" --agent "<AGENT_ID>" --title "<task_title>" --phase <N>
 ```
 
 ---
@@ -154,10 +156,15 @@ Write `implementation/design-bundle.md`:
 
 Set state: `RUNNING_TESTS`. Write state.yaml.
 
-Run Makefile targets from this task's Acceptance criteria.
-- Controller tasks: co-generate `_test.go` → `go test`
-- API tasks: `go build` + `go vet`
-- E2E tasks: `go build`
+Run Makefile targets from this task's Acceptance criteria. Test tier classification:
+- **Tier 1** (co-generate): Controller, API with webhooks/validation, manual Go with logic
+  → co-generate `_test.go` → `go test ./<package>/... -v -count=1`
+- **Tier 2** (run existing): Packages with existing `_test.go` coverage
+  → `go test ./<package>/... -v -count=1`
+- **Tier 3** (build verify): Pure struct types, codegen output, e2e
+  → `go build` + `go vet` (+ `make verify` for codegen)
+- **Tier 4** (non-Go): YAML, scripts, manifests
+  → `make verify` or `bash -n`
 
 ##### 4d. Code eval gate
 
@@ -212,16 +219,27 @@ Apply code changes in the working copy following:
 - Task payload instructions (objective, target files, implementation notes)
 - Acceptance criteria from the task
 
-##### 4c. Verify and test
+##### 4c. Co-generate unit tests (mandatory for Tier 1 tasks)
+
+For tasks producing Go source files with testable logic:
+- Scan files_changed for new/modified `.go` files (excluding `_test.go`)
+- For Tier 1 tasks: verify corresponding `_test.go` exists for each production `.go` file
+- If any `_test.go` missing: generate it before proceeding (follow agents.md test exemplar)
+- Run `go test ./<package>/... -v -count=1`
+- If tests fail: fix code/tests and re-run (up to 2 attempts)
+- Record test file paths + pass/fail in `current_task_result`
+- Tier 2: run existing `go test` on modified packages
+- Tier 3: `go build` + `go vet`
+- Tier 4 (non-Go): `make verify` or `bash -n`
+
+##### 4d. Verify and test
 
 Set state: `RUNNING_TESTS`. Write state.yaml.
 
-Run Makefile targets from this task's Acceptance criteria.
-- Controller tasks: co-generate `_test.go` → `go test`
-- API tasks: `go build` + `go vet`
-- E2E tasks: `go build`
+Run Makefile targets from this task's Acceptance criteria. Apply same tiered
+classification as ai-helpers mode step 4c.
 
-##### 4d. Write result
+##### 4e. Write result
 
 Write `current_task_result` to state.yaml:
 ```yaml
@@ -293,18 +311,32 @@ ASK: **"Approve the code changes for task {task_id} ({task_title})? (Approve / R
 **║  The user must send a new message to proceed.               ║**
 **╚══════════════════════════════════════════════════════════════╝**
 
-### 6. Post-loop (state = COMPLETE)
+### 6. Phase boundary (all current-phase tasks complete)
 
-When all tasks are marked complete:
-- **Telemetry — signal apply complete** (silent, non-blocking):
-  ```bash
-  python -m openspec.telemetry.auto on-apply-complete --change "<name>"
-  ```
-- Write `implementation-report.md` aggregating all `task-reports/*.md`
-- Write `deviation-observed.md` if any deviations logged
-- Commit, push feature branch, open draft PR
-- Present final summary with PR URL
-- Set state: `COMPLETE`. Write state.yaml.
+When all **current phase** tasks are marked complete:
+
+1. Set state: `PHASE_COMPLETE`. Write state.yaml.
+2. Present phase summary (tasks completed, files changed, test results for this phase).
+3. **Telemetry — signal phase complete** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-phase-complete --change "<name>" --phase <N> --pr-raised <true|false>
+   ```
+4. ASK: **"All Phase {N} tasks complete. Raise a draft PR for Phase {N}? (Yes / No, continue to Phase {N+1})"**
+5. If yes: commit, push, open draft PR scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+6. Check if `current_plan_phase >= total_plan_phases`:
+   - **All phases done:**
+     - **Telemetry — signal apply complete:**
+       ```bash
+       python -m openspec.telemetry.auto on-apply-complete --change "<name>"
+       ```
+     - Write `implementation-report.md` aggregating all `task-reports/*.md`
+     - Write `deviation-observed.md` if any deviations logged
+     - Present final summary with all phase PR URLs
+     - Set state: `COMPLETE`. Write state.yaml.
+   - **Phases remain:**
+     - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
+     - Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks."
+7. YIELD
 
 ## Guardrails
 
@@ -335,8 +367,8 @@ If you find yourself about to start a new task in the same response — STOP. Yo
 
 When the user requests "approve all", "continue all tasks", or similar batch execution that completes multiple tasks in a single session, per-task token estimation is unreliable (file-based estimation repeats the same shared context for every task). Use `--batch` flags on telemetry hooks so tokens are attributed at the phase level only:
 
-1. At batch start: `python -m openspec.telemetry.auto on-apply-start --change "<name>" --batch`
-2. Per task: still call `on-task-start` and `on-task-complete --batch` for each task (records status, agent, eval loops — but tokens_in/out = 0 with attribution = "phase_aggregate")
+1. At batch start: `python -m openspec.telemetry.auto on-apply-start --change "<name>" --phase <N> --batch`
+2. Per task: still call `on-task-start --phase <N>` and `on-task-complete --phase <N> --batch` for each task (records status, agent, eval loops — but tokens_in/out = 0 with attribution = "phase_aggregate")
 3. At end: `python -m openspec.telemetry.auto on-apply-complete --change "<name>"` (phase-level tokens computed once, not summed per-task)
 4. Do **not** expect per-task token breakdown in metrics for batch runs
 
