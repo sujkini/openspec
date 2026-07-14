@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, BigInteger, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, BigInteger, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.base import Base
@@ -34,6 +34,11 @@ class TaskExecution(Base):
     tokens_out: Mapped[int] = mapped_column(BigInteger, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     token_attribution: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    processing_time_s: Mapped[float] = mapped_column(Float, default=0.0)
+    verification_pass: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    verification_command: Mapped[str] = mapped_column(String(512), default="")
+    verification_result: Mapped[str] = mapped_column(String(32), default="")
+    verification_output: Mapped[str] = mapped_column(Text, default="")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

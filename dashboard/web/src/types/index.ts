@@ -50,6 +50,7 @@ export interface PhaseExecution {
   status: PhaseStatus;
   iteration_count: number;
   duration_s: number;
+  processing_time_s: number;
   tokens_in: number;
   tokens_out: number;
   model_id: string;
@@ -72,6 +73,11 @@ export interface TaskExecution {
   tokens_out: number;
   cost_usd: number;
   token_attribution?: string | null;
+  processing_time_s: number;
+  verification_pass: boolean | null;
+  verification_command: string;
+  verification_result: string;
+  verification_output: string;
   started_at: string | null;
   completed_at: string | null;
 }
@@ -91,6 +97,7 @@ export interface GlobalHealthMetrics {
   total_tokens_consumed: number;
   total_run_cost_usd: number;
   cumulative_wall_time_s: number;
+  agent_processing_time_s: number;
   compliance_index: number;
   gate_passing_rate: number;
   human_rejection_rate: number;
@@ -100,16 +107,20 @@ export interface GlobalHealthMetrics {
   tasks_total: number;
 }
 
-export interface TokenBurnEntry {
-  agent_id: string;
-  tokens: number;
-  cost_usd: number;
+export interface TaskVerificationEntry {
+  task_id: string;
+  task_title: string;
+  verification_pass: boolean | null;
+  verification_command: string;
+  verification_result: string;
+  verification_output: string;
 }
 
-export interface TokenBurnOut {
-  entries: TokenBurnEntry[];
-  total_tokens: number;
-  total_cost_usd: number;
+export interface VerificationSummaryOut {
+  entries: TaskVerificationEntry[];
+  total_verified: number;
+  total_passed: number;
+  total_failed: number;
 }
 
 export interface ArtifactEditEntry {
@@ -132,8 +143,8 @@ export interface RunReportOut {
   tasks: TaskExecution[];
   events: AgentEvent[];
   global_health: GlobalHealthMetrics;
-  token_burn: TokenBurnOut;
   artifact_edits: ArtifactEditsOut;
+  verification_summary: VerificationSummaryOut;
 }
 
 export interface SSEEvent {

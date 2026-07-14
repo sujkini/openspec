@@ -263,6 +263,14 @@ class FileEventPoller:
             phase = await db.get(PhaseExecution, phase_id)
             if not phase:
                 return
+            if event.get("status"):
+                try:
+                    new_status = PhaseStatus(event["status"])
+                    phase.status = new_status
+                    if new_status == PhaseStatus.running:
+                        phase.completed_at = None
+                except ValueError:
+                    pass
             phase.tokens_in = event.get("tokens_in", phase.tokens_in)
             phase.tokens_out = event.get("tokens_out", phase.tokens_out)
             if event.get("quality_score"):
@@ -308,6 +316,8 @@ class FileEventPoller:
             phase.iteration_count = event.get("iteration_count", 1)
             if "duration_s" in event:
                 phase.duration_s = event["duration_s"]
+            if "processing_time_s" in event:
+                phase.processing_time_s = event["processing_time_s"]
             phase.completed_at = datetime.now(timezone.utc)
             await db.commit()
 
@@ -365,6 +375,16 @@ class FileEventPoller:
             task.cost_usd = event.get("cost_usd", 0)
             task.self_correction_loops = event.get("self_correction_loops", 0)
             task.token_attribution = event.get("attribution")
+            if "processing_time_s" in event:
+                task.processing_time_s = event["processing_time_s"]
+            if "verification_pass" in event:
+                task.verification_pass = event["verification_pass"]
+            if event.get("verification_command"):
+                task.verification_command = event["verification_command"]
+            if event.get("verification_result"):
+                task.verification_result = event["verification_result"]
+            if event.get("verification_output"):
+                task.verification_output = event["verification_output"]
             task.completed_at = datetime.now(timezone.utc)
 
             if task.token_attribution != "phase_aggregate" and task.cost_usd == 0 and (task.tokens_in + task.tokens_out) > 0:

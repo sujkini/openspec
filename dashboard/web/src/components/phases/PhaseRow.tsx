@@ -44,9 +44,14 @@ export default function PhaseRow({ phase }: PhaseRowProps) {
         >
           {statusLabel}
         </span>
-        {phase.phase_name === "code_generation" && phase.status === "running" && (
+        {(phase.phase_name === "code_generation" || phase.phase_name === "subtask_creation") &&
+          phase.quality_label?.match(/Plan Phase (\d+)/) ? (
+          <span className="text-terminal-muted text-xs ml-1">
+            (Plan Phase {phase.quality_label.match(/Plan Phase (\d+)/)?.[1]})
+          </span>
+        ) : phase.phase_name === "code_generation" && phase.status === "running" ? (
           <span className="text-terminal-muted text-xs ml-1">(closes on impl. report)</span>
-        )}
+        ) : null}
       </td>
       <td className="px-4 py-2.5 text-sm text-center">
         {phase.iteration_count} {phase.iteration_count > 1 ? "Iterations" : "Iteration"}

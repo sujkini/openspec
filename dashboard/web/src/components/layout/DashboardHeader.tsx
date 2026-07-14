@@ -6,15 +6,20 @@ interface DashboardHeaderProps {
 export default function DashboardHeader({ branch, runId }: DashboardHeaderProps) {
   async function exportReport() {
     if (!runId) return;
-    const { fetchRunReport } = await import("@/services/api");
-    const report = await fetchRunReport(runId);
+    const { fetchLocalReport, fetchRunReport } = await import("@/services/api");
+    let report: Record<string, unknown>;
+    try {
+      report = await fetchLocalReport(runId);
+    } catch {
+      report = await fetchRunReport(runId) as unknown as Record<string, unknown>;
+    }
     const blob = new Blob([JSON.stringify(report, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `run-report-${runId.slice(0, 8)}.json`;
+    anchor.download = `metrics-report-${runId.slice(0, 8)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   }

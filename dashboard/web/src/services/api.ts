@@ -5,8 +5,8 @@ import type {
   TaskExecution,
   AgentEvent,
   GlobalHealthMetrics,
-  TokenBurnOut,
   ArtifactEditsOut,
+  VerificationSummaryOut,
   RunReportOut,
 } from "@/types";
 
@@ -53,17 +53,23 @@ export async function fetchGlobalHealth(
   return request(`/metrics/global/${runId}`);
 }
 
-export async function fetchTokenBurn(runId: string): Promise<TokenBurnOut> {
-  return request(`/metrics/token-burn/${runId}`);
-}
-
 export async function fetchArtifactEdits(
   runId: string
 ): Promise<ArtifactEditsOut> {
   return request(`/metrics/artifact-edits/${runId}`);
 }
 
+export async function fetchVerificationSummary(
+  runId: string
+): Promise<VerificationSummaryOut> {
+  return request(`/metrics/verification-summary/${runId}`);
+}
+
 export async function fetchRunReport(runId: string): Promise<RunReportOut> {
   return request(`/runs/${runId}/report`);
+}
+
+export async function fetchLocalReport(runId: string): Promise<Record<string, unknown>> {
+  return request(`/runs/${runId}/local-report`);
 }
 

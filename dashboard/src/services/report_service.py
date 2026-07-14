@@ -19,7 +19,7 @@ from src.schemas.task import TaskOut
 from src.services.metrics_service import (
     compute_artifact_edits,
     compute_global_health,
-    compute_token_burn,
+    compute_verification_summary,
 )
 
 
@@ -58,6 +58,6 @@ async def build_run_report(
         tasks=[TaskOut.model_validate(t) for t in tasks_result.scalars().all()],
         events=[EventOut.model_validate(e) for e in events_result.scalars().all()],
         global_health=await compute_global_health(db, run_id, cfg),
-        token_burn=await compute_token_burn(db, run_id, cfg),
         artifact_edits=await compute_artifact_edits(db, run_id, cfg),
+        verification_summary=await compute_verification_summary(db, run_id, cfg),
     )

@@ -32,6 +32,7 @@ class PhaseOut(BaseModel):
     status: PhaseStatus
     iteration_count: int
     duration_s: float
+    processing_time_s: float = 0.0
     tokens_in: int
     tokens_out: int
     model_id: str

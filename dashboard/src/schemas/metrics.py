@@ -7,6 +7,7 @@ class GlobalHealthMetrics(BaseModel):
     total_tokens_consumed: int
     total_run_cost_usd: float
     cumulative_wall_time_s: float
+    agent_processing_time_s: float
     compliance_index: float
     gate_passing_rate: float
     human_rejection_rate: float
@@ -14,18 +15,6 @@ class GlobalHealthMetrics(BaseModel):
     agent_success_rate: float
     tasks_passed: int
     tasks_total: int
-
-
-class TokenBurnEntry(BaseModel):
-    agent_id: str
-    tokens: int
-    cost_usd: float
-
-
-class TokenBurnOut(BaseModel):
-    entries: list[TokenBurnEntry]
-    total_tokens: int
-    total_cost_usd: float
 
 
 class ArtifactEditEntry(BaseModel):
@@ -39,6 +28,22 @@ class ArtifactEditEntry(BaseModel):
 class ArtifactEditsOut(BaseModel):
     artifacts: list[ArtifactEditEntry]
     total_edits: int
+
+
+class TaskVerificationEntry(BaseModel):
+    task_id: str
+    task_title: str
+    verification_pass: bool | None
+    verification_command: str
+    verification_result: str
+    verification_output: str
+
+
+class VerificationSummaryOut(BaseModel):
+    entries: list[TaskVerificationEntry]
+    total_verified: int
+    total_passed: int
+    total_failed: int
 
 
 class EvaluateRequest(BaseModel):

@@ -95,6 +95,7 @@ class TelemetryClient:
         quality_score: float = 0,
         quality_label: str = "",
         duration_s: float | None = None,
+        processing_time_s: float | None = None,
         iteration_count: int = 1,
         batch_mode: bool = False,
     ) -> None:
@@ -112,6 +113,8 @@ class TelemetryClient:
         }
         if duration_s is not None:
             event["duration_s"] = duration_s
+        if processing_time_s is not None:
+            event["processing_time_s"] = processing_time_s
         if batch_mode:
             event["batch_mode"] = True
         self._write_event(event)
@@ -120,6 +123,7 @@ class TelemetryClient:
         self,
         phase_id: str,
         *,
+        status: str | None = None,
         tokens_in: int = 0,
         tokens_out: int = 0,
         quality_score: float = 0,
@@ -138,6 +142,8 @@ class TelemetryClient:
             "quality_label": quality_label,
             "iteration_count": iteration_count,
         }
+        if status is not None:
+            event["status"] = status
         if duration_s is not None:
             event["duration_s"] = duration_s
         self._write_event(event)
@@ -173,6 +179,11 @@ class TelemetryClient:
         tokens_out: int = 0,
         cost_usd: float = 0,
         self_correction_loops: int = 0,
+        processing_time_s: float | None = None,
+        verification_pass: bool | None = None,
+        verification_command: str = "",
+        verification_result: str = "",
+        verification_output: str = "",
         attribution: str | None = None,
     ) -> None:
         event: dict[str, Any] = {
@@ -186,6 +197,16 @@ class TelemetryClient:
             "cost_usd": cost_usd,
             "self_correction_loops": self_correction_loops,
         }
+        if processing_time_s is not None:
+            event["processing_time_s"] = processing_time_s
+        if verification_pass is not None:
+            event["verification_pass"] = verification_pass
+        if verification_command:
+            event["verification_command"] = verification_command
+        if verification_result:
+            event["verification_result"] = verification_result
+        if verification_output:
+            event["verification_output"] = verification_output
         if attribution:
             event["attribution"] = attribution
         self._write_event(event)

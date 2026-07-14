@@ -22,7 +22,6 @@ export function useLiveTelemetry(
   useEffect(() => {
     if (!runId || !lastMetricsUpdate) return;
     queryClient.invalidateQueries({ queryKey: ["globalHealth", runId] });
-    queryClient.invalidateQueries({ queryKey: ["tokenBurn", runId] });
   }, [queryClient, runId, lastMetricsUpdate]);
 
   useEffect(() => {

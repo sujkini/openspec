@@ -38,6 +38,11 @@ class TaskOut(BaseModel):
     tokens_out: int
     cost_usd: float
     token_attribution: str | None = None
+    processing_time_s: float = 0.0
+    verification_pass: bool | None = None
+    verification_command: str = ""
+    verification_result: str = ""
+    verification_output: str = ""
     started_at: datetime | None
     completed_at: datetime | None
 

@@ -5,11 +5,10 @@ import PipelineStatusBanner from "@/components/pipeline/PipelineStatusBanner";
 import GlobalHealthMetrics from "@/components/metrics/GlobalHealthMetrics";
 import PhaseWaterfall from "@/components/phases/PhaseWaterfall";
 import WorkerLogs from "@/components/logs/WorkerLogs";
-import TokenBurnChart from "@/components/metrics/TokenBurnChart";
-
+import VerificationSummary from "@/components/metrics/VerificationSummary";
 import { useRuns, useRun, usePhases, useEvents } from "@/hooks/useRun";
 import ArtifactEdits from "@/components/metrics/ArtifactEdits";
-import { useGlobalHealth, useTokenBurn, useArtifactEdits } from "@/hooks/useMetrics";
+import { useGlobalHealth, useArtifactEdits, useVerificationSummary } from "@/hooks/useMetrics";
 import { useSSE } from "@/hooks/useSSE";
 import { useLiveTelemetry } from "@/hooks/useLiveTelemetry";
 import type { AgentEvent } from "@/types";
@@ -24,8 +23,8 @@ export default function App() {
   const { data: run } = useRun(activeRunId);
   const { data: phases } = usePhases(activeRunId);
   const { data: metrics } = useGlobalHealth(activeRunId);
-  const { data: tokenBurn } = useTokenBurn(activeRunId);
   const { data: artifactEdits } = useArtifactEdits(activeRunId);
+  const { data: verificationSummary } = useVerificationSummary(activeRunId);
   const { data: historicalEvents } = useEvents(activeRunId);
   const { logs: streamLogs, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus } = useSSE(activeRunId);
 
@@ -80,9 +79,9 @@ export default function App() {
 
       <ArtifactEdits data={artifactEdits ?? null} />
 
-      <WorkerLogs logs={allLogs} />
+      <VerificationSummary data={verificationSummary ?? null} />
 
-      <TokenBurnChart data={tokenBurn ?? null} />
+      <WorkerLogs logs={allLogs} />
     </DashboardLayout>
   );
 }

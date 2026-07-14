@@ -41,6 +41,7 @@ class PhaseExecution(Base):
     model_id: Mapped[str] = mapped_column(String(128), default="")
     quality_score: Mapped[float] = mapped_column(Float, default=0.0)
     quality_label: Mapped[str] = mapped_column(String(255), default="")
+    processing_time_s: Mapped[float] = mapped_column(Float, default=0.0)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

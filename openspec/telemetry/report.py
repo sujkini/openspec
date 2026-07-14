@@ -130,6 +130,7 @@ def _reconstruct_phases(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "quality_label": "",
                 "iteration_count": 1,
                 "duration_s": 0.0,
+                "processing_time_s": 0.0,
             }
         elif etype == "phase_end":
             pid = ev.get("phase_id", "")
@@ -145,9 +146,15 @@ def _reconstruct_phases(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 })
                 if ev.get("duration_s") is not None:
                     phases[pid]["duration_s"] = ev["duration_s"]
+                if ev.get("processing_time_s") is not None:
+                    phases[pid]["processing_time_s"] = ev["processing_time_s"]
         elif etype == "phase_progress":
             pid = ev.get("phase_id", "")
             if pid in phases:
+                if ev.get("status"):
+                    phases[pid]["status"] = ev["status"]
+                    if ev["status"] == "running":
+                        phases[pid]["completed_at"] = None
                 for key in ("tokens_in", "tokens_out", "quality_score", "quality_label", "iteration_count"):
                     if ev.get(key) is not None:
                         phases[pid][key] = ev[key]
@@ -225,6 +232,7 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "tokens_in": 0,
                 "tokens_out": 0,
                 "self_correction_loops": 0,
+                "processing_time_s": 0.0,
                 "attribution": None,
             }
         elif etype == "task_end":
@@ -237,12 +245,23 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "tokens_out": ev.get("tokens_out", 0),
                     "self_correction_loops": ev.get("self_correction_loops", 0),
                 }
+                if ev.get("processing_time_s") is not None:
+                    update["processing_time_s"] = ev["processing_time_s"]
+                if "verification_pass" in ev:
+                    update["verification_pass"] = ev["verification_pass"]
+                if ev.get("verification_command"):
+                    update["verification_command"] = ev["verification_command"]
+                if ev.get("verification_result"):
+                    update["verification_result"] = ev["verification_result"]
+                if ev.get("verification_output"):
+                    update["verification_output"] = ev["verification_output"]
                 if ev.get("attribution"):
                     update["attribution"] = ev["attribution"]
                 tasks[tpk].update(update)
 
     all_tasks = [tasks[tid] for tid in order if tid in tasks]
-    return _dedupe_tasks(all_tasks)
+    deduped = _dedupe_tasks(all_tasks)
+    return deduped
 
 
 def _dedupe_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -263,6 +282,81 @@ def _dedupe_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         best = passed[-1] if passed else candidates[-1]
         deduped.append(best)
     return deduped
+
+
+def _enrich_tasks_from_filesystem(tasks: list[dict[str, Any]], change_dir: Path) -> None:
+    """Enrich tasks with verification data from filesystem sources.
+
+    Fills in missing verification fields from:
+    1. implementation/state.yaml completed[] entries
+    2. implementation/task-reports/<task-id>.md ## Verification table
+    """
+    import re
+
+    # Source 1: state.yaml completed entries
+    state_path = change_dir / "implementation" / "state.yaml"
+    completed_by_id: dict[str, dict[str, Any]] = {}
+    if state_path.exists():
+        try:
+            import yaml
+            data = yaml.safe_load(state_path.read_text()) or {}
+            current = data.get("current_task_result") or {}
+            if current.get("task_id"):
+                completed_by_id[current["task_id"]] = current
+            for entry in data.get("completed", []):
+                tid = entry.get("task_id")
+                if tid:
+                    completed_by_id[tid] = entry
+        except Exception:
+            pass
+
+    for task in tasks:
+        tid = task.get("task_id", "")
+        has_verif = task.get("verification_pass") is not None or task.get("verification_command")
+        if has_verif:
+            continue
+
+        # Try state.yaml completed entry
+        state_entry = completed_by_id.get(tid)
+        if state_entry:
+            if "verification_pass" in state_entry:
+                task["verification_pass"] = bool(state_entry["verification_pass"])
+            if "test_command" in state_entry:
+                task["verification_command"] = str(state_entry["test_command"])
+            if "test_result" in state_entry:
+                task["verification_result"] = str(state_entry["test_result"])
+                if task.get("verification_pass") is None:
+                    task["verification_pass"] = state_entry["test_result"].upper() in ("PASS", "PASSED")
+            if "test_output_summary" in state_entry:
+                task["verification_output"] = str(state_entry["test_output_summary"])[:2000]
+            if task.get("verification_pass") is not None:
+                continue
+
+        # Try task-reports/<task-id>.md
+        report_path = change_dir / "implementation" / "task-reports" / f"{tid}.md"
+        if not report_path.exists():
+            continue
+        try:
+            content = report_path.read_text()
+        except OSError:
+            continue
+
+        verif_match = re.search(r'##\s+Verification\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
+        if not verif_match:
+            continue
+        table_text = verif_match.group(1)
+        rows = re.findall(r'\|\s*(.+?)\s*\|\s*(PASSED|FAILED|PASS|FAIL)\s*\|', table_text, re.IGNORECASE)
+        if rows:
+            all_passed = all(r[1].upper() in ("PASSED", "PASS") for r in rows)
+            any_failed = any(r[1].upper() in ("FAILED", "FAIL") for r in rows)
+            task["verification_pass"] = all_passed and not any_failed
+            checks = [f"{r[0].strip()}: {r[1].strip()}" for r in rows]
+            task["verification_result"] = "PASS" if task["verification_pass"] else "FAIL"
+            task["verification_output"] = "; ".join(checks)[:2000]
+
+        cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
+        if cmd_match:
+            task["verification_command"] = cmd_match.group(1)[:512]
 
 
 def _collect_log_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -345,10 +439,13 @@ def _compute_global_health(
     run["total_tokens_in"] = total_in
     run["total_tokens_out"] = total_out
 
+    agent_proc_time = sum(p.get("processing_time_s", 0) for p in phases)
+
     return {
         "total_tokens_consumed": total_tokens,
         "estimated_cost_usd": round(estimated_cost, 4),
         "cumulative_wall_time_s": round(wall_time, 1),
+        "agent_processing_time_s": round(agent_proc_time, 1),
         "compliance_index": round(compliance, 1),
         "gate_passing_rate": round(gate_passing, 1),
         "human_rejection_rate": round(human_rejection, 1),
@@ -398,6 +495,7 @@ def generate_report(change: str) -> Path:
     run = _reconstruct_run(events)
     phases = _reconstruct_phases(events)
     tasks = _reconstruct_tasks(events)
+    _enrich_tasks_from_filesystem(tasks, change_dir)
     log_events = _collect_log_events(events)
 
     if run:
@@ -407,6 +505,7 @@ def generate_report(change: str) -> Path:
         "total_tokens_consumed": 0,
         "estimated_cost_usd": 0.0,
         "cumulative_wall_time_s": 0.0,
+        "agent_processing_time_s": 0.0,
         "compliance_index": 0.0,
         "gate_passing_rate": 100.0,
         "human_rejection_rate": 0.0,
@@ -416,6 +515,25 @@ def generate_report(change: str) -> Path:
         "tasks_total": 0,
     }
     artifact_edits = _compute_artifact_edits(change_dir)
+
+    verified_entries = []
+    for t in tasks:
+        if t.get("verification_pass") is None and not t.get("verification_command"):
+            continue
+        verified_entries.append({
+            "task_id": t.get("task_id", ""),
+            "task_title": t.get("task_title", ""),
+            "verification_pass": t.get("verification_pass"),
+            "verification_command": t.get("verification_command", ""),
+            "verification_result": t.get("verification_result", ""),
+            "verification_output": t.get("verification_output", ""),
+        })
+    verification_summary = {
+        "entries": verified_entries,
+        "total_verified": len(verified_entries),
+        "total_passed": sum(1 for e in verified_entries if e.get("verification_pass") is True),
+        "total_failed": sum(1 for e in verified_entries if e.get("verification_pass") is False),
+    }
 
     jira_fields = read_jira_report_fields(change_dir)
 
@@ -429,6 +547,7 @@ def generate_report(change: str) -> Path:
         "events": log_events,
         "global_health": global_health,
         "artifact_edits": artifact_edits,
+        "verification_summary": verification_summary,
     }
 
     report_path = change_dir / "telemetry" / "metrics-report.json"

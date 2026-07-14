@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 
 from src.core.dependencies import DBSession, Settings
+from src.core.paths import get_change_dir
 from src.models.run import PipelineRun
 from src.schemas.report import RunReportOut
 from src.schemas.run import RunCreate, RunUpdate, RunOut, RunListOut
@@ -38,6 +42,27 @@ async def get_run(run_id: str, db: DBSession):
 @router.get("/{run_id}/report", response_model=RunReportOut)
 async def export_run_report(run_id: str, db: DBSession, cfg: Settings):
     return await build_run_report(db, run_id, cfg)
+
+
+@router.get("/{run_id}/local-report")
+async def get_local_report(run_id: str, db: DBSession, cfg: Settings):
+    """Serve the local metrics-report.json file for a run."""
+    run = await db.get(PipelineRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    change_slug = run.change_name.split(" — ", 1)[-1] if " — " in run.change_name else run.change_name
+    report_path = get_change_dir(cfg, change_slug) / "telemetry" / "metrics-report.json"
+
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="Local metrics-report.json not found")
+
+    try:
+        data = json.loads(report_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to read report: {exc}")
+
+    return JSONResponse(content=data)
 
 
 @router.post("", response_model=RunOut, status_code=201)

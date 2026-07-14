@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pathlib import Path
@@ -15,8 +16,8 @@ from src.schemas.metrics import (
     ArtifactEditEntry,
     ArtifactEditsOut,
     GlobalHealthMetrics,
-    TokenBurnEntry,
-    TokenBurnOut,
+    TaskVerificationEntry,
+    VerificationSummaryOut,
 )
 from src.core.paths import get_change_dir
 from openspec.telemetry.change_metrics import (
@@ -48,6 +49,7 @@ async def compute_global_health(
             total_tokens_consumed=0,
             total_run_cost_usd=0.0,
             cumulative_wall_time_s=0.0,
+            agent_processing_time_s=0.0,
             compliance_index=cfg.fallbacks.default_compliance_index,
             gate_passing_rate=cfg.fallbacks.default_gate_pass_rate,
             human_rejection_rate=0.0,
@@ -115,10 +117,13 @@ async def compute_global_health(
         run.total_cost_usd = cost
         await db.commit()
 
+    agent_proc_time = sum(p.processing_time_s for p in phases if p.processing_time_s)
+
     return GlobalHealthMetrics(
         total_tokens_consumed=total_tokens,
         total_run_cost_usd=round(cost, 4),
         cumulative_wall_time_s=wall_time,
+        agent_processing_time_s=round(agent_proc_time, 1),
         compliance_index=round(compliance, 1),
         gate_passing_rate=round(gate_passing, 1),
         human_rejection_rate=round(human_rejection, 1),
@@ -127,44 +132,6 @@ async def compute_global_health(
         tasks_passed=tasks_passed,
         tasks_total=tasks_total,
     )
-
-
-async def compute_token_burn(
-    db: AsyncSession,
-    run_id: str,
-    cfg: AppConfig,
-) -> TokenBurnOut:
-    result = await db.execute(
-        select(
-            TaskExecution.agent_id,
-            func.sum(TaskExecution.tokens_in + TaskExecution.tokens_out).label("tokens"),
-            func.sum(TaskExecution.cost_usd).label("cost"),
-        )
-        .where(TaskExecution.run_id == run_id)
-        .where(TaskExecution.token_attribution.is_(None))
-        .group_by(TaskExecution.agent_id)
-        .order_by(func.sum(TaskExecution.tokens_in + TaskExecution.tokens_out).desc())
-    )
-    rows = result.all()
-
-    entries = [
-        TokenBurnEntry(agent_id=row.agent_id or "Unknown Agent", tokens=int(row.tokens or 0), cost_usd=float(row.cost or 0.0))
-        for row in rows
-    ]
-
-    default_cost = cfg.metrics.cost_for_model("default")
-    for entry in entries:
-        if entry.cost_usd == 0 and entry.tokens > 0:
-            est_in = int(entry.tokens * 0.4)
-            est_out = entry.tokens - est_in
-            entry.cost_usd = round(
-                (est_in * default_cost.input + est_out * default_cost.output) / 1_000_000, 4
-            )
-
-    total_tokens = sum(e.tokens for e in entries)
-    total_cost = sum(e.cost_usd for e in entries)
-
-    return TokenBurnOut(entries=entries, total_tokens=total_tokens, total_cost_usd=total_cost)
 
 
 async def compute_artifact_edits(
@@ -203,4 +170,132 @@ async def compute_artifact_edits(
     return ArtifactEditsOut(
         artifacts=entries,
         total_edits=sum(e.total_edits for e in entries),
+    )
+
+
+def _read_verification_from_filesystem(
+    change_dir: Path,
+    task_id: str,
+) -> dict[str, Any]:
+    """Read verification results from state.yaml completed[] or task-reports/<task-id>.md."""
+    import re
+
+    # Try state.yaml completed entries
+    state_path = change_dir / "implementation" / "state.yaml"
+    if state_path.exists():
+        try:
+            import yaml
+            data = yaml.safe_load(state_path.read_text()) or {}
+            current = data.get("current_task_result") or {}
+            if current.get("task_id") == task_id:
+                result = current
+            else:
+                result = {}
+                for entry in data.get("completed", []):
+                    if entry.get("task_id") == task_id:
+                        result = entry
+                        break
+            if result:
+                out: dict[str, Any] = {}
+                if "verification_pass" in result:
+                    out["verification_pass"] = bool(result["verification_pass"])
+                if "test_command" in result:
+                    out["verification_command"] = str(result["test_command"])
+                if "test_result" in result:
+                    out["verification_result"] = str(result["test_result"])
+                    if "verification_pass" not in out:
+                        out["verification_pass"] = result["test_result"].upper() in ("PASS", "PASSED")
+                if "test_output_summary" in result:
+                    out["verification_output"] = str(result["test_output_summary"])[:2000]
+                if out.get("verification_pass") is not None:
+                    return out
+        except Exception:
+            pass
+
+    # Try task-reports/<task-id>.md
+    report_path = change_dir / "implementation" / "task-reports" / f"{task_id}.md"
+    if not report_path.exists():
+        return {}
+    try:
+        content = report_path.read_text()
+    except OSError:
+        return {}
+
+    verif_match = re.search(r'##\s+Verification\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
+    if not verif_match:
+        return {}
+    table_text = verif_match.group(1)
+    rows = re.findall(r'\|\s*(.+?)\s*\|\s*(PASSED|FAILED|PASS|FAIL)\s*\|', table_text, re.IGNORECASE)
+    if not rows:
+        return {}
+
+    all_passed = all(r[1].upper() in ("PASSED", "PASS") for r in rows)
+    any_failed = any(r[1].upper() in ("FAILED", "FAIL") for r in rows)
+    out = {
+        "verification_pass": all_passed and not any_failed,
+        "verification_result": "PASS" if (all_passed and not any_failed) else "FAIL",
+        "verification_output": "; ".join(f"{r[0].strip()}: {r[1].strip()}" for r in rows)[:2000],
+    }
+    cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
+    if cmd_match:
+        out["verification_command"] = cmd_match.group(1)[:512]
+    return out
+
+
+async def compute_verification_summary(
+    db: AsyncSession,
+    run_id: str,
+    cfg: AppConfig,
+) -> VerificationSummaryOut:
+    run = await db.get(PipelineRun, run_id)
+    change_dir: Path | None = None
+    if run:
+        change_slug = run.change_name.split(" — ", 1)[-1] if " — " in run.change_name else run.change_name
+        cd = get_change_dir(cfg, change_slug)
+        if cd.is_dir():
+            change_dir = cd
+
+    result = await db.execute(
+        select(TaskExecution).where(TaskExecution.run_id == run_id)
+    )
+    tasks = result.scalars().all()
+
+    entries: list[TaskVerificationEntry] = []
+    for t in tasks:
+        v_pass = t.verification_pass
+        v_cmd = t.verification_command
+        v_result = t.verification_result
+        v_output = t.verification_output
+
+        if v_pass is None and not v_cmd and change_dir:
+            fs_data = _read_verification_from_filesystem(change_dir, t.task_id)
+            if fs_data:
+                v_pass = fs_data.get("verification_pass")
+                v_cmd = fs_data.get("verification_command", "")
+                v_result = fs_data.get("verification_result", "")
+                v_output = fs_data.get("verification_output", "")
+
+        if v_pass is None and not v_cmd:
+            continue
+
+        entries.append(
+            TaskVerificationEntry(
+                task_id=t.task_id,
+                task_title=t.task_title,
+                verification_pass=v_pass,
+                verification_command=v_cmd or "",
+                verification_result=v_result or "",
+                verification_output=v_output or "",
+            )
+        )
+
+    total_verified = len(entries)
+    total_passed = sum(1 for e in entries if e.verification_pass is True)
+    total_failed = sum(1 for e in entries if e.verification_pass is False)
+
+    return VerificationSummaryOut(
+        entries=entries,
+        total_verified=total_verified,
+        total_passed=total_passed,
+        total_failed=total_failed,
     )
