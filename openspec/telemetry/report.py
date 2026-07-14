@@ -38,9 +38,27 @@ PRICE_TABLE: dict[str, dict[str, float]] = {
 }
 
 
+def _normalize_model_key(model: str) -> str:
+    """Map a raw model name to a PRICE_TABLE key."""
+    if not model:
+        return "default"
+    if model in PRICE_TABLE:
+        return model
+    lowered = model.lower()
+    if "opus" in lowered:
+        return "claude-opus"
+    if "sonnet" in lowered:
+        return "claude-sonnet"
+    if "gpt-4o" in lowered or "gpt4o" in lowered:
+        return "gpt-4o"
+    if "composer" in lowered:
+        return "claude-sonnet"
+    return "default"
+
+
 def _estimate_cost(tokens_in: int, tokens_out: int, model: str = "default") -> float:
     """Estimate USD cost from token counts using the price table."""
-    rates = PRICE_TABLE.get(model, PRICE_TABLE["default"])
+    rates = PRICE_TABLE.get(_normalize_model_key(model), PRICE_TABLE["default"])
     return (tokens_in * rates["input"] + tokens_out * rates["output"]) / 1_000_000
 
 
@@ -82,11 +100,13 @@ def _reconstruct_run(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Build run object from the first run_create event."""
     for ev in events:
         if ev.get("type") == "run_create":
+            metadata = ev.get("metadata") or {}
             run: dict[str, Any] = {
                 "id": ev.get("id", ""),
                 "change_name": ev.get("change_name", ""),
                 "jira_key": ev.get("jira_key", ""),
                 "branch": ev.get("branch", ""),
+                "primary_model": metadata.get("model_id", ""),
                 "status": "running",
                 "started_at": ev.get("ts", ""),
                 "completed_at": None,
@@ -120,7 +140,6 @@ def _reconstruct_phases(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "run_id": ev.get("run_id", ""),
                 "phase_number": ev.get("phase_number", 0),
                 "phase_name": ev.get("phase_name", ""),
-                "model_id": ev.get("model_id", ""),
                 "status": "running",
                 "started_at": ev.get("ts", ""),
                 "completed_at": None,
@@ -449,7 +468,7 @@ def _compute_global_health(
     tasks_passed = sum(1 for t in tasks if t.get("status") == "passed")
     success_rate = (tasks_passed / tasks_total * 100) if tasks_total > 0 else 100.0
 
-    estimated_cost = _estimate_cost(total_in, total_out)
+    estimated_cost = _estimate_cost(total_in, total_out, run.get("primary_model", ""))
 
     # Fix #2: populate run.total_tokens_in/out so top-level summary is useful
     run["total_tokens_in"] = total_in

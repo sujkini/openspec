@@ -5,7 +5,7 @@ After each hook, auto-generates ``metrics-report.json``.
 
 Usage:
 
-    python -m openspec.telemetry.auto on-new    --change cm-830 --jira-key CM-830
+    python -m openspec.telemetry.auto on-new    --change cm-830 --jira-key CM-830 --model claude-opus-4.6
     python -m openspec.telemetry.auto on-artifact-complete --change cm-830 --artifact specs --status passed --score 91
     python -m openspec.telemetry.auto on-task-start --change cm-830 --task-id T1_1 --agent API_Agent
     python -m openspec.telemetry.auto on-task-complete --change cm-830 --task-id T1_1 --status passed
@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,26 @@ logger = logging.getLogger(__name__)
 
 CHANGES_DIR = Path("openspec/changes")
 STATE_FILE = ".dashboard.json"
+
+
+def _resolve_model(args: argparse.Namespace | None, state: dict[str, Any] | None) -> str:
+    """Resolve the active model from CLI arg, persisted state, or environment."""
+    if args is not None:
+        cli_model = getattr(args, "model", "") or ""
+        if cli_model.strip():
+            return cli_model.strip()
+    if state and state.get("model_id"):
+        return str(state["model_id"]).strip()
+    for env_var in ("CURSOR_MODEL", "CURSOR_ACTIVE_MODEL", "OPENSPEC_MODEL"):
+        env_model = os.environ.get(env_var, "").strip()
+        if env_model:
+            return env_model
+    return ""
+
+
+def _persist_model(state: dict[str, Any], model_id: str) -> None:
+    if model_id:
+        state["model_id"] = model_id
 
 
 def _now_iso() -> str:
@@ -336,15 +357,19 @@ def on_new(args: argparse.Namespace) -> None:
     from .jira_metadata import read_jira_metadata
     change_dir = CHANGES_DIR / args.change
     jira_meta = read_jira_metadata(change_dir)
+    model_id = _resolve_model(args, None)
 
     client = _client(args.change)
     try:
         change_label = f"{args.jira_key} — {args.change}"
+        metadata: dict[str, Any] = dict(jira_meta) if jira_meta else {}
+        if model_id:
+            metadata["model_id"] = model_id
         run_id = client.create_run(
             change_name=change_label,
             jira_key=args.jira_key,
             branch=getattr(args, "branch", "") or f"feature/{args.change}",
-            metadata=jira_meta if jira_meta else None,
+            metadata=metadata if metadata else None,
         )
         state: dict[str, Any] = {
             "run_id": run_id,
@@ -353,6 +378,7 @@ def on_new(args: argparse.Namespace) -> None:
             "phases": {},
             "tasks": {},
         }
+        _persist_model(state, model_id)
         _save_state(args.change, state)
         _out({"ok": True, "run_id": run_id})
     finally:
@@ -404,7 +430,9 @@ def on_artifact_start(args: argparse.Namespace) -> None:
 
     client = _client(args.change)
     try:
-        phase_id = client.start_phase(run_id, phase_number, phase_name)
+        model_id = _resolve_model(args, state)
+        _persist_model(state, model_id)
+        phase_id = client.start_phase(run_id, phase_number, phase_name, model_id=model_id)
         phases[key] = {"id": phase_id, "name": phase_name, "ended": False, "agent_started_at": _now_iso()}
         if batch:
             _set_batch_mode(state, key)
@@ -662,7 +690,9 @@ def on_apply_start(args: argparse.Namespace) -> None:
 
     client = _client(args.change)
     try:
-        phase_id = client.start_phase(run_id, 5, "code_generation")
+        model_id = _resolve_model(args, state)
+        _persist_model(state, model_id)
+        phase_id = client.start_phase(run_id, 5, "code_generation", model_id=model_id)
         phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False, "agent_started_at": _now_iso()}
         if batch:
             _set_batch_mode(state, "5")
@@ -928,8 +958,10 @@ def sync(args: argparse.Namespace) -> None:
 
         client = _client(args.change)
         try:
+            model_id = _resolve_model(args, state)
+            _persist_model(state, model_id)
             if key not in phases:
-                phase_id = client.start_phase(run_id, phase_number, phase_name)
+                phase_id = client.start_phase(run_id, phase_number, phase_name, model_id=model_id)
                 phases[key] = {"id": phase_id, "name": phase_name, "ended": False}
 
             if is_last:
@@ -965,7 +997,9 @@ def sync(args: argparse.Namespace) -> None:
             if "5" not in phases:
                 client = _client(args.change)
                 try:
-                    phase_id = client.start_phase(run_id, 5, "code_generation")
+                    model_id = _resolve_model(args, state)
+                    _persist_model(state, model_id)
+                    phase_id = client.start_phase(run_id, 5, "code_generation", model_id=model_id)
                     phases["5"] = {"id": phase_id, "name": "code_generation", "ended": False}
                 except Exception:
                     pass
@@ -1010,6 +1044,14 @@ def report_cmd(args: argparse.Namespace) -> None:
     _out({"ok": True, "path": str(path)})
 
 
+def _add_model_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--model",
+        default="",
+        help="AI model identifier (e.g. claude-opus-4.6, composer-2.5-fast)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="openspec-telemetry",
@@ -1021,12 +1063,14 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--change", required=True)
     r.add_argument("--jira-key", required=True)
     r.add_argument("--branch", default="")
+    _add_model_arg(r)
 
     sa = sub.add_parser("on-artifact-start", help="Signal artifact creation started")
     sa.add_argument("--change", required=True)
     sa.add_argument("--artifact", required=True)
     sa.add_argument("--phase", type=int, default=None, help="Plan phase number (phase_iterative mode)")
     sa.add_argument("--batch", action="store_true", help="Batch mode — skip per-artifact token attribution")
+    _add_model_arg(sa)
 
     acr = sub.add_parser("on-artifact-created", help="Signal artifact file written to disk")
     acr.add_argument("--change", required=True)
@@ -1054,6 +1098,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--change", required=True)
     ap.add_argument("--phase", type=int, default=None, help="Plan phase number (phase_iterative mode)")
     ap.add_argument("--batch", action="store_true", help="Batch mode — skip per-task token attribution")
+    _add_model_arg(ap)
 
     ts = sub.add_parser("on-task-start", help="Signal task execution started")
     ts.add_argument("--change", required=True)
@@ -1082,6 +1127,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sy = sub.add_parser("sync", help="Sync filesystem state to telemetry")
     sy.add_argument("--change", required=True)
+    _add_model_arg(sy)
 
     rp = sub.add_parser("report", help="Regenerate metrics-report.json")
     rp.add_argument("--change", required=True)
