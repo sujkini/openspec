@@ -312,27 +312,40 @@ def _enrich_tasks_from_filesystem(tasks: list[dict[str, Any]], change_dir: Path)
 
     for task in tasks:
         tid = task.get("task_id", "")
-        has_verif = task.get("verification_pass") is not None or task.get("verification_command")
-        if has_verif:
+        all_populated = (
+            task.get("verification_pass") is not None
+            and task.get("verification_command")
+            and task.get("verification_result")
+            and task.get("verification_output")
+        )
+        if all_populated:
             continue
 
-        # Try state.yaml completed entry
+        # Try state.yaml completed entry for any missing fields
         state_entry = completed_by_id.get(tid)
         if state_entry:
-            if "verification_pass" in state_entry:
+            if task.get("verification_pass") is None and "verification_pass" in state_entry:
                 task["verification_pass"] = bool(state_entry["verification_pass"])
-            if "test_command" in state_entry:
+            if not task.get("verification_command") and "test_command" in state_entry:
                 task["verification_command"] = str(state_entry["test_command"])
             if "test_result" in state_entry:
-                task["verification_result"] = str(state_entry["test_result"])
+                if not task.get("verification_result"):
+                    task["verification_result"] = str(state_entry["test_result"])
                 if task.get("verification_pass") is None:
                     task["verification_pass"] = state_entry["test_result"].upper() in ("PASS", "PASSED")
-            if "test_output_summary" in state_entry:
+            if not task.get("verification_output") and "test_output_summary" in state_entry:
                 task["verification_output"] = str(state_entry["test_output_summary"])[:2000]
-            if task.get("verification_pass") is not None:
-                continue
 
-        # Try task-reports/<task-id>.md
+        # Try task-reports/<task-id>.md for any still-missing fields
+        all_populated = (
+            task.get("verification_pass") is not None
+            and task.get("verification_command")
+            and task.get("verification_result")
+            and task.get("verification_output")
+        )
+        if all_populated:
+            continue
+
         report_path = change_dir / "implementation" / "task-reports" / f"{tid}.md"
         if not report_path.exists():
             continue
@@ -342,21 +355,24 @@ def _enrich_tasks_from_filesystem(tasks: list[dict[str, Any]], change_dir: Path)
             continue
 
         verif_match = re.search(r'##\s+Verification\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
-        if not verif_match:
-            continue
-        table_text = verif_match.group(1)
-        rows = re.findall(r'\|\s*(.+?)\s*\|\s*(PASSED|FAILED|PASS|FAIL)\s*\|', table_text, re.IGNORECASE)
-        if rows:
-            all_passed = all(r[1].upper() in ("PASSED", "PASS") for r in rows)
-            any_failed = any(r[1].upper() in ("FAILED", "FAIL") for r in rows)
-            task["verification_pass"] = all_passed and not any_failed
-            checks = [f"{r[0].strip()}: {r[1].strip()}" for r in rows]
-            task["verification_result"] = "PASS" if task["verification_pass"] else "FAIL"
-            task["verification_output"] = "; ".join(checks)[:2000]
+        if verif_match:
+            table_text = verif_match.group(1)
+            rows = re.findall(r'\|\s*(.+?)\s*\|\s*(PASSED|FAILED|PASS|FAIL)\s*\|', table_text, re.IGNORECASE)
+            if rows:
+                all_passed = all(r[1].upper() in ("PASSED", "PASS") for r in rows)
+                any_failed = any(r[1].upper() in ("FAILED", "FAIL") for r in rows)
+                checks = [f"{r[0].strip()}: {r[1].strip()}" for r in rows]
+                if task.get("verification_pass") is None:
+                    task["verification_pass"] = all_passed and not any_failed
+                if not task.get("verification_result"):
+                    task["verification_result"] = "PASS" if (all_passed and not any_failed) else "FAIL"
+                if not task.get("verification_output"):
+                    task["verification_output"] = "; ".join(checks)[:2000]
 
-        cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
-        if cmd_match:
-            task["verification_command"] = cmd_match.group(1)[:512]
+        if not task.get("verification_command"):
+            cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
+            if cmd_match:
+                task["verification_command"] = cmd_match.group(1)[:512]
 
 
 def _collect_log_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -319,6 +319,14 @@ class FileEventPoller:
             if "processing_time_s" in event:
                 phase.processing_time_s = event["processing_time_s"]
             phase.completed_at = datetime.now(timezone.utc)
+
+            _PLACEHOLDER_DURATIONS = (60.0, 300.0)
+            if phase.duration_s in _PLACEHOLDER_DURATIONS and phase.started_at:
+                start = phase.started_at
+                if start.tzinfo is None:
+                    start = start.replace(tzinfo=timezone.utc)
+                real_dur = max(0.0, (phase.completed_at - start).total_seconds())
+                phase.duration_s = round(real_dur, 1)
             await db.commit()
 
             await sse_broker.publish(

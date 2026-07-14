@@ -177,10 +177,16 @@ def _read_verification_from_filesystem(
     change_dir: Path,
     task_id: str,
 ) -> dict[str, Any]:
-    """Read verification results from state.yaml completed[] or task-reports/<task-id>.md."""
+    """Read verification results from state.yaml completed[] and task-reports/<task-id>.md.
+
+    Merges both sources: state.yaml provides the baseline, task-reports
+    fills in any missing command/output fields.
+    """
     import re
 
-    # Try state.yaml completed entries
+    out: dict[str, Any] = {}
+
+    # Source 1: state.yaml completed entries
     state_path = change_dir / "implementation" / "state.yaml"
     if state_path.exists():
         try:
@@ -196,7 +202,6 @@ def _read_verification_from_filesystem(
                         result = entry
                         break
             if result:
-                out: dict[str, Any] = {}
                 if "verification_pass" in result:
                     out["verification_pass"] = bool(result["verification_pass"])
                 if "test_command" in result:
@@ -207,38 +212,48 @@ def _read_verification_from_filesystem(
                         out["verification_pass"] = result["test_result"].upper() in ("PASS", "PASSED")
                 if "test_output_summary" in result:
                     out["verification_output"] = str(result["test_output_summary"])[:2000]
-                if out.get("verification_pass") is not None:
-                    return out
         except Exception:
             pass
 
-    # Try task-reports/<task-id>.md
+    all_populated = (
+        out.get("verification_pass") is not None
+        and out.get("verification_command")
+        and out.get("verification_result")
+        and out.get("verification_output")
+    )
+    if all_populated:
+        return out
+
+    # Source 2: task-reports/<task-id>.md — fill in gaps
     report_path = change_dir / "implementation" / "task-reports" / f"{task_id}.md"
     if not report_path.exists():
-        return {}
+        return out
     try:
         content = report_path.read_text()
     except OSError:
-        return {}
+        return out
 
     verif_match = re.search(r'##\s+Verification\s*\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
     if not verif_match:
-        return {}
+        return out
     table_text = verif_match.group(1)
     rows = re.findall(r'\|\s*(.+?)\s*\|\s*(PASSED|FAILED|PASS|FAIL)\s*\|', table_text, re.IGNORECASE)
     if not rows:
-        return {}
+        return out
 
     all_passed = all(r[1].upper() in ("PASSED", "PASS") for r in rows)
     any_failed = any(r[1].upper() in ("FAILED", "FAIL") for r in rows)
-    out = {
-        "verification_pass": all_passed and not any_failed,
-        "verification_result": "PASS" if (all_passed and not any_failed) else "FAIL",
-        "verification_output": "; ".join(f"{r[0].strip()}: {r[1].strip()}" for r in rows)[:2000],
-    }
-    cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
-    if cmd_match:
-        out["verification_command"] = cmd_match.group(1)[:512]
+    checks = [f"{r[0].strip()}: {r[1].strip()}" for r in rows]
+    if out.get("verification_pass") is None:
+        out["verification_pass"] = all_passed and not any_failed
+    if not out.get("verification_result"):
+        out["verification_result"] = "PASS" if (all_passed and not any_failed) else "FAIL"
+    if not out.get("verification_output"):
+        out["verification_output"] = "; ".join(checks)[:2000]
+    if not out.get("verification_command"):
+        cmd_match = re.search(r'`((?:go\s+(?:test|build|vet)|make\s+\S+|bash\s+-n)[^`]*)`', content)
+        if cmd_match:
+            out["verification_command"] = cmd_match.group(1)[:512]
     return out
 
 

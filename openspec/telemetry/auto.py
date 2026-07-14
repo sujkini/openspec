@@ -120,11 +120,21 @@ def _read_verification(change: str, task_id: str) -> dict[str, Any]:
         except Exception:
             pass
 
-    if out.get("verification_pass") is not None:
+    all_populated = (
+        out.get("verification_pass") is not None
+        and out.get("verification_command")
+        and out.get("verification_result")
+        and out.get("verification_output")
+    )
+    if all_populated:
         return out
 
-    # Source 3: task-reports/<task-id>.md — parse ## Verification table
-    out = _read_verification_from_report(change, task_id)
+    # Source 3: task-reports/<task-id>.md — fill in any gaps
+    report_data = _read_verification_from_report(change, task_id)
+    for key in ("verification_pass", "verification_command", "verification_result", "verification_output"):
+        if not out.get(key) and report_data.get(key):
+            out[key] = report_data[key]
+
     return out
 
 
@@ -376,12 +386,17 @@ def on_artifact_start(args: argparse.Namespace) -> None:
         _out({"ok": True, "phase_id": phases[key]["id"], "already_running": True})
         return
 
-    if key in phases and phases[key].get("ended") and plan_phase is not None:
+    if key in phases and phases[key].get("ended"):
         client = _client(args.change)
         try:
+            phases[key]["ended"] = False
             phases[key]["agent_started_at"] = _now_iso()
-            _toggle_phases(args.change, state, client, plan_phase, "task_gen_start")
-            _out({"ok": True, "phase_id": phases[key]["id"], "reopened": True, "plan_phase": plan_phase})
+            if plan_phase is not None:
+                _toggle_phases(args.change, state, client, plan_phase, "task_gen_start")
+            else:
+                client.update_phase(phases[key]["id"], status="running")
+                _save_state(args.change, state)
+            _out({"ok": True, "phase_id": phases[key]["id"], "reopened": True})
         finally:
             client.close()
         _regenerate_report(args.change)
@@ -563,17 +578,48 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
             if not batch:
                 phases[key]["tokens_in"] = cum_in
                 phases[key]["tokens_out"] = cum_out
-                client.update_phase(
+
+            from .change_metrics import PHASE_ARTIFACTS
+            sibling_ids = PHASE_ARTIFACTS.get(phase_number, [])
+            all_siblings_done = all(
+                (change_dir / f"{aid}.md").exists() or (change_dir / f"{aid}.json").exists()
+                for aid in sibling_ids
+            )
+
+            if all_siblings_done:
+                phase_proc = phase_info.get("processing_time_s", 0.0)
+                if phase_info.get("agent_started_at"):
+                    phase_proc += _elapsed_since(phase_info["agent_started_at"])
+                client.end_phase(
                     phase_info["id"],
-                    tokens_in=cum_in,
-                    tokens_out=cum_out,
+                    status="passed",
                     quality_score=getattr(args, "score", 0) or 0,
                     quality_label=getattr(args, "label", "") or "",
+                    tokens_in=cum_in,
+                    tokens_out=cum_out,
                     iteration_count=iteration_count,
                     duration_s=duration_s,
+                    processing_time_s=round(phase_proc, 1),
+                    batch_mode=batch,
                 )
-            _save_state(args.change, state)
-            _out({"ok": True, "phase_ended": False, "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
+                phases[key]["ended"] = True
+                phases[key]["processing_time_s"] = round(phase_proc, 1)
+                _save_state(args.change, state)
+                _out({"ok": True, "phase_ended": True, "all_siblings_done": True,
+                      "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
+            else:
+                if not batch:
+                    client.update_phase(
+                        phase_info["id"],
+                        tokens_in=cum_in,
+                        tokens_out=cum_out,
+                        quality_score=getattr(args, "score", 0) or 0,
+                        quality_label=getattr(args, "label", "") or "",
+                        iteration_count=iteration_count,
+                        duration_s=duration_s,
+                    )
+                _save_state(args.change, state)
+                _out({"ok": True, "phase_ended": False, "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
     finally:
         client.close()
     _regenerate_report(args.change)

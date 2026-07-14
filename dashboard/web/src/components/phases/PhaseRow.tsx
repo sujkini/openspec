@@ -11,7 +11,6 @@ function formatTokens(n: number): string {
 }
 
 function formatDuration(seconds: number): string {
-  if (seconds === 60) return "~1m (est.)";
   if (seconds === 0) return "\u2014";
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
