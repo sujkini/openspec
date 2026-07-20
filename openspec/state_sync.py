@@ -59,6 +59,16 @@ def _authenticated_url(repo_url: str, token: str) -> str:
     return repo_url.replace("https://", f"https://x-access-token:{token}@", 1)
 
 
+def _normalize_repo_url(url: str) -> str:
+    """Normalize repo URLs for comparison (strip auth, trailing .git)."""
+    if "@" in url and "://" in url:
+        url = url.split("://", 1)[1]
+        url = url.split("@", 1)[1]
+    else:
+        url = url.split("://", 1)[-1]
+    return url.rstrip("/").removesuffix(".git").lower()
+
+
 def _run(cmd: list[str], cwd: str | Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=cwd, check=check)
 
@@ -69,10 +79,22 @@ def _ensure_clone(repo_url: str, token: str) -> Path:
     clone_dir = _CACHE_ROOT / "repo"
 
     auth_url = _authenticated_url(repo_url, token)
+    expected = _normalize_repo_url(repo_url)
 
     if (clone_dir / ".git").exists():
-        _run(["git", "fetch", "--all", "--prune"], cwd=clone_dir, check=False)
-        return clone_dir
+        current = _run(["git", "remote", "get-url", "origin"], cwd=clone_dir, check=False)
+        current_url = current.stdout.strip() if current.returncode == 0 else ""
+        if current_url and _normalize_repo_url(current_url) != expected:
+            logger.info(
+                "state_sync: remote changed (%s -> %s), re-cloning cache",
+                current_url,
+                repo_url,
+            )
+            shutil.rmtree(clone_dir)
+        else:
+            _run(["git", "remote", "set-url", "origin", auth_url], cwd=clone_dir, check=False)
+            _run(["git", "fetch", "--all", "--prune"], cwd=clone_dir, check=False)
+            return clone_dir
 
     if clone_dir.exists():
         shutil.rmtree(clone_dir)
@@ -88,30 +110,33 @@ def _branch_name(jira_key: str, change_slug: str, config: dict[str, Any]) -> str
 
 def _checkout_branch(clone_dir: Path, branch: str) -> None:
     """Checkout the branch, creating it from the default branch if needed."""
-    result = _run(
-        ["git", "rev-parse", "--verify", f"origin/{branch}"],
+    remote_ref = f"refs/remotes/origin/{branch}"
+    local_ref = f"refs/heads/{branch}"
+
+    remote = _run(["git", "rev-parse", "--verify", remote_ref], cwd=clone_dir, check=False)
+    if remote.returncode == 0:
+        _run(["git", "checkout", "-B", branch, remote_ref], cwd=clone_dir)
+        return
+
+    local = _run(["git", "rev-parse", "--verify", local_ref], cwd=clone_dir, check=False)
+    if local.returncode == 0:
+        _run(["git", "checkout", branch], cwd=clone_dir)
+        return
+
+    default = _run(
+        ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
         cwd=clone_dir,
         check=False,
     )
-    if result.returncode == 0:
-        _run(["git", "checkout", "-B", branch, f"origin/{branch}"], cwd=clone_dir)
-    else:
-        default = _run(
-            ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
-            cwd=clone_dir,
-            check=False,
-        )
-        base = default.stdout.strip().replace("origin/", "") if default.returncode == 0 else "main"
-        base_exists = _run(
-            ["git", "rev-parse", "--verify", f"origin/{base}"],
-            cwd=clone_dir,
-            check=False,
-        )
-        if base_exists.returncode == 0:
-            _run(["git", "checkout", "-B", branch, f"origin/{base}"], cwd=clone_dir)
-        else:
-            _run(["git", "checkout", "--orphan", branch], cwd=clone_dir)
-            _run(["git", "rm", "-rf", "--ignore-unmatch", "."], cwd=clone_dir, check=False)
+    base = default.stdout.strip().replace("origin/", "") if default.returncode == 0 else "main"
+    base_ref = f"refs/remotes/origin/{base}"
+    base_exists = _run(["git", "rev-parse", "--verify", base_ref], cwd=clone_dir, check=False)
+    if base_exists.returncode == 0:
+        _run(["git", "checkout", "-B", branch, base_ref], cwd=clone_dir)
+        return
+
+    _run(["git", "checkout", "--orphan", branch], cwd=clone_dir)
+    _run(["git", "rm", "-rf", "--ignore-unmatch", "."], cwd=clone_dir, check=False)
 
 
 def _copy_artifacts(change_dir: Path, clone_dir: Path) -> None:
@@ -216,7 +241,7 @@ def pull_state(jira_key: str, change_slug: str | None = None) -> tuple[str, Path
     else:
         branch = matching[0]
 
-    _run(["git", "checkout", "-B", branch, f"origin/{branch}"], cwd=clone_dir)
+    _run(["git", "checkout", "-B", branch, f"refs/remotes/origin/{branch}"], cwd=clone_dir)
 
     changes_root = clone_dir / "openspec" / "changes"
     if not changes_root.exists():

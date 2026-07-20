@@ -125,11 +125,45 @@ cd /path/to/your-operator-repo
 
 Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
-### 5. Restart Cursor
+### 5. Connect MCP Servers (GitHub + Jira)
 
-Restart Cursor so slash commands load from `.cursor/commands/`.
+The workflow uses two MCP servers for external integrations. Add them to your Cursor MCP config.
 
-### 6. Run your first change
+Open (or create) your MCP config file at `~/.cursor/mcp.json` and add:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer <your-github-pat>"
+      }
+    },
+    "jira": {
+      "command": "uvx",
+      "args": ["mcp-atlassian", "--toolsets", "default,jira_users"],
+      "env": {
+        "JIRA_URL": "https://redhat.atlassian.net",
+        "JIRA_USERNAME": "<your-email>@redhat.com",
+        "JIRA_API_TOKEN": "<your-jira-api-token>"
+      }
+    }
+  }
+}
+```
+
+**GitHub MCP** — provides `create_repository`, `get_file_contents`, and other GitHub API tools. Used by `/opsx-new` to auto-create the state repo. Generate a PAT at [GitHub Settings → Tokens](https://github.com/settings/tokens) with `repo` scope.
+
+**Jira MCP** (`mcp-atlassian`) — provides `jira_add_comment`, `jira_search_users`, `jira_get_issue`. Used for fetching ticket data and posting handover notifications. Generate an API token at [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens). Requires `uvx` (install via `pip install uvx` or `pipx install uv`).
+
+After editing `mcp.json`, restart Cursor so both servers connect.
+
+### 6. Restart Cursor
+
+Restart Cursor so slash commands load from `.cursor/commands/` and MCP servers connect.
+
+### 7. Run your first change
 
 ```
 /opsx-new PROJ-123
@@ -272,17 +306,6 @@ phase_owners:
 
 Skip the prompt (or omit all emails) for single-owner mode — no handover gates activate.
 
-### Handover flow
-
-When `/opsx-continue` or `/opsx-apply` completes a phase and the **next phase has a different owner**:
-
-1. Artifacts are pushed to the state repo (see below)
-2. A Jira comment is posted on the ticket with an `@mention` of the next owner
-3. The current user sees a **HANDOVER** message and the command **hard-stops** — it refuses to generate the next artifact
-4. The next owner runs `/opsx-resume <JIRA-KEY>` in their own Cursor workspace to pull the state and continue
-
-If consecutive phases share the same owner, no handover occurs — the user keeps running `/opsx-continue` normally.
-
 ### RBAC module
 
 The `openspec/rbac.py` module provides:
@@ -297,6 +320,17 @@ The `openspec/rbac.py` module provides:
 ## State Sync (Artifact Persistence)
 
 State sync pushes `openspec/changes/<change>/` artifacts to a **dedicated git repository** after each phase completes. This enables multi-owner handover — each owner pulls the shared state from the same branch.
+
+### Do I need to create the state repo manually?
+
+**No.** The `/opsx-new` command auto-creates the state repo via GitHub MCP if it does not already exist:
+
+1. It reads the `OPENSPEC_STATE_REPO` env var.
+2. If the env var is set and the repo exists → uses it directly.
+3. If the env var is empty or the repo does not exist → calls GitHub MCP `create_repository` to create a **private** repo named `openspec-state` under your GitHub org.
+4. You are informed: `"Created state repo: <url>"`.
+
+If you prefer to create it manually, create an **empty private repo** on GitHub (e.g. `yourorg/openspec-state`) and set the env var before running `/opsx-new`.
 
 ### Configuration
 
@@ -317,26 +351,35 @@ export OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
 export GIT_TOKEN=ghp_...
 ```
 
-### How it works
+### How state sync commits and pushes
 
-- `/opsx-new` auto-creates the state repo via GitHub MCP if it does not exist
-- After each phase completion, artifacts are committed and pushed to branch `<JIRA-KEY>/<change-slug>`
-- State sync is **best-effort** — a push failure logs a warning but never blocks the workflow
-- The `openspec/state_sync.py` module handles clone, branch, copy, commit, and push
+State sync is triggered **automatically via telemetry hooks** in `openspec/telemetry/auto.py`. The flow is:
 
-### Resuming (next owner)
+1. User approves an artifact in `/opsx-continue` or a task in `/opsx-apply`.
+2. The command calls the telemetry hook (e.g. `on-artifact-complete`, `on-task-complete`).
+3. At the end of each telemetry hook, `_try_state_sync()` is called automatically.
+4. `_try_state_sync()` calls `openspec/state_sync.py → sync_state()` which:
+   - Clones (or reuses a cached clone of) the state repo into `/tmp/openspec-state-cache/`
+   - Checks out (or creates) the branch `<JIRA-KEY>/<change-slug>`
+   - Copies all files from `openspec/changes/<change>/` into the clone
+   - Commits with message `[openspec] <phase_name> complete - <JIRA-KEY>`
+   - Pushes to the remote state repo using `GIT_TOKEN` for authentication
+5. State sync is **best-effort** — a push failure logs a warning but **never** blocks the workflow.
 
-```
-/opsx-resume OAPE-850
-```
+The four hook points where state sync fires:
 
-Pulls the state branch, reconstructs `openspec/changes/<change>/` locally, and displays a summary. The next owner then runs `/opsx-continue` to proceed.
+| Telemetry hook | When it fires | What was just completed |
+|----------------|---------------|------------------------|
+| `on-artifact-complete` | After user approves an artifact in `/opsx-continue` | validation.json, specs.md, plan.md, etc. |
+| `on-task-complete` | After user approves a task in `/opsx-apply` | A single implementation task |
+| `on-phase-complete` | After all tasks in a plan phase are done | An entire plan phase (e.g. Phase 1) |
+| `on-apply-complete` | After all phases and tasks are done | The entire implementation |
 
 ---
 
 ## Jira Notifications
 
-When RBAC is configured, Jira comments are posted automatically on the child ticket at phase boundaries:
+When RBAC is configured, Jira comments are posted automatically on the child ticket at phase boundaries. The Jira MCP server must be connected in `~/.cursor/mcp.json` (see [Step 5: Connect MCP Servers](#5-connect-mcp-servers-github--jira)).
 
 | Event | Who is notified | Comment content |
 |-------|----------------|-----------------|
@@ -345,9 +388,87 @@ When RBAC is configured, Jira comments are posted automatically on the child tic
 | All phases complete | Epic owner | Summary of all phases with state repo link |
 | Phase failed | Phase owner + Epic owner | Error summary |
 
-Mentions use Jira Cloud `[~accountid:<id>]` format. Account IDs are resolved via `jira_search_users` on first use and cached in `inputs/rbac.yaml`.
+Mentions use Jira Cloud `[~accountid:<id>]` format. Account IDs are resolved via Jira MCP `jira_search_users` on first use and cached in `inputs/rbac.yaml`.
 
-The `openspec/jira_notify.py` module formats comment text. The actual Jira API call is made by the Cursor agent via the Atlassian MCP `jira_add_comment` tool.
+The `openspec/jira_notify.py` module formats comment text. The actual Jira API call is made by the Cursor agent via the Jira MCP `jira_add_comment` tool.
+
+---
+
+## End-to-End Handover Flow (Owner A → Owner B)
+
+This is the complete step-by-step lifecycle when phases have different owners.
+
+### Owner A starts the change
+
+1. **Owner A** opens their operator repo clone in Cursor (optionally in the dev container).
+2. Owner A runs:
+   ```
+   /opsx-new OAPE-850
+   ```
+3. `/opsx-new` fetches the Jira ticket, auto-creates the state repo (if needed), and prompts for RBAC:
+   ```
+   Spec validation owner: alice@redhat.com     ← Owner A
+   Repo assessment owner: bob@redhat.com       ← Owner B
+   ...
+   ```
+4. Owner A runs `/opsx-continue` repeatedly to generate and approve artifacts (`validation.json`, `specs.md`).
+5. After `specs.md` is approved, the telemetry hook fires → **state sync pushes** all artifacts to branch `OAPE-850/oape-850` in the state repo.
+6. `/opsx-continue` detects that the **next phase (repo_assessment) has a different owner** (bob@redhat.com):
+   - Posts a **Jira comment** on OAPE-850 with `@bob` mention:
+     ```
+     [OpenSpec] Phase handover: "spec_understanding" → "repo_assessment"
+     @Bob please run /opsx-resume OAPE-850 then /opsx-continue
+     ```
+   - Outputs to Owner A:
+     ```
+     ═══════════════════════════════════════════════
+     HANDOVER: spec_understanding is complete.
+     Next phase (repo_assessment) is assigned to bob@redhat.com.
+     A Jira notification has been posted on OAPE-850.
+     The assigned owner must run /opsx-resume OAPE-850 then /opsx-continue.
+     ═══════════════════════════════════════════════
+     ```
+   - **HARD STOP** — Owner A cannot proceed further. The command refuses to generate the next artifact.
+
+### Owner B picks up the change
+
+7. **Owner B** gets the Jira notification (email or watched ticket).
+8. Owner B opens **their own** operator repo clone in Cursor (their own workspace, not Owner A's).
+9. Owner B must have:
+   - `install.sh` already run on their repo (so `openspec/`, `.cursor/`, `.devcontainer/` are present)
+   - `OPENSPEC_STATE_REPO` and `GIT_TOKEN` env vars set
+   - Jira MCP connected in `~/.cursor/mcp.json`
+10. Owner B runs:
+    ```
+    /opsx-resume OAPE-850
+    ```
+    This:
+    - Finds branch `OAPE-850/oape-850` in the state repo
+    - Pulls all artifacts into `openspec/changes/oape-850/` locally
+    - Verifies the state is valid
+    - Shows:
+      ```
+      ═══════════════════════════════════════════════
+      RESUMED: oape-850
+      Jira: OAPE-850
+      State branch: OAPE-850/oape-850
+      Last completed phase: spec_understanding (by alice@redhat.com)
+      Next phase: repo_assessment (assigned to you)
+      ═══════════════════════════════════════════════
+
+      Run /opsx-continue to start the next phase.
+      ```
+11. Owner B runs `/opsx-continue` to generate `repo-assessment.md`, approve it, and continue.
+12. If Owner B also owns the next phase (e.g. `arch_planning`), they keep running `/opsx-continue` — no handover.
+13. When the next phase has a **different owner** again, the handover cycle repeats (steps 5–11).
+
+### Key points
+
+- Each owner works in **their own Cursor IDE** with their own clone of the operator repo.
+- `/opsx-resume` is the bridge — it pulls the shared state into the new owner's workspace.
+- The state repo branch is the **single source of truth** that travels between owners.
+- If the same owner handles consecutive phases, no handover happens — they just keep running `/opsx-continue`.
+- The handover is a **hard stop** — the current owner cannot override it.
 
 ---
 
