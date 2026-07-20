@@ -27,7 +27,31 @@ A `.devcontainer/` configuration is included for running the workspace inside a 
    #   OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
    #   GIT_TOKEN=ghp_...
    ```
-2. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+2. **Ensure Docker is running** before opening the container:
+   ```bash
+   docker info    # Should show both Client and Server sections
+   ```
+   If the Server section is empty or you see `Error running docker info`, start the daemon:
+   ```bash
+   # systemd (Fedora, RHEL, Ubuntu)
+   sudo systemctl start docker
+
+   # Docker Desktop (macOS / Windows)
+   # Open Docker Desktop app and wait for "Docker is running"
+
+   # Podman (rootless alternative)
+   podman machine start
+   ```
+   Verify with `docker info` again — the **Server** section must show `Server Version`, `Storage Driver`, etc.
+
+3. **Ensure your user can run Docker without sudo**:
+   ```bash
+   # If "docker info" requires sudo, add yourself to the docker group:
+   sudo usermod -aG docker $USER
+   newgrp docker    # or log out and back in
+   ```
+
+4. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
 
 The dev container is optional — the workflow works without it. It is recommended when using RBAC multi-owner handover so each owner gets a consistent environment.
 
@@ -432,18 +456,32 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 
 ## Prerequisites
 
+### Required
+
 | Requirement | Notes |
 |-------------|-------|
-| [Node.js](https://nodejs.org/) | For OpenSpec CLI installation |
-| [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed by `install.sh` |
+| [Node.js](https://nodejs.org/) 18+ | For OpenSpec CLI installation |
+| [Python](https://python.org/) 3.12+ | For telemetry, state sync, RBAC modules |
+| [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed automatically by `install.sh` |
 | [Cursor](https://cursor.com) | Slash commands load from `.cursor/commands/` |
-| Jira access | Ticket key at `/opsx-new`; spec via MCP or paste |
-| Atlassian MCP (Cursor) | Required for Jira notifications; authenticate via Cursor MCP settings |
+| Jira access | Ticket key at `/opsx-new`; spec via Jira MCP or paste |
 | Target GitHub repo | URL before **repo-assessment**; or use working-folder mode |
 | Fork GitHub repo | URL before `/opsx-apply`; skip in working-folder mode |
-| Docker / Podman | Optional — for dev container support |
-| GitHub PAT (`GIT_TOKEN`) | Optional — required for state sync and multi-owner handover |
-| State repo (`OPENSPEC_STATE_REPO`) | Optional — dedicated repo for artifact persistence across owners |
+
+### Required for RBAC / Jira notifications
+
+| Requirement | Notes |
+|-------------|-------|
+| [Atlassian MCP](https://www.npmjs.com/package/@anthropic/atlassian-mcp) in Cursor | Authenticate via Cursor Settings → MCP → `user-atlassian`. Provides `jira_add_comment`, `jira_search_users` |
+| GitHub PAT (`GIT_TOKEN`) | Token with `repo` scope for pushing to the state repo |
+| State repo (`OPENSPEC_STATE_REPO`) | Dedicated private repo for artifact persistence (auto-created by `/opsx-new` if missing) |
+
+### Required for dev container
+
+| Requirement | Notes |
+|-------------|-------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman](https://podman.io/) | Container runtime for building and running the dev container |
+| [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) for Cursor | Install from Extensions panel — search "Dev Containers" by Microsoft (`ms-vscode-remote.remote-containers`). Required to use `Ctrl+Shift+P → Dev Containers: Reopen in Container` |
 
 ---
 
