@@ -168,6 +168,17 @@ if [ "$INSTALL_DASHBOARD" = true ]; then
   add_if_missing "dashboard/web/dist/"
 fi
 
+FIX_PERMS="$TARGET_DIR/.devcontainer/fix-host-permissions.sh"
+if [ -x "$FIX_PERMS" ]; then
+  echo "==> Fixing host permissions for dev container bind mounts..."
+  if bash "$FIX_PERMS"; then
+    echo "    Host permissions OK."
+  else
+    echo "    Warning: permission fix needs sudo. Run manually:"
+    echo "      bash $FIX_PERMS"
+  fi
+fi
+
 echo ""
 echo "=== Installation complete ==="
 echo ""
