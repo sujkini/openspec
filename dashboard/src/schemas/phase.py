@@ -22,6 +22,7 @@ class PhaseUpdate(BaseModel):
     quality_score: float | None = None
     quality_label: str | None = None
     completed_at: datetime | None = None
+    owner_email: str | None = None
 
 
 class PhaseOut(BaseModel):
@@ -38,6 +39,7 @@ class PhaseOut(BaseModel):
     model_id: str
     quality_score: float
     quality_label: str
+    owner_email: str
     started_at: datetime
     completed_at: datetime | None
 

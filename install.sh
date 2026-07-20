@@ -12,7 +12,7 @@ Usage: $0 [--no-dashboard] <target-directory>
 Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
   2. Runs 'openspec init' in the target directory
-  3. Copies openspec/, .cursor/, eval-generation/, and dashboard/ into the target
+  3. Copies openspec/, .cursor/, .devcontainer/, eval-generation/, and dashboard/ into the target
   4. Installs telemetry Python dependencies (pyyaml, tiktoken)
   5. Installs dashboard Python + Node dependencies (if dashboard enabled)
   6. Updates .gitignore
@@ -76,6 +76,12 @@ cp -r "$SCRIPT_DIR/openspec" "$TARGET_DIR/"
 
 echo "==> Copying .cursor/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/.cursor" "$TARGET_DIR/"
+
+echo "==> Copying .devcontainer/ into $TARGET_DIR..."
+if [ -d "$SCRIPT_DIR/.devcontainer" ]; then
+  cp -r "$SCRIPT_DIR/.devcontainer" "$TARGET_DIR/"
+  echo "    Dev container config installed. To use: Ctrl+Shift+P → 'Dev Containers: Reopen in Container'"
+fi
 
 echo "==> Copying eval-generation/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/eval-generation" "$TARGET_DIR/"
@@ -141,6 +147,9 @@ add_if_missing() {
   fi
 }
 
+add_if_missing "# ─── OpenSpec secrets (never commit) ───"
+add_if_missing ".devcontainer/.env"
+add_if_missing ""
 add_if_missing "# ─── OpenSpec runtime artifacts (never commit) ───"
 add_if_missing "eval-generation/output-evals/"
 add_if_missing "eval-generation/output-refined-templates/"
@@ -165,10 +174,15 @@ echo ""
 echo "Next steps:"
 echo "  1. Edit openspec/inputs/agents.md      — define your operator's architecture & agent routing"
 echo "  2. Edit openspec/inputs/constitution.md — define coding guardrails & CI gates"
-echo "  3. Restart Cursor so slash commands load from .cursor/commands/"
-echo "  4. Run /opsx-new <JIRA-KEY> to start your first change"
+echo "  3. (Optional) Copy .devcontainer/.env.example to .devcontainer/.env and fill in:"
+echo "       OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git"
+echo "       GIT_TOKEN=ghp_..."
+echo "  4. Open in dev container: Ctrl+Shift+P → 'Dev Containers: Reopen in Container'"
+echo "     Or continue without a container — the workflow works either way."
+echo "  5. Restart Cursor so slash commands load from .cursor/commands/"
+echo "  6. Run /opsx-new <JIRA-KEY> to start your first change"
 if [ "$INSTALL_DASHBOARD" = true ]; then
-  echo "  5. (Optional) Start the dashboard:  cd $TARGET_DIR && ./dashboard/start.sh"
+  echo "  7. (Optional) Start the dashboard:  cd $TARGET_DIR && ./dashboard/start.sh"
 fi
 echo ""
 echo "Telemetry:"

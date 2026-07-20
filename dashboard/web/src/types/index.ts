@@ -56,6 +56,7 @@ export interface PhaseExecution {
   model_id: string;
   quality_score: number;
   quality_label: string;
+  owner_email: string;
   started_at: string;
   completed_at: string | null;
 }

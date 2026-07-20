@@ -21,13 +21,14 @@ export default function PhaseWaterfall({ phases }: PhaseWaterfallProps) {
               <th className="px-4 py-2 text-center">Time Taken</th>
               <th className="px-4 py-2 text-center">Tokens In / Out</th>
               <th className="px-4 py-2">Quality / Eval Output</th>
+              <th className="px-4 py-2">Owner</th>
             </tr>
           </thead>
           <tbody>
             {phases.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="px-4 py-8 text-center text-terminal-muted text-sm"
                 >
                   No phase data available.

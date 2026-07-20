@@ -33,6 +33,16 @@ flags:
     default_max: 15
     consolidation_threshold: 2
 
+state_sync:
+  enabled: true
+  repo_env_var: OPENSPEC_STATE_REPO
+  token_env_var: GIT_TOKEN
+  branch_pattern: "{jira_key}/{change_slug}"
+  sync_on:
+    - artifact_complete
+    - task_complete
+    - phase_complete
+
 rules:
   validation:
     - "Read jira_key from inputs/jira.yaml; use inputs/jira-spec.md as spec source"

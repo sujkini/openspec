@@ -51,6 +51,50 @@ If no Jira key, ask once. Do **not** proceed without it.
    - **Note:** Spec-understanding phase telemetry does NOT start here — it begins at
      `/opsx-continue` step 6 (`on-artifact-start --artifact validation`). `/opsx-new` only
      registers the run.
+4a. **State repo setup** (if `openspec/config.yaml` → `state_sync.enabled` is true):
+   - Read `OPENSPEC_STATE_REPO` env var.
+   - If the env var is set, verify the repo is accessible (silent check via GitHub MCP
+     `get_file_contents` on `README.md`, or `git ls-remote`). If accessible, persist
+     `state_repo_url` to `inputs/jira.yaml`.
+   - If the env var is empty or the repo does not exist:
+     - If `target_repo` was provided, derive the GitHub org from its URL.
+       Otherwise ask the user once: "GitHub org for the state repo? (e.g. `myorg`)"
+     - Call GitHub MCP `create_repository` with `name: "openspec-state"`, `org: "<org>"`,
+       `private: true`, `description: "OpenSpec workflow state artifacts"`.
+     - Persist the new repo URL to `inputs/jira.yaml` as `state_repo_url`.
+     - Inform user: "Created state repo: `<url>`"
+   - Create the initial branch `<jira-key>/<change-slug>` with an initial commit
+     containing `inputs/jira.yaml`:
+     ```bash
+     python -c "from openspec.state_sync import sync_state; sync_state('<name>', 'init', '<JIRA-KEY>')"
+     ```
+
+4b. **RBAC configuration** (optional):
+   - ASK the user:
+     ```
+     Define phase owners for this change? Enter email addresses per phase, or "skip" to use single-owner mode (no handover).
+
+     Spec validation owner: [email or skip]
+     Repo assessment owner: [email or skip]
+     Planning owner:        [email or skip]
+     Tasks owner:           [email or skip]
+     Code generation owner: [email or skip]
+     ```
+   - If the user provides at least one email: write `inputs/rbac.yaml` with the
+     phase-owner mapping. Use the `openspec.rbac` module to validate and persist:
+     ```yaml
+     epic_owner: <epic_owner_email_if_known>
+     phase_owners:
+       spec_understanding:
+         owner: <email>
+       repo_assessment:
+         owner: <email>
+       ...
+     ```
+     Validate emails with `openspec.rbac.validate_rbac_config()`.
+   - If all skipped or user says "skip": do not create `rbac.yaml`. Single-owner
+     mode — no handover gates will activate.
+
 5. **Telemetry — register run** (silent, non-blocking):
    ```bash
    python -m openspec.telemetry.auto on-new --change "<name>" --jira-key "<JIRA-KEY>"
@@ -64,3 +108,5 @@ Prompt: `/opsx-continue` to create `validation.json`.
 
 - Jira key required; repo URL optional at this step
 - No planning artifacts in this command
+- State repo auto-creation requires GitHub MCP (`create_repository` permission)
+- RBAC is optional — omitting it disables the handover flow entirely

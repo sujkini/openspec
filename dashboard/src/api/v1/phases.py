@@ -55,6 +55,7 @@ async def update_phase(phase_id: str, payload: PhaseUpdate, db: DBSession):
             "tokens_out": phase.tokens_out,
             "quality_score": phase.quality_score,
             "quality_label": phase.quality_label,
+            "owner_email": phase.owner_email,
         },
         run_id=phase.run_id,
     )

@@ -333,9 +333,51 @@ When all **current phase** tasks are marked complete:
      - Write `deviation-observed.md` if any deviations logged
      - Present final summary with all phase PR URLs
      - Set state: `COMPLETE`. Write state.yaml.
+     - **Jira notification — run complete** (only if `inputs/rbac.yaml` exists):
+       ```python
+       from openspec.jira_notify import format_run_complete_comment
+       comment = format_run_complete_comment(jira_key=jira_key, phases_summary=summary,
+                                              state_repo_url=state_repo_url, state_branch=branch,
+                                              epic_owner_account_id=epic_owner_aid)
+       ```
+       Post via Atlassian MCP `jira_add_comment`.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
      - Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks."
+
+6b. **Handover check at phase boundary** (only if `inputs/rbac.yaml` exists):
+    - The code_generation phase is the last one in RBAC, so handover applies to the
+      *plan-phase* boundaries only when the RBAC config maps them differently (e.g.
+      subtask_creation → one owner, code_generation → another).
+    - Load RBAC config and determine the current RBAC phase (e.g. `code_generation`
+      during `/opsx-apply`).
+    - If the **next plan phase** maps to a different RBAC owner for `code_generation`:
+      this is within the same RBAC phase, so no handover — continue normally.
+    - If the workflow transitions from `subtask_creation` to `code_generation` (i.e.
+      tasks are done and implementation begins), check `is_handover_needed(config, "subtask_creation")`.
+      If True:
+      a. Resolve next owner's Jira `accountId` (same as `/opsx-continue` step 12a).
+      b. Format and post a handover comment via Atlassian MCP:
+         ```python
+         from openspec.jira_notify import format_handover_comment
+         comment = format_handover_comment(
+             completed_phase="subtask_creation", next_phase="code_generation",
+             current_owner_account_id=..., next_owner_account_id=...,
+             jira_key=jira_key,
+         )
+         ```
+      c. Output:
+         ```
+         ═══════════════════════════════════════════════
+         HANDOVER: subtask_creation is complete.
+         Next phase (code_generation) is assigned to <next_owner>.
+         A Jira notification has been posted on <JIRA_KEY>.
+         The assigned owner must run /opsx-resume <JIRA_KEY> then /opsx-apply.
+         ═══════════════════════════════════════════════
+         ```
+      d. Set state: `IDLE`. **HARD STOP.**
+    - If no handover needed: proceed normally.
+
 7. YIELD
 
 ## Guardrails

@@ -65,6 +65,15 @@ export default function PhaseRow({ phase }: PhaseRowProps) {
       <td className="px-4 py-2.5 text-sm">
         {phase.quality_label || `Score: ${phase.quality_score}/100`}
       </td>
+      <td className="px-4 py-2.5 text-sm text-terminal-muted">
+        {phase.owner_email ? (
+          <span title={phase.owner_email}>
+            {phase.owner_email.split("@")[0]}
+          </span>
+        ) : (
+          "\u2014"
+        )}
+      </td>
     </tr>
   );
 }

@@ -97,6 +97,64 @@ Continue working on a change by creating the **next** artifact (one per invocati
     Use `--status failed` if the user rejects the artifact.
     Omit `--phase` for non-task artifacts.
 
+12. **Handover check** (only if `inputs/rbac.yaml` exists in the change directory):
+    - Load RBAC config:
+      ```python
+      from openspec.rbac import load_rbac_config, is_handover_needed, get_phase_owner, get_next_phase_owner, get_next_phase_name, save_rbac_config
+      ```
+    - Determine the completed phase name from the artifact mapping (e.g. `specs` → `spec_understanding`,
+      `repo-assessment` → `repo_assessment`, `plan` → `arch_planning`, `tasks` → `subtask_creation`).
+    - If `is_handover_needed(config, completed_phase)` returns True:
+      a. Resolve the next owner's Jira `accountId`:
+         - Check if `jira_account_id` is already cached in `inputs/rbac.yaml` for the next owner.
+         - If not cached, call Jira MCP: `jira_get_user_profile` with `account_id: "<next_owner_email>"`.
+           If that fails, fall back to `jira_search` with JQL `assignee = "<next_owner_email>"` and
+           extract `accountId` from the first matching issue's assignee field.
+         - Extract `accountId` from the response and cache it back to `inputs/rbac.yaml` via
+           `save_rbac_config()`.
+      b. Format a handover comment:
+         ```python
+         from openspec.jira_notify import format_handover_comment
+         comment = format_handover_comment(
+             completed_phase=completed_phase,
+             next_phase=next_phase,
+             current_owner_account_id=current_owner.jira_account_id,
+             current_owner_display=current_owner.display_name or current_owner.owner,
+             next_owner_account_id=next_owner.jira_account_id,
+             next_owner_display=next_owner.display_name or next_owner.owner,
+             jira_key=jira_key,
+             state_branch=f"{jira_key}/{change_name}",
+         )
+         ```
+      c. Post the comment to Jira via Atlassian MCP: `jira_add_comment` with
+         `issue_key: "<JIRA_KEY>"`, `body: "<comment>"`.
+      d. State sync is automatic (done by telemetry hooks in step 11).
+      e. Output to user:
+         ```
+         ═══════════════════════════════════════════════
+         HANDOVER: <completed_phase> is complete.
+         Next phase (<next_phase>) is assigned to <next_owner_email>.
+         A Jira notification has been posted on <JIRA_KEY>.
+         The assigned owner must run /opsx-resume <JIRA_KEY> then /opsx-continue.
+         ═══════════════════════════════════════════════
+         ```
+      f. **HARD STOP** — refuse to generate the next artifact. This is not a warning;
+         the command MUST NOT proceed regardless of user input.
+    - If `is_handover_needed()` returns False (same owner or no RBAC):
+      - If `inputs/rbac.yaml` exists, post an informational Jira comment:
+        ```python
+        from openspec.jira_notify import format_phase_complete_comment
+        comment = format_phase_complete_comment(
+            phase_name=completed_phase,
+            status="passed",
+            quality_score=eval_score,
+            owner_account_id=current_owner.jira_account_id,
+            owner_display_name=current_owner.display_name or current_owner.owner,
+        )
+        ```
+        Post via Atlassian MCP `jira_add_comment`.
+      - Proceed normally (no handover message).
+
 ## Artifact order (openspec-agile-workflow)
 
 validation.json → specs.md → repo-assessment.md → constitution.md → plan.md → tasks.md → …

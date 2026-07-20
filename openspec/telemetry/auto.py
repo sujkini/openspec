@@ -61,6 +61,19 @@ def _regenerate_report(change: str) -> None:
         logger.warning("Report generation failed: %s", exc, exc_info=True)
 
 
+def _try_state_sync(change: str, phase_name: str) -> None:
+    """Best-effort push of change artifacts to the state repo."""
+    try:
+        state = _load_state(change)
+        jira_key = state.get("jira_key", "")
+        if not jira_key:
+            return
+        from openspec.state_sync import sync_state
+        sync_state(change, phase_name, jira_key)
+    except Exception as exc:
+        logger.warning("State sync failed (non-blocking): %s", exc)
+
+
 def _state_path(change: str) -> Path:
     return CHANGES_DIR / change / STATE_FILE
 
@@ -623,6 +636,7 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
     finally:
         client.close()
     _regenerate_report(args.change)
+    _try_state_sync(args.change, f"artifact_{args.artifact}")
 
 
 def on_apply_start(args: argparse.Namespace) -> None:
@@ -779,6 +793,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
     finally:
         client.close()
     _regenerate_report(args.change)
+    _try_state_sync(args.change, f"task_{args.task_id}")
 
 
 def _detect_batch_from_tasks(change: str, state: dict[str, Any]) -> bool:
@@ -819,6 +834,7 @@ def on_phase_complete(args: argparse.Namespace) -> None:
     finally:
         client.close()
     _regenerate_report(args.change)
+    _try_state_sync(args.change, f"phase_{plan_phase}_complete")
 
 
 def on_apply_complete(args: argparse.Namespace) -> None:
@@ -899,6 +915,7 @@ def on_apply_complete(args: argparse.Namespace) -> None:
     finally:
         client.close()
     _regenerate_report(args.change)
+    _try_state_sync(args.change, "all_phases_complete")
 
 
 def sync(args: argparse.Namespace) -> None:
