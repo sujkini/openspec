@@ -14,9 +14,24 @@ git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
-This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
+This copies `openspec/`, `.cursor/`, `.devcontainer/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
-### 2. Choose code generation mode (`openspec/config.yaml`)
+### 2. (Optional) Open in Dev Container
+
+A `.devcontainer/` configuration is included for running the workspace inside a reproducible container with Python 3.12, Node 20, Go 1.22, git, and gh CLI pre-installed.
+
+1. Copy `.devcontainer/.env.example` to `.devcontainer/.env` and fill in your values:
+   ```bash
+   cp .devcontainer/.env.example .devcontainer/.env
+   # Edit .devcontainer/.env:
+   #   OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
+   #   GIT_TOKEN=ghp_...
+   ```
+2. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+
+The dev container is optional — the workflow works without it. It is recommended when using RBAC multi-owner handover so each owner gets a consistent environment.
+
+### 3. Choose code generation mode (`openspec/config.yaml`)
 
 Set `flags.codegen_mode` before you start implementing tasks:
 
@@ -33,7 +48,7 @@ flags:
 
 Change the flag anytime; `/opsx-apply` reads it on each invocation. Details below under [Configuration](#configuration-openspecconfigyaml).
 
-### 3. Start the Dashboard
+### 4. Start the Dashboard
 
 ```bash
 cd /path/to/your-operator-repo
@@ -42,11 +57,11 @@ cd /path/to/your-operator-repo
 
 Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
-### 4. Restart Cursor
+### 5. Restart Cursor
 
 Restart Cursor so slash commands load from `.cursor/commands/`.
 
-### 5. Run your first change
+### 6. Run your first change
 
 ```
 /opsx-new PROJ-123
@@ -154,15 +169,130 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 
 ---
 
+## RBAC Phase Ownership (Multi-Owner Handover)
+
+When multiple people own different phases of a change, RBAC configuration enables automatic handover with Jira notifications.
+
+### Setup
+
+During `/opsx-new`, you are prompted to assign phase owners:
+
+```
+Spec validation owner: alice@redhat.com
+Repo assessment owner: bob@redhat.com
+Planning owner:        bob@redhat.com
+Tasks owner:           alice@redhat.com
+Code generation owner: charlie@redhat.com
+```
+
+This writes `openspec/changes/<change>/inputs/rbac.yaml`:
+
+```yaml
+epic_owner: epic-owner@redhat.com
+phase_owners:
+  spec_understanding:
+    owner: alice@redhat.com
+  repo_assessment:
+    owner: bob@redhat.com
+  arch_planning:
+    owner: bob@redhat.com
+  subtask_creation:
+    owner: alice@redhat.com
+  code_generation:
+    owner: charlie@redhat.com
+```
+
+Skip the prompt (or omit all emails) for single-owner mode — no handover gates activate.
+
+### Handover flow
+
+When `/opsx-continue` or `/opsx-apply` completes a phase and the **next phase has a different owner**:
+
+1. Artifacts are pushed to the state repo (see below)
+2. A Jira comment is posted on the ticket with an `@mention` of the next owner
+3. The current user sees a **HANDOVER** message and the command **hard-stops** — it refuses to generate the next artifact
+4. The next owner runs `/opsx-resume <JIRA-KEY>` in their own Cursor workspace to pull the state and continue
+
+If consecutive phases share the same owner, no handover occurs — the user keeps running `/opsx-continue` normally.
+
+### RBAC module
+
+The `openspec/rbac.py` module provides:
+
+- `load_rbac_config(change_dir)` — load `inputs/rbac.yaml`
+- `is_handover_needed(config, current_phase)` — check if owners differ
+- `get_phase_owner(config, phase)` / `get_next_phase_owner(config, phase)`
+- `validate_rbac_config(config)` — validate emails and phase names
+
+---
+
+## State Sync (Artifact Persistence)
+
+State sync pushes `openspec/changes/<change>/` artifacts to a **dedicated git repository** after each phase completes. This enables multi-owner handover — each owner pulls the shared state from the same branch.
+
+### Configuration
+
+In `openspec/config.yaml`:
+
+```yaml
+state_sync:
+  enabled: true
+  repo_env_var: OPENSPEC_STATE_REPO
+  token_env_var: GIT_TOKEN
+  branch_pattern: "{jira_key}/{change_slug}"
+```
+
+Set environment variables (or add to `.devcontainer/.env`):
+
+```bash
+export OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
+export GIT_TOKEN=ghp_...
+```
+
+### How it works
+
+- `/opsx-new` auto-creates the state repo via GitHub MCP if it does not exist
+- After each phase completion, artifacts are committed and pushed to branch `<JIRA-KEY>/<change-slug>`
+- State sync is **best-effort** — a push failure logs a warning but never blocks the workflow
+- The `openspec/state_sync.py` module handles clone, branch, copy, commit, and push
+
+### Resuming (next owner)
+
+```
+/opsx-resume OAPE-850
+```
+
+Pulls the state branch, reconstructs `openspec/changes/<change>/` locally, and displays a summary. The next owner then runs `/opsx-continue` to proceed.
+
+---
+
+## Jira Notifications
+
+When RBAC is configured, Jira comments are posted automatically on the child ticket at phase boundaries:
+
+| Event | Who is notified | Comment content |
+|-------|----------------|-----------------|
+| Phase complete (same owner continues) | Current owner (informational) | Phase name, status, quality score |
+| Phase complete (handover needed) | Next owner (`@mentioned`) | Handover instructions with `/opsx-resume` command |
+| All phases complete | Epic owner | Summary of all phases with state repo link |
+| Phase failed | Phase owner + Epic owner | Error summary |
+
+Mentions use Jira Cloud `[~accountid:<id>]` format. Account IDs are resolved via `jira_search_users` on first use and cached in `inputs/rbac.yaml`.
+
+The `openspec/jira_notify.py` module formats comment text. The actual Jira API call is made by the Cursor agent via the Atlassian MCP `jira_add_comment` tool.
+
+---
+
 ## Cursor Commands
 
 ### Forward workflow
 
 | Command | Purpose |
 |---------|---------|
-| `/opsx-new PROJ-123` | Start a change from a Jira key |
-| `/opsx-continue` | Create next artifact; eval gate; approval |
-| `/opsx-apply` | Implement tasks — one at a time, approval after each |
+| `/opsx-new PROJ-123` | Start a change from a Jira key; optionally configure RBAC + state repo |
+| `/opsx-continue` | Create next artifact; eval gate; approval; handover check |
+| `/opsx-apply` | Implement tasks — one at a time, approval after each; handover at phase boundaries |
+| `/opsx-resume PROJ-123` | Pull state from the state repo for multi-owner handover |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-explore` | Explore ideas without creating artifacts |
 
@@ -308,8 +438,12 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 | [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed by `install.sh` |
 | [Cursor](https://cursor.com) | Slash commands load from `.cursor/commands/` |
 | Jira access | Ticket key at `/opsx-new`; spec via MCP or paste |
+| Atlassian MCP (Cursor) | Required for Jira notifications; authenticate via Cursor MCP settings |
 | Target GitHub repo | URL before **repo-assessment**; or use working-folder mode |
 | Fork GitHub repo | URL before `/opsx-apply`; skip in working-folder mode |
+| Docker / Podman | Optional — for dev container support |
+| GitHub PAT (`GIT_TOKEN`) | Optional — required for state sync and multi-owner handover |
+| State repo (`OPENSPEC_STATE_REPO`) | Optional — dedicated repo for artifact persistence across owners |
 
 ---
 
@@ -318,7 +452,10 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 ```
 .
 ├── openspec/                              # Pre-built — ready to use after install
-│   ├── config.yaml                        # Workflow configuration and flags
+│   ├── config.yaml                        # Workflow configuration, flags, state_sync settings
+│   ├── state_sync.py                      # Git-based state sync for multi-owner handover
+│   ├── rbac.py                            # RBAC phase-owner mapping and handover logic
+│   ├── jira_notify.py                     # Jira comment templates for notifications
 │   ├── inputs/                            # Operator-specific inputs (edit these)
 │   │   ├── agents.md                      # Agent routing, architecture, test patterns
 │   │   └── constitution.md                # Coding guardrails, CI gates, governance
@@ -329,8 +466,12 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 │   │   ├── stage-gate/                    # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/      # Format spec for rejection rounds
 │   └── changes/                           # Active changes (created per /opsx-new)
+├── .devcontainer/                         # Dev container for reproducible environments
+│   ├── devcontainer.json                  # Container config (Python, Node, Go, git, gh)
+│   ├── Containerfile                      # Base image definition
+│   └── .env.example                       # Template for OPENSPEC_STATE_REPO, GIT_TOKEN
 ├── .cursor/                               # Pre-built — Cursor loads immediately
-│   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, eval-loop
+│   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, opsx-resume, eval-loop
 │   └── skills/                            # openspec-*, effective-go, e2e-test-generator
 ├── eval-generation/                       # Retrospective eval loop
 │   ├── input/                             # feature-bundle.yaml (your input)
