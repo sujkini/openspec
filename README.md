@@ -51,9 +51,53 @@ A `.devcontainer/` configuration is included for running the workspace inside a 
    newgrp docker    # or log out and back in
    ```
 
-4. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+4. **Fix file permissions** (if repo files are owned by root):
+   ```bash
+   # Run on the HOST (outside the container), not inside it
+   sudo chown -R $USER:$USER /path/to/your-operator-repo
+
+   # Fedora / RHEL only — fix SELinux context for container bind mounts
+   sudo chcon -R -t container_file_t /path/to/your-operator-repo
+
+   # Remove restrictive ACLs if present
+   sudo setfacl -R -b /path/to/your-operator-repo
+   ```
+   Skip this step if you already own the files (`ls -la` shows your username, not `root`).
+
+5. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+
+6. **Inside the container** — verify environment and set up credentials:
+   ```bash
+   # Disable git signing (SSH signing keys from host are not available in container)
+   git config --global commit.gpgsign false
+   git config --global tag.gpgsign false
+
+   # Set state sync credentials
+   export OPENSPEC_STATE_REPO=https://github.com/<your-org>/openspec-state.git
+   export GIT_TOKEN=ghp_<your-token>
+
+   # Verify tools and modules are installed
+   ls openspec/state_sync.py openspec/rbac.py openspec/jira_notify.py
+   ls .cursor/commands/opsx-resume.md
+   grep state_sync openspec/config.yaml
+   pip install -r openspec/telemetry/requirements.txt
+   python3 -c "import yaml; print('pyyaml OK')"
+   ```
 
 The dev container is optional — the workflow works without it. It is recommended when using RBAC multi-owner handover so each owner gets a consistent environment.
+
+#### Dev Container Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `Error running docker info` / empty Server section | Docker daemon not running | `sudo systemctl start docker` (Linux) or open Docker Desktop (macOS/Windows) |
+| `permission denied` on `/var/run/docker.sock` | User not in docker group | `sudo usermod -aG docker $USER` then re-login |
+| `ls: cannot open directory: Permission denied` inside container | Host files owned by root | Run on **host**: `sudo chown -R $USER:$USER /path/to/repo` |
+| `pip install -r ... Permission denied` inside container | Same root ownership issue | Same fix: `chown` on host, then rebuild container |
+| `fatal: failed to write commit object` / GPG signing error | SSH signing key not in container | Inside container: `git config --global commit.gpgsign false` |
+| SELinux blocking reads (Fedora) | Wrong file context on mount | Run on **host**: `sudo chcon -R -t container_file_t /path/to/repo` |
+| Podman instead of Docker | Dev Containers extension expects Docker socket | Set in Cursor settings: `"docker.environment": {"DOCKER_HOST": "unix:///run/user/1000/podman/podman.sock"}` |
+| `postCreateCommand` failed silently | Usually caused by the permission issues above | Fix permissions, then `Ctrl+Shift+P` → **"Dev Containers: Rebuild Container"** |
 
 ### 3. Choose code generation mode (`openspec/config.yaml`)
 
