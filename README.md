@@ -10,7 +10,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ```bash
 rm -rf /tmp/openspec-workflow
-git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b containerization https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
@@ -21,91 +21,44 @@ This copies `openspec/`, `.cursor/`, `.devcontainer/`, `eval-generation/`, and `
 A `.devcontainer/` configuration is included for running the workspace inside a reproducible container with Python 3.12, Node 20, Go 1.22, git, and gh CLI pre-installed.
 
 1. Copy `.devcontainer/.env.example` to `.devcontainer/.env` and fill in your values:
-   ```bash
+  ```bash
    cp .devcontainer/.env.example .devcontainer/.env
    # Edit .devcontainer/.env:
    #   OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
    #   GIT_TOKEN=ghp_...
-   ```
+  ```
 2. **Ensure Docker is running** before opening the container:
-   ```bash
+  ```bash
    docker info    # Should show both Client and Server sections
-   ```
+  ```
    If the Server section is empty or you see `Error running docker info`, start the daemon:
-   ```bash
-   # systemd (Fedora, RHEL, Ubuntu)
-   sudo systemctl start docker
-
-   # Docker Desktop (macOS / Windows)
-   # Open Docker Desktop app and wait for "Docker is running"
-
-   # Podman (rootless alternative)
-   podman machine start
-   ```
    Verify with `docker info` again — the **Server** section must show `Server Version`, `Storage Driver`, etc.
-
 3. **Ensure your user can run Docker without sudo**:
-   ```bash
+  ```bash
    # If "docker info" requires sudo, add yourself to the docker group:
    sudo usermod -aG docker $USER
    newgrp docker    # or log out and back in
-   ```
-
+  ```
 4. **Fix file permissions** (if repo files are owned by root):
-   ```bash
+  ```bash
    # Run on the HOST (outside the container), not inside it
    bash .devcontainer/fix-host-permissions.sh
-   ```
+  ```
    Or manually:
-   ```bash
-   sudo chown -R $USER:$USER /path/to/your-operator-repo
-   sudo chcon -R -t container_file_t /path/to/your-operator-repo   # Fedora / RHEL only
-   sudo setfacl -R -b /path/to/your-operator-repo
-   ```
    Skip this step if you already own the files (`ls -la` shows your username, not `root`).
-
 5. **Install the Dev Containers extension** in Cursor (or VS Code):
-   - Open Extensions (`Ctrl+Shift+X`)
-   - Search for **Dev Containers** (publisher: Microsoft, ID: `ms-vscode-remote.remote-containers`)
-   - Install it before reopening the workspace in a container
-
+  - Open Extensions (`Ctrl+Shift+X`)
+  - Search for **Dev Containers** (publisher: Microsoft, ID: `ms-vscode-remote.remote-containers`)
+  - Install it before reopening the workspace in a container
 6. **Connect MCP servers** (GitHub + Jira) — required for `/opsx-new`, state repo creation, and handover notifications.
-
-   Open (or create) `~/.cursor/mcp.json`:
-
-   ```json
-   {
-     "mcpServers": {
-       "github": {
-         "url": "https://api.githubcopilot.com/mcp/",
-         "headers": {
-           "Authorization": "Bearer <your-github-pat>"
-         }
-       },
-       "jira": {
-         "command": "uvx",
-         "args": ["mcp-atlassian", "--toolsets", "default,jira_users"],
-         "env": {
-           "JIRA_URL": "https://redhat.atlassian.net",
-           "JIRA_USERNAME": "<your-email>@redhat.com",
-           "JIRA_API_TOKEN": "<your-jira-api-token>"
-         }
-       }
-     }
-   }
-   ```
-
-   - **GitHub MCP** — `create_repository`, `get_file_contents` (used by `/opsx-new` for the state repo)
-   - **Jira MCP** — `jira_add_comment`, `jira_search_users`, `jira_get_issue` (ticket fetch and handover @mentions)
-
+  Open (or create) `~/.cursor/mcp.json`:
+  - **GitHub MCP** — `create_repository`, `get_file_contents` (used by `/opsx-new` for the state repo)
+  - **Jira MCP** — `jira_add_comment`, `jira_search_users`, `jira_get_issue` (ticket fetch and handover @mentions)
    Set `JIRA_USERNAME` to your work email — RBAC identity checks compare it to `inputs/rbac.yaml` phase owners.
-
    Restart Cursor after editing `mcp.json`. Full reference: [Step 5: Connect MCP Servers](#5-connect-mcp-servers-github--jira).
-
 7. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
-
 8. **Inside the container** — verify environment and set up credentials:
-   ```bash
+  ```bash
    # Disable git signing (SSH signing keys from host are not available in container)
    git config --global commit.gpgsign false
    git config --global tag.gpgsign false
@@ -120,33 +73,34 @@ A `.devcontainer/` configuration is included for running the workspace inside a 
    grep state_sync openspec/config.yaml
    pip install -r openspec/telemetry/requirements.txt
    python3 -c "import yaml; print('pyyaml OK')"
-   ```
-
+  ```
 9. **Multi-owner handover (User B and later owners):**
-   - Use the **same** `OPENSPEC_STATE_REPO` URL that User A created at `/opsx-new` (from team docs, User A's `.devcontainer/.env`, or `state_repo_url` in `inputs/jira.yaml` on the state branch). Do **not** create a separate state repo.
-   - Set in `.devcontainer/.env` or your shell:
-     ```bash
-     export OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
-     export GIT_TOKEN=ghp_<your-token-with-repo-access>
-     ```
-   - **User A must grant access** to the shared state repo for every handover recipient (GitHub → repo **Settings → Collaborators**, or org team with repo access). Without this, User B's `/opsx-resume` fails on `git pull`.
-   - User B needs their **own** operator repo clone with `install.sh` already run; only the state repo is shared.
-   - Ensure `JIRA_USERNAME` in `~/.cursor/mcp.json` matches the email assigned in `inputs/rbac.yaml` for the phase User B is resuming — `/opsx-resume` and `/opsx-continue` enforce this.
+  - Use the **same** `OPENSPEC_STATE_REPO` URL that User A created at `/opsx-new` (from team docs, User A's `.devcontainer/.env`, or `state_repo_url` in `inputs/jira.yaml` on the state branch). Do **not** create a separate state repo.
+  - Set in `.devcontainer/.env` or your shell:
+    ```bash
+    export OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
+    export GIT_TOKEN=ghp_<your-token-with-repo-access>
+    ```
+  - **User A must grant access** to the shared state repo for every handover recipient (GitHub → repo **Settings → Collaborators**, or org team with repo access). Without this, User B's `/opsx-resume` fails on `git pull`.
+  - User B needs their **own** operator repo clone with `install.sh` already run; only the state repo is shared.
+  - Ensure `JIRA_USERNAME` in `~/.cursor/mcp.json` matches the email assigned in `inputs/rbac.yaml` for the phase User B is resuming — `/opsx-resume` and `/opsx-continue` enforce this.
 
 The dev container is optional — the workflow works without it. It is recommended when using RBAC multi-owner handover so each owner gets a consistent environment.
 
 #### Dev Container Troubleshooting
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `Error running docker info` / empty Server section | Docker daemon not running | `sudo systemctl start docker` (Linux) or open Docker Desktop (macOS/Windows) |
-| `permission denied` on `/var/run/docker.sock` | User not in docker group | `sudo usermod -aG docker $USER` then re-login |
-| `ls: cannot open directory: Permission denied` inside container | Host files owned by root | Run on **host**: `sudo chown -R $USER:$USER /path/to/repo` |
-| `pip install -r ... Permission denied` inside container | Same root ownership issue | Same fix: `chown` on host, then rebuild container |
-| `fatal: failed to write commit object` / GPG signing error | SSH signing key not in container | Inside container: `git config --global commit.gpgsign false` |
-| SELinux blocking reads (Fedora) | Wrong file context on mount | Run on **host**: `sudo chcon -R -t container_file_t /path/to/repo` |
-| Podman instead of Docker | Dev Containers extension expects Docker socket | Set in Cursor settings: `"docker.environment": {"DOCKER_HOST": "unix:///run/user/1000/podman/podman.sock"}` |
-| `postCreateCommand` failed silently | Usually caused by the permission issues above | Fix permissions, then `Ctrl+Shift+P` → **"Dev Containers: Rebuild Container"** |
+
+| Problem                                                         | Cause                                          | Fix                                                                                                         |
+| --------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Error running docker info` / empty Server section              | Docker daemon not running                      | `sudo systemctl start docker` (Linux) or open Docker Desktop (macOS/Windows)                                |
+| `permission denied` on `/var/run/docker.sock`                   | User not in docker group                       | `sudo usermod -aG docker $USER` then re-login                                                               |
+| `ls: cannot open directory: Permission denied` inside container | Host files owned by root                       | Run on **host**: `sudo chown -R $USER:$USER /path/to/repo`                                                  |
+| `pip install -r ... Permission denied` inside container         | Same root ownership issue                      | Same fix: `chown` on host, then rebuild container                                                           |
+| `fatal: failed to write commit object` / GPG signing error      | SSH signing key not in container               | Inside container: `git config --global commit.gpgsign false`                                                |
+| SELinux blocking reads (Fedora)                                 | Wrong file context on mount                    | Run on **host**: `sudo chcon -R -t container_file_t /path/to/repo`                                          |
+| Podman instead of Docker                                        | Dev Containers extension expects Docker socket | Set in Cursor settings: `"docker.environment": {"DOCKER_HOST": "unix:///run/user/1000/podman/podman.sock"}` |
+| `postCreateCommand` failed silently                             | Usually caused by the permission issues above  | Fix permissions, then `Ctrl+Shift+P` → **"Dev Containers: Rebuild Container"**                              |
+
 
 ### 3. Choose code generation mode (`openspec/config.yaml`)
 
@@ -158,10 +112,12 @@ flags:
   codegen_mode: ai-helpers   # or: direct
 ```
 
-| Mode | When to use | What `/opsx-apply` does |
-|------|-------------|-------------------------|
-| **`ai-helpers`** (default) | API/controller/e2e work that benefits from specialized OAPE Cursor commands and a code eval gate | design-bundle → OAPE command → verify → code eval → refine → approve |
-| **`direct`** | Straightforward tasks; simpler/faster path | agent reads context → FILE OPERATIONS → verify → approve (no OAPE, no code eval) |
+
+| Mode                       | When to use                                                                                      | What `/opsx-apply` does                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `**ai-helpers**` (default) | API/controller/e2e work that benefits from specialized OAPE Cursor commands and a code eval gate | design-bundle → OAPE command → verify → code eval → refine → approve             |
+| `**direct**`               | Straightforward tasks; simpler/faster path                                                       | agent reads context → FILE OPERATIONS → verify → approve (no OAPE, no code eval) |
+
 
 Change the flag anytime; `/opsx-apply` reads it on each invocation. Details below under [Configuration](#configuration-openspecconfigyaml).
 
@@ -172,7 +128,7 @@ cd /path/to/your-operator-repo
 ./dashboard/start.sh
 ```
 
-Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
+Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open [http://localhost:5173](http://localhost:5173). The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
 ### 5. Connect MCP Servers (GitHub + Jira)
 
@@ -224,14 +180,17 @@ Restart Cursor so slash commands load from `.cursor/commands/` and MCP servers c
 
 After installation, configure two files in `openspec/inputs/`:
 
-| File | What to define |
-|------|---------------|
-| **`openspec/inputs/agents.md`** | Agent routing, repository architecture, test patterns, verification matrix |
-| **`openspec/inputs/constitution.md`** | Coding guardrails, CI gates, governance rules |
+
+| File                                  | What to define                                                             |
+| ------------------------------------- | -------------------------------------------------------------------------- |
+| `**openspec/inputs/agents.md**`       | Agent routing, repository architecture, test patterns, verification matrix |
+| `**openspec/inputs/constitution.md**` | Coding guardrails, CI gates, governance rules                              |
+
 
 These are the **only operator-specific files**. Everything else is generic.
 
 Your `agents.md` should define:
+
 - **Repository layout** — directory structure, key packages
 - **Architecture patterns** — controller frameworks, reconciliation flow
 - **Test exemplar** — how tests are structured (mocks, table-driven patterns, file naming)
@@ -261,6 +220,7 @@ The bundled `agents.md` ships with a reference. Replace it entirely with your op
 ```
 
 Each artifact is:
+
 1. Generated from the template
 2. Evaluated against stage evals
 3. Refined if needed
@@ -277,6 +237,7 @@ If you **reject**, the agent refines and re-runs evals until you approve. Previo
 The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 
 **ai-helpers mode** (`codegen_mode: ai-helpers`):
+
 1. Compose `design-bundle.md` scoped to that task
 2. Resolve one OAPE command (or manual work)
 3. Run in fork working copy (or project cwd in working-folder mode)
@@ -286,6 +247,7 @@ The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 7. On approve: mark task complete, next task
 
 **direct mode** (`codegen_mode: direct`):
+
 1. Read context files (agents.md, constitution.md, specs, plan, repo-assessment)
 2. Implement code directly via FILE OPERATIONS
 3. Verify against acceptance criteria
@@ -307,12 +269,14 @@ The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 Use when your Cursor workspace IS the operator repo.
 
 When prompted for target repo, tell the agent: **"use this as the working directory"**
+
 - Code changes happen directly in your working directory
 - No fork URL needed, no draft PR
 
 ### Mode B: Fork mode (draft PR)
 
 When prompted, provide:
+
 - **Target repo URL** — before repo-assessment
 - **Fork repo URL** — before `/opsx-apply`
 
@@ -410,21 +374,23 @@ State sync is triggered **automatically via telemetry hooks** in `openspec/telem
 2. The command calls the telemetry hook (e.g. `on-artifact-complete`, `on-task-complete`).
 3. At the end of each telemetry hook, `_try_state_sync()` is called automatically.
 4. `_try_state_sync()` calls `openspec/state_sync.py → sync_state()` which:
-   - Clones (or reuses a cached clone of) the state repo into `/tmp/openspec-state-cache/`
-   - Checks out (or creates) the branch `<JIRA-KEY>/<change-slug>`
-   - Copies all files from `openspec/changes/<change>/` into the clone
-   - Commits with message `[openspec] <phase_name> complete - <JIRA-KEY>`
-   - Pushes to the remote state repo using `GIT_TOKEN` for authentication
+  - Clones (or reuses a cached clone of) the state repo into `/tmp/openspec-state-cache/`
+  - Checks out (or creates) the branch `<JIRA-KEY>/<change-slug>`
+  - Copies all files from `openspec/changes/<change>/` into the clone
+  - Commits with message `[openspec] <phase_name> complete - <JIRA-KEY>`
+  - Pushes to the remote state repo using `GIT_TOKEN` for authentication
 5. State sync is **best-effort** — a push failure logs a warning but **never** blocks the workflow.
 
 The four hook points where state sync fires:
 
-| Telemetry hook | When it fires | What was just completed |
-|----------------|---------------|------------------------|
+
+| Telemetry hook         | When it fires                                       | What was just completed                  |
+| ---------------------- | --------------------------------------------------- | ---------------------------------------- |
 | `on-artifact-complete` | After user approves an artifact in `/opsx-continue` | validation.json, specs.md, plan.md, etc. |
-| `on-task-complete` | After user approves a task in `/opsx-apply` | A single implementation task |
-| `on-phase-complete` | After all tasks in a plan phase are done | An entire plan phase (e.g. Phase 1) |
-| `on-apply-complete` | After all phases and tasks are done | The entire implementation |
+| `on-task-complete`     | After user approves a task in `/opsx-apply`         | A single implementation task             |
+| `on-phase-complete`    | After all tasks in a plan phase are done            | An entire plan phase (e.g. Phase 1)      |
+| `on-apply-complete`    | After all phases and tasks are done                 | The entire implementation                |
+
 
 ---
 
@@ -432,12 +398,14 @@ The four hook points where state sync fires:
 
 When RBAC is configured, Jira comments are posted automatically on the child ticket at phase boundaries. The Jira MCP server must be connected in `~/.cursor/mcp.json` (see [Step 5: Connect MCP Servers](#5-connect-mcp-servers-github--jira)).
 
-| Event | Who is notified | Comment content |
-|-------|----------------|-----------------|
-| Phase complete (same owner continues) | Current owner (informational) | Phase name, status, quality score |
-| Phase complete (handover needed) | Next owner (`@mentioned`) | Handover instructions with `/opsx-resume` command |
-| All phases complete | Epic owner | Summary of all phases with state repo link |
-| Phase failed | Phase owner + Epic owner | Error summary |
+
+| Event                                 | Who is notified               | Comment content                                   |
+| ------------------------------------- | ----------------------------- | ------------------------------------------------- |
+| Phase complete (same owner continues) | Current owner (informational) | Phase name, status, quality score                 |
+| Phase complete (handover needed)      | Next owner (`@mentioned`)     | Handover instructions with `/opsx-resume` command |
+| All phases complete                   | Epic owner                    | Summary of all phases with state repo link        |
+| Phase failed                          | Phase owner + Epic owner      | Error summary                                     |
+
 
 Mentions use Jira Cloud `[~accountid:<id>]` format. Account IDs are resolved via Jira MCP `jira_search_users` on first use and cached in `inputs/rbac.yaml`.
 
@@ -453,66 +421,62 @@ This is the complete step-by-step lifecycle when phases have different owners.
 
 1. **Owner A** opens their operator repo clone in Cursor (optionally in the dev container).
 2. Owner A runs:
-   ```
+  ```
    /opsx-new OAPE-850
-   ```
+  ```
 3. `/opsx-new` fetches the Jira ticket, auto-creates the state repo (if needed), and prompts for RBAC:
-   ```
+  ```
    Spec validation owner: alice@redhat.com     ← Owner A
    Repo assessment owner: bob@redhat.com       ← Owner B
    ...
-   ```
+  ```
 4. Owner A runs `/opsx-continue` repeatedly to generate and approve artifacts (`validation.json`, `specs.md`).
 5. After `specs.md` is approved, the telemetry hook fires → **state sync pushes** all artifacts to branch `OAPE-850/oape-850` in the state repo.
-6. `/opsx-continue` detects that the **next phase (repo_assessment) has a different owner** (bob@redhat.com):
-   - Posts a **Jira comment** on OAPE-850 with `@bob` mention:
-     ```
-     [OpenSpec] Phase handover: "spec_understanding" → "repo_assessment"
-     @Bob please run /opsx-resume OAPE-850 then /opsx-continue
-     ```
-   - Outputs to Owner A:
-     ```
-     ═══════════════════════════════════════════════
-     HANDOVER: spec_understanding is complete.
-     Next phase (repo_assessment) is assigned to bob@redhat.com.
-     A Jira notification has been posted on OAPE-850.
-     The assigned owner must run /opsx-resume OAPE-850 then /opsx-continue.
-     ═══════════════════════════════════════════════
-     ```
-   - **HARD STOP** — Owner A cannot proceed further. The command refuses to generate the next artifact.
+6. `/opsx-continue` detects that the **next phase (repo_assessment) has a different owner** ([bob@redhat.com](mailto:bob@redhat.com)):
+  - Posts a **Jira comment** on OAPE-850 with `@bob` mention:
+  - Outputs to Owner A:
+    ```
+    ═══════════════════════════════════════════════
+    HANDOVER: spec_understanding is complete.
+    Next phase (repo_assessment) is assigned to bob@redhat.com.
+    A Jira notification has been posted on OAPE-850.
+    The assigned owner must run /opsx-resume OAPE-850 then /opsx-continue.
+    ═══════════════════════════════════════════════
+    ```
+  - **HARD STOP** — Owner A cannot proceed further. The command refuses to generate the next artifact.
 
 ### Owner B picks up the change
 
-7. **Owner B** gets the Jira notification (email or watched ticket).
-8. Owner B opens **their own** operator repo clone in Cursor (their own workspace, not Owner A's).
-9. Owner B must have:
-   - `install.sh` already run on their repo (so `openspec/`, `.cursor/`, `.devcontainer/` are present)
-   - The **same** `OPENSPEC_STATE_REPO` URL as User A (not a new repo) and a `GIT_TOKEN` with push access to that repo
-   - **Collaborator access** to the state repo granted by User A (or an org admin)
-   - Jira MCP connected in `~/.cursor/mcp.json` with `JIRA_USERNAME` matching their assigned email in `inputs/rbac.yaml`
-10. Owner B runs:
-    ```
+1. **Owner B** gets the Jira notification (email or watched ticket).
+2. Owner B opens **their own** operator repo clone in Cursor (their own workspace, not Owner A's).
+3. Owner B must have:
+  - `install.sh` already run on their repo (so `openspec/`, `.cursor/`, `.devcontainer/` are present)
+  - The **same** `OPENSPEC_STATE_REPO` URL as User A (not a new repo) and a `GIT_TOKEN` with push access to that repo
+  - **Collaborator access** to the state repo granted by User A (or an org admin)
+  - Jira MCP connected in `~/.cursor/mcp.json` with `JIRA_USERNAME` matching their assigned email in `inputs/rbac.yaml`
+4. Owner B runs:
+  ```
     /opsx-resume OAPE-850
-    ```
+  ```
     This:
-    - Finds branch `OAPE-850/oape-850` in the state repo
-    - Pulls all artifacts into `openspec/changes/oape-850/` locally
-    - Verifies the state is valid
-    - Shows:
-      ```
-      ═══════════════════════════════════════════════
-      RESUMED: oape-850
-      Jira: OAPE-850
-      State branch: OAPE-850/oape-850
-      Last completed phase: spec_understanding (by alice@redhat.com)
-      Next phase: repo_assessment (assigned to you)
-      ═══════════════════════════════════════════════
+  - Finds branch `OAPE-850/oape-850` in the state repo
+  - Pulls all artifacts into `openspec/changes/oape-850/` locally
+  - Verifies the state is valid
+  - Shows:
+    ```
+    ═══════════════════════════════════════════════
+    RESUMED: oape-850
+    Jira: OAPE-850
+    State branch: OAPE-850/oape-850
+    Last completed phase: spec_understanding (by alice@redhat.com)
+    Next phase: repo_assessment (assigned to you)
+    ═══════════════════════════════════════════════
 
-      Run /opsx-continue to start the next phase.
-      ```
-11. Owner B runs `/opsx-continue` to generate `repo-assessment.md`, approve it, and continue.
-12. If Owner B also owns the next phase (e.g. `arch_planning`), they keep running `/opsx-continue` — no handover.
-13. When the next phase has a **different owner** again, the handover cycle repeats (steps 5–11).
+    Run /opsx-continue to start the next phase.
+    ```
+5. Owner B runs `/opsx-continue` to generate `repo-assessment.md`, approve it, and continue.
+6. If Owner B also owns the next phase (e.g. `arch_planning`), they keep running `/opsx-continue` — no handover.
+7. When the next phase has a **different owner** again, the handover cycle repeats (steps 5–11).
 
 ### Key points
 
@@ -529,31 +493,37 @@ This is the complete step-by-step lifecycle when phases have different owners.
 
 ### Forward workflow
 
-| Command | Purpose |
-|---------|---------|
-| `/opsx-new PROJ-123` | Start a change from a Jira key; optionally configure RBAC + state repo |
-| `/opsx-continue` | Create next artifact; eval gate; approval; handover check |
-| `/opsx-apply` | Implement tasks — one at a time, approval after each; handover at phase boundaries |
-| `/opsx-resume PROJ-123` | Pull state from the state repo for multi-owner handover |
-| `/opsx-archive` | Archive a completed change |
-| `/opsx-explore` | Explore ideas without creating artifacts |
+
+| Command                 | Purpose                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `/opsx-new PROJ-123`    | Start a change from a Jira key; optionally configure RBAC + state repo             |
+| `/opsx-continue`        | Create next artifact; eval gate; approval; handover check                          |
+| `/opsx-apply`           | Implement tasks — one at a time, approval after each; handover at phase boundaries |
+| `/opsx-resume PROJ-123` | Pull state from the state repo for multi-owner handover                            |
+| `/opsx-archive`         | Archive a completed change                                                         |
+| `/opsx-explore`         | Explore ideas without creating artifacts                                           |
+
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
 
-| Command | When |
-|---------|------|
-| `/oape:api-generate` | API_Agent task |
-| `/oape:api-generate-tests` | API_Agent verification task |
-| `/oape:api-implement` | OperatorController_Agent task |
-| `/oape:e2e-generate` | E2E / Testing_Agent task |
+
+| Command                    | When                          |
+| -------------------------- | ----------------------------- |
+| `/oape:api-generate`       | API_Agent task                |
+| `/oape:api-generate-tests` | API_Agent verification task   |
+| `/oape:api-implement`      | OperatorController_Agent task |
+| `/oape:e2e-generate`       | E2E / Testing_Agent task      |
+
 
 These commands are **not used** when `codegen_mode: direct`.
 
 ### Retrospective eval loop
 
-| Command | Purpose |
-|---------|---------|
+
+| Command      | Purpose                                       |
+| ------------ | --------------------------------------------- |
 | `/eval-loop` | Improve evals from a completed feature bundle |
+
 
 ---
 
@@ -568,17 +538,19 @@ flags:
   exit_on_all_tasks_complete: true
 ```
 
-| Flag | Default | What it does |
-|------|---------|--------------|
-| `codegen_mode` | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
-| `max_feedback_rounds` | 3 | Max rejection + refinement loops per artifact before halting |
-| `exit_on_all_tasks_complete` | true | Auto-exit implementation when all tasks marked `[x]` |
+
+| Flag                         | Default      | What it does                                                                                                             |
+| ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `codegen_mode`               | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
+| `max_feedback_rounds`        | 3            | Max rejection + refinement loops per artifact before halting                                                             |
+| `exit_on_all_tasks_complete` | true         | Auto-exit implementation when all tasks marked `[x]`                                                                     |
+
 
 ### Code generation modes
 
-**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
+`**ai-helpers**` — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
 
-**`direct`** — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
+`**direct**` — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
 
 ---
 
@@ -590,17 +562,19 @@ The eval loop is a **retrospective improvement** tool. After a feature is fully 
 
 Fill `eval-generation/input/feature-bundle.yaml` with data from a **completed feature**:
 
-| Field | What to paste |
-|-------|---------------|
-| `feature_name` | Feature name |
-| `epic_key` | Jira epic key |
-| `target_repo` | Target repository URL |
-| `enhancement_proposal` | Full EP/ARD content |
-| `jira_epic` | Jira epic export |
-| `repo_state` | Pre-feature repo state |
-| `user_stories` | User stories linked to the epic |
-| `repo_prs` | PR links and key diffs |
-| `bugs` | Bug list with root causes |
+
+| Field                  | What to paste                   |
+| ---------------------- | ------------------------------- |
+| `feature_name`         | Feature name                    |
+| `epic_key`             | Jira epic key                   |
+| `target_repo`          | Target repository URL           |
+| `enhancement_proposal` | Full EP/ARD content             |
+| `jira_epic`            | Jira epic export                |
+| `repo_state`           | Pre-feature repo state          |
+| `user_stories`         | User stories linked to the epic |
+| `repo_prs`             | PR links and key diffs          |
+| `bugs`                 | Bug list with root causes       |
+
 
 ### Step 2: Run the eval loop
 
@@ -660,15 +634,17 @@ Update `eval-generation/input/feature-bundle.yaml` with the next completed featu
 validation → specs → repo-assessment → [resolve constitution.md] → plan → tasks → implementation → archive
 ```
 
-| Stage | Artifacts | Purpose |
-|-------|-----------|---------|
-| **Spec understanding** | `validation.json`, `specs.md` | Validate Jira spec before repo work |
-| **Repo understanding** | `repo-assessment.md` | Ground planning in the target repository |
-| **Constitution (input)** | `constitution.md` (resolved) | Non-negotiable guardrails |
-| **Planning** | `plan.md` | Phased implementation plan |
-| **Task creation** | `tasks.md` | Executable task manifest with agents |
-| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval (ai-helpers or direct mode) |
-| **Archive** | archived change | Close out |
+
+| Stage                    | Artifacts                         | Purpose                                                                   |
+| ------------------------ | --------------------------------- | ------------------------------------------------------------------------- |
+| **Spec understanding**   | `validation.json`, `specs.md`     | Validate Jira spec before repo work                                       |
+| **Repo understanding**   | `repo-assessment.md`              | Ground planning in the target repository                                  |
+| **Constitution (input)** | `constitution.md` (resolved)      | Non-negotiable guardrails                                                 |
+| **Planning**             | `plan.md`                         | Phased implementation plan                                                |
+| **Task creation**        | `tasks.md`                        | Executable task manifest with agents                                      |
+| **Implementation**       | code + `implementation-report.md` | Task-by-task execution with per-task approval (ai-helpers or direct mode) |
+| **Archive**              | archived change                   | Close out                                                                 |
+
 
 ---
 
@@ -676,30 +652,36 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 
 ### Required
 
-| Requirement | Notes |
-|-------------|-------|
-| [Node.js](https://nodejs.org/) 18+ | For OpenSpec CLI installation |
-| [Python](https://python.org/) 3.12+ | For telemetry, state sync, RBAC modules |
-| [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed automatically by `install.sh` |
-| [Cursor](https://cursor.com) | Slash commands load from `.cursor/commands/` |
-| Jira access | Ticket key at `/opsx-new`; spec via Jira MCP or paste |
-| Target GitHub repo | URL before **repo-assessment**; or use working-folder mode |
-| Fork GitHub repo | URL before `/opsx-apply`; skip in working-folder mode |
+
+| Requirement                                            | Notes                                                      |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| [Node.js](https://nodejs.org/) 18+                     | For OpenSpec CLI installation                              |
+| [Python](https://python.org/) 3.12+                    | For telemetry, state sync, RBAC modules                    |
+| [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed automatically by `install.sh`                    |
+| [Cursor](https://cursor.com)                           | Slash commands load from `.cursor/commands/`               |
+| Jira access                                            | Ticket key at `/opsx-new`; spec via Jira MCP or paste      |
+| Target GitHub repo                                     | URL before **repo-assessment**; or use working-folder mode |
+| Fork GitHub repo                                       | URL before `/opsx-apply`; skip in working-folder mode      |
+
 
 ### Required for RBAC / Jira notifications
 
-| Requirement | Notes |
-|-------------|-------|
+
+| Requirement                                                                       | Notes                                                                                                       |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | [Atlassian MCP](https://www.npmjs.com/package/@anthropic/atlassian-mcp) in Cursor | Authenticate via Cursor Settings → MCP → `user-atlassian`. Provides `jira_add_comment`, `jira_search_users` |
-| GitHub PAT (`GIT_TOKEN`) | Token with `repo` scope for pushing to the state repo |
-| State repo (`OPENSPEC_STATE_REPO`) | Dedicated public repo for artifact persistence (auto-created by `/opsx-new` if missing) |
+| GitHub PAT (`GIT_TOKEN`)                                                          | Token with `repo` scope for pushing to the state repo                                                       |
+| State repo (`OPENSPEC_STATE_REPO`)                                                | Dedicated public repo for artifact persistence (auto-created by `/opsx-new` if missing)                     |
+
 
 ### Required for dev container
 
-| Requirement | Notes |
-|-------------|-------|
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman](https://podman.io/) | Container runtime for building and running the dev container |
+
+| Requirement                                                                                                                   | Notes                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [Podman](https://podman.io/)                             | Container runtime for building and running the dev container                                                                                                                      |
 | [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) for Cursor | Install from Extensions panel — search "Dev Containers" by Microsoft (`ms-vscode-remote.remote-containers`). Required to use `Ctrl+Shift+P → Dev Containers: Reopen in Container` |
+
 
 ---
 
