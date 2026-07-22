@@ -67,6 +67,16 @@ If file doesn't exist, initialize from template.
 
 Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `direct`.
 
+**RBAC identity check** (only if `inputs/rbac.yaml` exists): before picking or executing tasks,
+verify the current user is the assigned owner for the `code_generation` phase:
+```python
+from pathlib import Path
+from openspec.rbac import load_rbac_config, resolve_current_user_email, verify_user_is_phase_owner
+config = load_rbac_config(Path("openspec/changes/<name>"))
+ok, err = verify_user_is_phase_owner(config, "code_generation", resolve_current_user_email())
+```
+If `ok` is False: output the error and **STOP**.
+
 ### 2. Handle current state
 
 | State | Action |

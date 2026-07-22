@@ -64,6 +64,23 @@ Continue working on a change by creating the **next** artifact (one per invocati
     - If `prompt_user` is false: inject defaults silently (no prompt).
     - **Do NOT re-prompt during eval gate, feedback loop, or regeneration.**
       The task_sizing metadata persists for the lifetime of this artifact generation.
+5c. **RBAC identity check** (only if `inputs/rbac.yaml` exists):
+    - Map the selected artifact id to its RBAC phase (e.g. `specs` → `spec_understanding`,
+      `repo-assessment` → `repo_assessment`, `plan` → `arch_planning`, `tasks` → `subtask_creation`).
+    - Verify the current user is the assigned owner for that phase **before** creating the artifact:
+      ```python
+      from pathlib import Path
+      from openspec.rbac import (
+          load_rbac_config,
+          artifact_to_phase,
+          resolve_current_user_email,
+          verify_user_is_phase_owner,
+      )
+      config = load_rbac_config(Path("openspec/changes/<name>"))
+      phase = artifact_to_phase("<artifact-id>")
+      ok, err = verify_user_is_phase_owner(config, phase, resolve_current_user_email())
+      ```
+    - If `ok` is False: output the error and **HARD STOP** — do not run telemetry or create artifacts.
 6. **Telemetry — signal artifact start** (silent, non-blocking; starts phase clock on dashboard):
    ```bash
    python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "<artifact-id>" --phase <N>
@@ -100,10 +117,15 @@ Continue working on a change by creating the **next** artifact (one per invocati
 12. **Handover check** (only if `inputs/rbac.yaml` exists in the change directory):
     - Load RBAC config:
       ```python
-      from openspec.rbac import load_rbac_config, is_handover_needed, get_phase_owner, get_next_phase_owner, get_next_phase_name, save_rbac_config
+      from openspec.rbac import load_rbac_config, is_handover_needed, get_phase_owner, get_next_phase_owner, get_next_phase_name, save_rbac_config, resolve_current_user_email, verify_user_is_phase_owner
       ```
     - Determine the completed phase name from the artifact mapping (e.g. `specs` → `spec_understanding`,
       `repo-assessment` → `repo_assessment`, `plan` → `arch_planning`, `tasks` → `subtask_creation`).
+    - Verify the current user is the assigned owner for `completed_phase` before posting handover:
+      ```python
+      ok, err = verify_user_is_phase_owner(config, completed_phase, resolve_current_user_email())
+      ```
+      If `ok` is False: output the error and **HARD STOP**.
     - If `is_handover_needed(config, completed_phase)` returns True:
       a. Resolve the next owner's Jira `accountId`:
          - Check if `jira_account_id` is already cached in `inputs/rbac.yaml` for the next owner.
@@ -180,6 +202,7 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the user approves the current one
+- When RBAC is enabled, refuse to create artifacts or complete handover if the current user is not the assigned phase owner (`JIRA_USERNAME`, `OPENSPEC_USER_EMAIL`, or git `user.email`)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 
 ## Batch / Continue-All Telemetry

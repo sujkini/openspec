@@ -54,19 +54,57 @@ A `.devcontainer/` configuration is included for running the workspace inside a 
 4. **Fix file permissions** (if repo files are owned by root):
    ```bash
    # Run on the HOST (outside the container), not inside it
+   bash .devcontainer/fix-host-permissions.sh
+   ```
+   Or manually:
+   ```bash
    sudo chown -R $USER:$USER /path/to/your-operator-repo
-
-   # Fedora / RHEL only — fix SELinux context for container bind mounts
-   sudo chcon -R -t container_file_t /path/to/your-operator-repo
-
-   # Remove restrictive ACLs if present
+   sudo chcon -R -t container_file_t /path/to/your-operator-repo   # Fedora / RHEL only
    sudo setfacl -R -b /path/to/your-operator-repo
    ```
    Skip this step if you already own the files (`ls -la` shows your username, not `root`).
 
-5. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+5. **Install the Dev Containers extension** in Cursor (or VS Code):
+   - Open Extensions (`Ctrl+Shift+X`)
+   - Search for **Dev Containers** (publisher: Microsoft, ID: `ms-vscode-remote.remote-containers`)
+   - Install it before reopening the workspace in a container
 
-6. **Inside the container** — verify environment and set up credentials:
+6. **Connect MCP servers** (GitHub + Jira) — required for `/opsx-new`, state repo creation, and handover notifications.
+
+   Open (or create) `~/.cursor/mcp.json`:
+
+   ```json
+   {
+     "mcpServers": {
+       "github": {
+         "url": "https://api.githubcopilot.com/mcp/",
+         "headers": {
+           "Authorization": "Bearer <your-github-pat>"
+         }
+       },
+       "jira": {
+         "command": "uvx",
+         "args": ["mcp-atlassian", "--toolsets", "default,jira_users"],
+         "env": {
+           "JIRA_URL": "https://redhat.atlassian.net",
+           "JIRA_USERNAME": "<your-email>@redhat.com",
+           "JIRA_API_TOKEN": "<your-jira-api-token>"
+         }
+       }
+     }
+   }
+   ```
+
+   - **GitHub MCP** — `create_repository`, `get_file_contents` (used by `/opsx-new` for the state repo)
+   - **Jira MCP** — `jira_add_comment`, `jira_search_users`, `jira_get_issue` (ticket fetch and handover @mentions)
+
+   Set `JIRA_USERNAME` to your work email — RBAC identity checks compare it to `inputs/rbac.yaml` phase owners.
+
+   Restart Cursor after editing `mcp.json`. Full reference: [Step 5: Connect MCP Servers](#5-connect-mcp-servers-github--jira).
+
+7. In Cursor: `Ctrl+Shift+P` → **"Dev Containers: Reopen in Container"**
+
+8. **Inside the container** — verify environment and set up credentials:
    ```bash
    # Disable git signing (SSH signing keys from host are not available in container)
    git config --global commit.gpgsign false
@@ -83,6 +121,17 @@ A `.devcontainer/` configuration is included for running the workspace inside a 
    pip install -r openspec/telemetry/requirements.txt
    python3 -c "import yaml; print('pyyaml OK')"
    ```
+
+9. **Multi-owner handover (User B and later owners):**
+   - Use the **same** `OPENSPEC_STATE_REPO` URL that User A created at `/opsx-new` (from team docs, User A's `.devcontainer/.env`, or `state_repo_url` in `inputs/jira.yaml` on the state branch). Do **not** create a separate state repo.
+   - Set in `.devcontainer/.env` or your shell:
+     ```bash
+     export OPENSPEC_STATE_REPO=https://github.com/<org>/openspec-state.git
+     export GIT_TOKEN=ghp_<your-token-with-repo-access>
+     ```
+   - **User A must grant access** to the shared state repo for every handover recipient (GitHub → repo **Settings → Collaborators**, or org team with repo access). Without this, User B's `/opsx-resume` fails on `git pull`.
+   - User B needs their **own** operator repo clone with `install.sh` already run; only the state repo is shared.
+   - Ensure `JIRA_USERNAME` in `~/.cursor/mcp.json` matches the email assigned in `inputs/rbac.yaml` for the phase User B is resuming — `/opsx-resume` and `/opsx-continue` enforce this.
 
 The dev container is optional — the workflow works without it. It is recommended when using RBAC multi-owner handover so each owner gets a consistent environment.
 
@@ -314,6 +363,8 @@ The `openspec/rbac.py` module provides:
 - `is_handover_needed(config, current_phase)` — check if owners differ
 - `get_phase_owner(config, phase)` / `get_next_phase_owner(config, phase)`
 - `validate_rbac_config(config)` — validate emails and phase names
+- `resolve_current_user_email()` — identity from `JIRA_USERNAME`, `OPENSPEC_USER_EMAIL`, or git `user.email`
+- `verify_user_is_phase_owner(config, phase, user_email)` — enforced by `/opsx-resume`, `/opsx-continue`, and `/opsx-apply`
 
 ---
 
@@ -327,10 +378,10 @@ State sync pushes `openspec/changes/<change>/` artifacts to a **dedicated git re
 
 1. It reads the `OPENSPEC_STATE_REPO` env var.
 2. If the env var is set and the repo exists → uses it directly.
-3. If the env var is empty or the repo does not exist → calls GitHub MCP `create_repository` to create a **private** repo named `openspec-state` under your GitHub org.
+3. If the env var is empty or the repo does not exist → calls GitHub MCP `create_repository` to create a **public** repo named `openspec-state` under your GitHub org.
 4. You are informed: `"Created state repo: <url>"`.
 
-If you prefer to create it manually, create an **empty private repo** on GitHub (e.g. `yourorg/openspec-state`) and set the env var before running `/opsx-new`.
+If you prefer to create it manually, create an **empty public repo** on GitHub (e.g. `yourorg/openspec-state`) and set the env var before running `/opsx-new`.
 
 ### Configuration
 
@@ -436,8 +487,9 @@ This is the complete step-by-step lifecycle when phases have different owners.
 8. Owner B opens **their own** operator repo clone in Cursor (their own workspace, not Owner A's).
 9. Owner B must have:
    - `install.sh` already run on their repo (so `openspec/`, `.cursor/`, `.devcontainer/` are present)
-   - `OPENSPEC_STATE_REPO` and `GIT_TOKEN` env vars set
-   - Jira MCP connected in `~/.cursor/mcp.json`
+   - The **same** `OPENSPEC_STATE_REPO` URL as User A (not a new repo) and a `GIT_TOKEN` with push access to that repo
+   - **Collaborator access** to the state repo granted by User A (or an org admin)
+   - Jira MCP connected in `~/.cursor/mcp.json` with `JIRA_USERNAME` matching their assigned email in `inputs/rbac.yaml`
 10. Owner B runs:
     ```
     /opsx-resume OAPE-850
@@ -469,6 +521,7 @@ This is the complete step-by-step lifecycle when phases have different owners.
 - The state repo branch is the **single source of truth** that travels between owners.
 - If the same owner handles consecutive phases, no handover happens — they just keep running `/opsx-continue`.
 - The handover is a **hard stop** — the current owner cannot override it.
+- **Identity checks** — `/opsx-resume`, `/opsx-continue`, and `/opsx-apply` compare `JIRA_USERNAME` (or git `user.email`) to the email in `inputs/rbac.yaml` and refuse if they do not match.
 
 ---
 
@@ -639,7 +692,7 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 |-------------|-------|
 | [Atlassian MCP](https://www.npmjs.com/package/@anthropic/atlassian-mcp) in Cursor | Authenticate via Cursor Settings → MCP → `user-atlassian`. Provides `jira_add_comment`, `jira_search_users` |
 | GitHub PAT (`GIT_TOKEN`) | Token with `repo` scope for pushing to the state repo |
-| State repo (`OPENSPEC_STATE_REPO`) | Dedicated private repo for artifact persistence (auto-created by `/opsx-new` if missing) |
+| State repo (`OPENSPEC_STATE_REPO`) | Dedicated public repo for artifact persistence (auto-created by `/opsx-new` if missing) |
 
 ### Required for dev container
 

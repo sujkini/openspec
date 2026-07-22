@@ -10,7 +10,9 @@ Phase ordering follows the openspec-agile-workflow schema:
 """
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,15 @@ PHASE_ORDER: list[str] = [
 ]
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+ARTIFACT_TO_PHASE: dict[str, str] = {
+    "validation": "spec_understanding",
+    "specs": "spec_understanding",
+    "repo-assessment": "repo_assessment",
+    "constitution": "repo_assessment",
+    "plan": "arch_planning",
+    "tasks": "subtask_creation",
+}
 
 
 @dataclass
@@ -144,3 +155,60 @@ def validate_rbac_config(config: RBACConfig) -> list[str]:
         errors.append(f"Unknown phase names: {', '.join(sorted(unknown))}")
 
     return errors
+
+
+def artifact_to_phase(artifact_id: str) -> str | None:
+    """Map an openspec artifact id to its RBAC phase name."""
+    return ARTIFACT_TO_PHASE.get(artifact_id)
+
+
+def resolve_current_user_email() -> str:
+    """Best-effort identity from ``JIRA_USERNAME`` or git ``user.email``."""
+    for env_var in ("JIRA_USERNAME", "OPENSPEC_USER_EMAIL"):
+        email = os.environ.get(env_var, "").strip()
+        if email and _EMAIL_RE.match(email):
+            return email.lower()
+
+    try:
+        result = subprocess.run(
+            ["git", "config", "--global", "user.email"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        email = result.stdout.strip()
+        if email and _EMAIL_RE.match(email):
+            return email.lower()
+    except OSError:
+        pass
+
+    return ""
+
+
+def verify_user_is_phase_owner(
+    config: RBACConfig,
+    phase_name: str,
+    user_email: str,
+) -> tuple[bool, str]:
+    """Return ``(True, \"\")`` if *user_email* may work on *phase_name*."""
+    if not config.enabled:
+        return True, ""
+
+    owner = get_phase_owner(config, phase_name)
+    if not owner or not owner.owner.strip():
+        return True, ""
+
+    if not user_email:
+        return False, (
+            "Cannot verify identity for RBAC: set JIRA_USERNAME in ~/.cursor/mcp.json "
+            "(Jira MCP env), OPENSPEC_USER_EMAIL, or git config user.email to match "
+            f"the assigned owner for '{phase_name}' ({owner.owner})."
+        )
+
+    if user_email.lower() != owner.owner.strip().lower():
+        return False, (
+            f"Access denied: phase '{phase_name}' is assigned to {owner.owner}, "
+            f"but the current user is {user_email}."
+        )
+
+    return True, ""

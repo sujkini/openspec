@@ -55,7 +55,27 @@ Jira key pattern: `[A-Z][A-Z0-9]+-\d+`.
    ```bash
    openspec status --change "<change>" --json
    ```
-8. Load `inputs/rbac.yaml` (if present) and display the phase ownership summary.
+8. **RBAC identity check** (only if `inputs/rbac.yaml` exists):
+   - Determine the last completed phase from `openspec status --change "<change>" --json` and the
+     next phase name via `openspec.rbac.get_next_phase_name()`.
+   - Resolve the current user email and verify they are the assigned owner for the **next** phase:
+     ```python
+     from pathlib import Path
+     from openspec.rbac import (
+         load_rbac_config,
+         get_next_phase_name,
+         resolve_current_user_email,
+         verify_user_is_phase_owner,
+         get_phase_owner,
+     )
+     config = load_rbac_config(Path("openspec/changes/<change>"))
+     next_phase = get_next_phase_name("<last_completed_phase>")
+     user_email = resolve_current_user_email()
+     ok, err = verify_user_is_phase_owner(config, next_phase, user_email)
+     ```
+   - If `ok` is False: output the error message and **STOP** — do not show "assigned to you".
+   - If `ok` is True and RBAC is enabled: display the phase ownership summary (assigned owner
+     email for the next phase must match `user_email`).
 9. Display resume summary:
    ```
    ═══════════════════════════════════════════════
@@ -73,6 +93,7 @@ Jira key pattern: `[A-Z][A-Z0-9]+-\d+`.
 ## Guardrails
 
 - Jira key required
+- When RBAC is enabled, refuse resume if the current user is not the assigned owner for the next phase
 - Never auto-start a phase — always require explicit `/opsx-continue`
 - Back up local state before overwriting (never silently destroy work)
 - If the state repo is unreachable, provide actionable error with steps to fix

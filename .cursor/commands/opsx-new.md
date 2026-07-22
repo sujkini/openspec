@@ -60,7 +60,7 @@ If no Jira key, ask once. Do **not** proceed without it.
      - If `target_repo` was provided, derive the GitHub org from its URL.
        Otherwise ask the user once: "GitHub org for the state repo? (e.g. `myorg`)"
      - Call GitHub MCP `create_repository` with `name: "openspec-state"`, `org: "<org>"`,
-       `private: true`, `description: "OpenSpec workflow state artifacts"`.
+       `private: false`, `description: "OpenSpec workflow state artifacts"`.
      - Persist the new repo URL to `inputs/jira.yaml` as `state_repo_url`.
      - Inform user: "Created state repo: `<url>`"
    - Create the initial branch `<jira-key>/<change-slug>` with an initial commit
