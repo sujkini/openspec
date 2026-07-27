@@ -11,6 +11,7 @@ class PhaseCreate(BaseModel):
     phase_number: int
     phase_name: PhaseName
     model_id: str = ""
+    plan_phase: int | None = None
 
 
 class PhaseUpdate(BaseModel):
@@ -37,6 +38,7 @@ class PhaseOut(BaseModel):
     model_id: str
     quality_score: float
     quality_label: str
+    plan_phase: int | None = None
     started_at: datetime
     completed_at: datetime | None
 

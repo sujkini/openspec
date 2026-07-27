@@ -14,6 +14,7 @@ eval-generation/eval-generation-workflow/rounds/
 eval-generation/eval-generation-workflow/template-gaps/
 eval-generation/eval-generation-workflow/refined-templates/
 eval-generation/eval-generation-workflow/round-state.yaml
+/home/skini/explore-openspec/new-openspec/openspec-operator-generic/openspec-ppt-prompt.md
 
 # ─── OpenSpec changes (per-ticket working artifacts — ephemeral) ───
 # Created by /opsx-new, used during /opsx-continue and /opsx-apply.

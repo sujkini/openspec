@@ -6,6 +6,9 @@ interface PhaseWaterfallProps {
 }
 
 export default function PhaseWaterfall({ phases }: PhaseWaterfallProps) {
+  const parentPhases = phases.filter((p) => p.plan_phase === null || p.plan_phase === undefined);
+  const subPhases = phases.filter((p) => p.plan_phase !== null && p.plan_phase !== undefined);
+
   return (
     <section className="px-6 py-4 border-b border-terminal-border">
       <div className="text-terminal-muted text-xs uppercase tracking-wider mb-3 font-bold">
@@ -34,7 +37,18 @@ export default function PhaseWaterfall({ phases }: PhaseWaterfallProps) {
                 </td>
               </tr>
             ) : (
-              phases.map((p) => <PhaseRow key={p.id} phase={p} />)
+              parentPhases.map((parent) => {
+                const children = subPhases
+                  .filter((s) => s.phase_number === parent.phase_number)
+                  .sort((a, b) => (a.plan_phase ?? 0) - (b.plan_phase ?? 0));
+                return (
+                  <PhaseRow
+                    key={parent.id}
+                    phase={parent}
+                    subPhases={children.length > 0 ? children : undefined}
+                  />
+                );
+              })
             )}
           </tbody>
         </table>

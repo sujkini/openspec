@@ -15,10 +15,16 @@ phase's tasks. Task IDs use the phase prefix (T{N}_*).
 
 ### Output sections — use these EXACT headings
 
-## 0. Input coverage checklist
+## 0. Input Coverage Checklist
 Short bullet list mapping spec goals + plan phases → task coverage (prove nothing obvious was dropped).
+
+### Functional Requirements → Task Coverage
 One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with the Task IDs that
 cover it.
+
+### User Stories → Task Coverage
+One bullet per US-00x with covering Task IDs (and Jira key when available).
+Every US-00x from specs.md must appear with ≥1 Task ID.
 
 ## 1. Task Dependency Graph (Mermaid)
 Use `graph TD` (or `flowchart LR`) with stable node IDs like `T1_1`, `T1_2`, ... matching Task IDs.
@@ -44,9 +50,9 @@ Numbered list of Task IDs in a valid topological order (ties broken by phase ord
 
 ## 3. Task Execution Manifest (table)
 A markdown table with EXACT columns:
-| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk |
-|---------|-----------|---------------|-------|-----------|------------|-----------|------|
-| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] |
+| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story |
+|---------|-----------|---------------|-------|-----------|------------|-----------|------|------------|
+| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] | US-001 |
 
 ### tasks_index.json
 
@@ -82,6 +88,8 @@ Output structure:
 
 ### Quality self-check
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
+- [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)
 - [ ] §2 linear order is a valid topological sort of §1 DAG
 - [ ] Assigned Agent values exist in agents.md (when PROVIDED) or match provisional IDs exactly

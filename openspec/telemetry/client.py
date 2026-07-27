@@ -71,9 +71,10 @@ class TelemetryClient:
         phase_number: int,
         phase_name: str,
         model_id: str = "",
+        plan_phase: int | None = None,
     ) -> str:
         local_id = str(uuid.uuid4())
-        self._write_event({
+        event: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "type": "phase_start",
             "change": self._change or "",
@@ -82,7 +83,10 @@ class TelemetryClient:
             "phase_number": phase_number,
             "phase_name": phase_name,
             "model_id": model_id,
-        })
+        }
+        if plan_phase is not None:
+            event["plan_phase"] = plan_phase
+        self._write_event(event)
         return local_id
 
     def end_phase(

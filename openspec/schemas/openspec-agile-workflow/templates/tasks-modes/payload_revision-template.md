@@ -12,6 +12,7 @@ the user's feedback. Do not emit §0–§3 or §5. Address every point in the fe
 ### § 4. Task Specifications — payload format
 
 ### Task <ID>: <Title>
+- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)
@@ -21,5 +22,6 @@ the user's feedback. Do not emit §0–§3 or §5. Address every point in the fe
 
 ### Quality self-check
 - [ ] Every Task ID in the provided list has a matching payload subsection
+- [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
 - [ ] Every point in the user's feedback is addressed
 - [ ] No truncated mid-task payloads; last payload ends cleanly

@@ -69,10 +69,11 @@
 ## Traceability Matrix
 
 Map every file touched during implementation to the requirement IDs from specs.md.
+Include US-* (user story), FR-* (functional requirement), SC-* (success criteria), and AC-* IDs.
 
 | File | Task ID | Requirement IDs | Reason |
 |------|---------|-----------------|--------|
-| `relative/path/to/file` | T1_1 | FR-01, SC-01 | [brief reason] |
+| `relative/path/to/file` | T1_1 | US-001, FR-01, SC-01 | [brief reason] |
 
 ## Deviations Observed
 

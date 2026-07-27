@@ -13,6 +13,7 @@ shorten Implementation notes and Acceptance criteria rather than omitting a task
 For EACH Task ID, emit:
 
 ### Task <ID>: <Title>
+- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)
@@ -22,5 +23,6 @@ For EACH Task ID, emit:
 
 ### Quality self-check
 - [ ] Every Task ID in the provided list has a matching payload subsection
+- [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
 - [ ] Target file(s) trace to repo_assessment.md or plan.md (marked PARTIAL if uncertain)
 - [ ] No truncated mid-task payloads; last payload ends cleanly

@@ -51,7 +51,7 @@ When appending to existing tasks.md (Phase N > 1):
 - Task IDs continue the numbering: Phase 1 = T1_*, Phase 2 = T2_*, etc.
 - Depends On may reference completed tasks from prior phases
 
-When `phase_scope` is absent: generate all phases (legacy single-shot mode).
+When `phase_scope` is absent (task_execution_mode = "one-shot"): generate all phases at once.
 
 ## Core responsibilities
 1) **Granular decomposition:** expand each planning phase into discrete tasks at **file/package**
@@ -96,8 +96,16 @@ When `phase_scope` is absent: generate all phases (legacy single-shot mode).
 **AgentRoutingMode:** PROVIDED | PROVISIONAL
 **ConstitutionVersion:** <user-supplied label or UNKNOWN>
 
-## 0. Input coverage checklist
+## 0. Input Coverage Checklist
 Short bullet list mapping spec goals + plan phases → task coverage (prove nothing obvious was dropped).
+
+### Functional Requirements → Task Coverage
+One bullet per FR-xx / SC-xx / AC-xx with covering Task IDs.
+
+### User Stories → Task Coverage
+One bullet per US-00x with covering Task IDs (and Jira key from inputs/jira.yaml when available).
+Derive by unioning each story's FR task coverage from Story → FR Traceability in specs.md,
+or assign directly. Every US-00x from specs.md must appear with ≥1 Task ID.
 
 ## 1. Task Dependency Graph (Mermaid)
 Use `graph TD` (or `flowchart LR`) with stable node IDs like `T1_1`, `T1_2`, ... matching Task IDs.
@@ -107,14 +115,16 @@ Numbered list of Task IDs in a valid topological order (ties broken by phase ord
 
 ## 3. Task Execution Manifest (table)
 A markdown table with EXACT columns:
-| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk |
+| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story |
 
 Complexity: use Fibonacci-ish integers 1,2,3,5,8 (1=trivial, 2=small, 3=medium, 5=large, 8=extra-large).
+User Story: comma-separated US-00x IDs this task covers (e.g. "US-001, US-002").
 
 ## 4. Task Specifications (Payloads)
 For EACH Task ID, emit a subsection:
 
 ### Task <ID>: <Title>
+- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)
@@ -168,6 +178,9 @@ decomposition), then apply these consolidation rules to the result.
 ## Quality self-check (target ≥75%)
 Before finalizing, verify:
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
+- [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
+- [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)
 - [ ] §3 manifest row count equals §4 payload subsection count (every ID covered)
 - [ ] §2 linear order is a valid topological sort of §1 DAG
@@ -250,8 +263,14 @@ When NO `pass_mode` field is present in the user message, generate the complete 
 ## Output Schema Reference
 
 ### § 0. Input coverage checklist
+
+#### Functional Requirements → Task Coverage
 One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with the Task IDs that
 cover it. Every spec goal and every plan phase must appear.
+
+#### User Stories → Task Coverage
+One bullet per US-00x with covering Task IDs (and Jira key when available).
+Every US-00x from specs.md must appear with ≥1 Task ID.
 
 ### § 1. Task Dependency Graph (Mermaid)
 ```mermaid
@@ -278,10 +297,10 @@ graph TD
 
 ### § 3. Task Execution Manifest
 
-| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk |
-|---------|-----------|---------------|-------|-----------|------------|-----------|------|
-| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] |
-| T1_2 | [TITLE] | [AGENT_ID] | [PHASE] | T1_1 | No | [1-8] | [Low/Med/High] |
+| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story |
+|---------|-----------|---------------|-------|-----------|------------|-----------|------|------------|
+| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] | US-001 |
+| T1_2 | [TITLE] | [AGENT_ID] | [PHASE] | T1_1 | No | [1-8] | [Low/Med/High] | US-001, US-002 |
 
 Provisional agent IDs when AgentRoutingMode is PROVISIONAL:
 `API_Agent`, `OperatorController_Agent`, `ManifestsBindata_Agent`, `WebhookTLS_Agent`,
@@ -290,6 +309,7 @@ Provisional agent IDs when AgentRoutingMode is PROVISIONAL:
 ### § 4. Task Specifications (Payloads)
 
 #### Task T1_1: [TITLE]
+- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
 - **Objective:** [WHAT_THIS_TASK_ACCOMPLISHES]
 - **Target file(s):** [FILE_PATHS_FROM_REPO_ASSESSMENT_OR_PLAN]
 - **Non-goals / forbidden edits:** [WHAT_NOT_TO_TOUCH]

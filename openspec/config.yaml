@@ -22,11 +22,16 @@ flags:
   #   "direct"     — plain agent implementation (reads context files, applies FILE OPERATIONS
   #                  directly, no OAPE commands, no code eval gate)
   codegen_mode: ai-helpers
+  auto_approve: false             # true = skip all approval prompts; artifacts/tasks auto-approved (specs rejection still requires explicit action)
   max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
   exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
   generate_evaluation_reports: true # Generate <artifact>_evaluation_report.md alongside each artifact
-  phase_iterative: true           # Generate and implement tasks one plan phase at a time
-  pr_between_phases: optional     # optional | mandatory | none
+  # task_execution_mode controls how tasks.md is generated and implemented:
+  #   "one-shot"        — generate ALL tasks for ALL plan phases at once, implement sequentially,
+  #                       single PR at the end
+  #   "phase-iterative" — generate and implement tasks one plan phase at a time, optional PR per phase
+  task_execution_mode: phase-iterative   # one-shot | phase-iterative
+  pr_between_phases: optional            # optional | mandatory | none (phase-iterative only)
   task_sizing:
     prompt_user: true
     default_min: 5
@@ -54,7 +59,7 @@ rules:
     - "All sections §0–§8; each phase uses Goal, Dependencies, Target files, Verification hooks"
   tasks:
     - "Use §0–§5 structure; prefer multipass (skeleton → payloads → orchestration) for large backlogs"
-    - "Task IDs: T<n>_<m>; unit tests are co-generated per task (not separate tasks); phase-scoped when phase_iterative enabled"
+    - "Task IDs: T<n>_<m>; unit tests are co-generated per task (not separate tasks); phase-scoped when task_execution_mode = phase-iterative"
   implementation:
     - "Follow the implementation artifact instruction in schema.yaml exactly"
     - "Working-folder mode: use project cwd; no fork, no draft PR (schema working_folder_repo)"

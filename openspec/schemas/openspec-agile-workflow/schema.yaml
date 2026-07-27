@@ -157,6 +157,57 @@ jira_metadata:
     jira_key/epic_key when explicit URLs are missing.
 
 # ---------------------------------------------------------------------------
+# user_stories_jira_sync — Jira Story tickets created after specs approval
+# ---------------------------------------------------------------------------
+user_stories_jira_sync:
+  description: >-
+    After specs.md is approved, one Jira Story ticket is created per US-00x
+    user story under the epic (or input ticket). Results are persisted in
+    inputs/jira.yaml under user_stories[]. The workflow does not hard-stop
+    on Jira MCP failure — stories are marked jira_key: PENDING and retried
+    once at the start of the tasks stage.
+  stored_in: openspec/changes/<change>/inputs/jira.yaml
+  populated_at: specs-approval
+  retry_at: tasks-start
+  fields:
+    user_stories:
+      type: array
+      description: >-
+        One entry per US-00x from specs.md. Created after specs approval.
+      items:
+        id:
+          type: string
+          description: "Stable story ID from specs.md (e.g. US-001)"
+        summary:
+          type: string
+          description: "Story title from the US-00x heading"
+        priority:
+          type: string
+          description: "P1 / P2 / P3 from specs.md"
+        jira_key:
+          type: string
+          description: "Created Jira issue key (e.g. CM-901) or PENDING if creation failed"
+        jira_url:
+          type: string
+          description: "Full browse URL for the created Story"
+          optional: true
+        created_at:
+          type: string
+          description: "ISO8601 timestamp of Jira ticket creation"
+          optional: true
+  create_ticket_spec:
+    project: "Prefix of epic_key or jira_key (e.g. CM from CM-800)"
+    issuetype: Story
+    parent: "epic_key from jira.yaml; fallback to jira_key"
+    summary: "[US-001] <title from specs.md heading>"
+    description: >-
+      Story narrative + acceptance scenarios + Story→FR traceability lines
+      + OpenSpec change path + parent key reference.
+  idempotency: >-
+    If user_stories[].jira_key already set and not PENDING, skip recreate.
+    If PENDING, retry create_ticket once.
+
+# ---------------------------------------------------------------------------
 # target_repo — upstream GitHub repo for assessment and planning
 # ---------------------------------------------------------------------------
 target_repo:
@@ -328,54 +379,90 @@ task_sizing:
       host task. Remove merged ID from §1, §2, §3. Update Depends On refs.
 
 # ---------------------------------------------------------------------------
-# phase_iterative — phase-by-phase task generation and implementation
+# task_execution_mode — one-shot vs phase-iterative task generation/implementation
 # ---------------------------------------------------------------------------
-phase_iterative:
+# auto_approve — skip all user approval prompts
+# ---------------------------------------------------------------------------
+auto_approve:
   description: >-
-    After plan.md approval, tasks are generated and implemented one plan phase
-    at a time. Each phase cycle: generate tasks → eval gate → user approval →
-    implement (task-by-task with co-gen tests) → optional PR → next phase.
-    tasks.md uses append strategy: completed phase tasks stay marked [x].
-  config_key: flags.phase_iterative
-  enabled_by_default: true
-  tasks_file_strategy: append
-  pr_between_phases: optional
-  phase_approval_gate: full
-  phase_tracking:
-    stored_in: openspec/changes/<change>/implementation/state.yaml
-    fields:
-      current_plan_phase: integer
-      total_plan_phases: integer
-      completed_phases: "array of integer"
-      phase_pr_urls: "map of phase_number to url"
-  flow: >-
-    plan.md approved →
-    generate tasks for Phase 1 → eval gate → user approval →
-    /opsx-apply Phase 1 tasks (task-by-task) →
-    phase complete → optional PR →
-    generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
-    /opsx-apply Phase 2 tasks →
-    ... repeat for all phases →
-    final implementation-report.md → archive
-  phase_boundary:
-    on_all_phase_tasks_complete:
-      - Present phase summary (tasks completed, files changed, test results)
-      - >-
-        ASK: "All Phase {N} tasks complete. Raise a draft PR for Phase {N}?
-        (Yes / No, continue to Phase {N+1})"
-      - If yes: commit, push, open draft PR; record URL in state.yaml phase_pr_urls
-      - Update state.yaml: current_plan_phase = N+1
-      - >-
-        If current_plan_phase > total_plan_phases: all phases done →
-        write implementation-report.md, set COMPLETE
-      - >-
-        If phases remain: set state IDLE, tell user to run /opsx-continue
-        for Phase N+1 task generation
-  telemetry:
-    per_phase:
-      task_creation: "on-artifact-start/complete --artifact tasks --phase <N>"
-      implementation: "on-apply-start --phase <N>, on-task-start/complete per task"
-      phase_complete: "on-phase-complete --phase <N> --pr-raised <true|false>"
+    When true, all user approval gates are auto-approved without prompting.
+    Applies to: artifact approval (specs, repo-assessment, plan, tasks),
+    per-task approval during implementation, and the Jira Story creation prompt.
+    Evals still run and artifacts are still refined — only the user prompt is skipped.
+    Exception: specs rejection (exit_on_reject) still requires explicit user action.
+    auto_approve only auto-approves, never auto-rejects.
+  config_key: flags.auto_approve
+  default: false
+  affects:
+    - user_approval_feedback_gate.approval_prompt
+    - user_approval_feedback_gate.exit_on_reject.specs (NOT affected — rejection is always explicit)
+    - implementation task approval (code_generation_eval_gate.task_approval_prompt)
+    - user_stories_jira_sync Jira Story creation prompt
+
+# ---------------------------------------------------------------------------
+task_execution_mode:
+  description: >-
+    Controls how tasks are generated and implemented after plan.md approval.
+    Set via config.yaml → flags.task_execution_mode (default: phase-iterative).
+  config_key: flags.task_execution_mode
+  values:
+    one-shot:
+      description: >-
+        Generate ALL tasks for ALL plan phases in a single tasks.md. Implement
+        all tasks sequentially. Single PR at the end. No phase cycling.
+      flow: >-
+        plan.md approved → "How many total tasks?" →
+        generate tasks.md (all phases) → eval gate → user approval →
+        /opsx-apply all tasks sequentially →
+        implementation-report.md → push → draft PR → COMPLETE
+      telemetry:
+        task_creation: "on-artifact-start/complete --artifact tasks (no --phase)"
+        implementation: "on-apply-start, on-task-start/complete per task (no --phase)"
+        apply_complete: "on-apply-complete"
+    phase-iterative:
+      description: >-
+        After plan.md approval, tasks are generated and implemented one plan phase
+        at a time. Each phase cycle: generate tasks → eval gate → user approval →
+        implement (task-by-task with co-gen tests) → optional PR → next phase.
+        tasks.md uses append strategy: completed phase tasks stay marked [x].
+      tasks_file_strategy: append
+      pr_between_phases: optional
+      phase_approval_gate: full
+      phase_tracking:
+        stored_in: openspec/changes/<change>/implementation/state.yaml
+        fields:
+          current_plan_phase: integer
+          total_plan_phases: integer
+          completed_phases: "array of integer"
+          phase_pr_urls: "map of phase_number to url"
+      flow: >-
+        plan.md approved →
+        generate tasks for Phase 1 → eval gate → user approval →
+        /opsx-apply Phase 1 tasks (task-by-task) →
+        phase complete → optional PR →
+        generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
+        /opsx-apply Phase 2 tasks →
+        ... repeat for all phases →
+        final implementation-report.md → archive
+      phase_boundary:
+        on_all_phase_tasks_complete:
+          - Present phase summary (tasks completed, files changed, test results)
+          - >-
+            ASK: "All Phase {N} tasks complete. Raise a draft PR for Phase {N}?
+            (Yes / No, continue to Phase {N+1})"
+          - If yes: commit, push, open draft PR; record URL in state.yaml phase_pr_urls
+          - Update state.yaml: current_plan_phase = N+1
+          - >-
+            If current_plan_phase > total_plan_phases: all phases done →
+            write implementation-report.md, set COMPLETE
+          - >-
+            If phases remain: set state IDLE, tell user to run /opsx-continue
+            for Phase N+1 task generation
+      telemetry:
+        per_phase:
+          task_creation: "on-artifact-start/complete --artifact tasks --phase <N>"
+          implementation: "on-apply-start --phase <N>, on-task-start/complete per task --phase <N>"
+          phase_complete: "on-phase-complete --phase <N> --pr-raised <true|false>"
 
 # ---------------------------------------------------------------------------
 # code_generation_eval_gate — per-task code evals during /opsx-apply
@@ -419,9 +506,11 @@ code_generation_eval_gate:
   flow: >-
     execute_oape_or_manual → verify_task_criteria → run_code_generation_evals →
     refine_code_until_pass_or_max_passes → present_task_summary_with_scorecard →
-    user_code_approval → write_task_report → next_task
+    check_auto_approve → (auto_approve=true → write_task_report → next_task) |
+    (auto_approve=false → user_code_approval → write_task_report → next_task)
   task_approval_prompt: >-
-    Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
+    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   skip_when:
@@ -469,14 +558,17 @@ user_approval_feedback_gate:
       user that the maximum feedback rounds have been reached. Suggest revising
       inputs or starting a new change. Do not continue the loop or auto-approve.
   flow: >-
-    present_artifact → ask_approval →
-    (approve → lock_artifact → unlock_next → stop) |
-    (reject_with_feedback → check_round_count_vs_max_feedback_rounds
-     → load_context → update_template_if_required
-     → regenerate_current_artifact → write_feedback_stage_summary
-     → re_run_stage_eval_gate → ask_approval)
+    present_artifact → check_auto_approve →
+    (auto_approve=true → approve → lock_artifact → unlock_next → stop) |
+    (auto_approve=false → ask_approval →
+      (approve → lock_artifact → unlock_next → stop) |
+      (reject_with_feedback → check_round_count_vs_max_feedback_rounds
+       → load_context → update_template_if_required
+       → regenerate_current_artifact → write_feedback_stage_summary
+       → re_run_stage_eval_gate → ask_approval))
   approval_prompt: >-
-    Approve this artifact and proceed to the next stage?
+    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
+    Otherwise ask: Approve this artifact and proceed to the next stage?
     (Approve / Reject with feedback)
   on_reject:
     steps:
@@ -773,13 +865,15 @@ oape_routing:
         - Run code_generation_eval_gate — score fork code; refine code until evals
           pass or max_refinement_passes (2); do NOT ask user approval before this completes
         - Present task summary with code eval scorecard
-        - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt)
+        - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt);
+          if config.yaml → flags.auto_approve is true, skip prompt and treat as Approve
         - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
         - >-
           On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`
         - Advance to next pending task in §2 order
   task_approval_prompt: >-
-    Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
+    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   command_order:
@@ -896,11 +990,12 @@ workflow:
   - id: task-creation
     name: Task Creation Stage
     description: >-
-      Decompose the approved plan into an execution backlog (tasks.md) one plan
-      phase at a time (see schema phase_iterative). Each phase cycle: generate
-      tasks for Phase N → eval gate → user approval → implement Phase N →
-      optional PR → generate Phase N+1 tasks (appended to tasks.md).
-      tasks.md grows incrementally; completed phase tasks stay marked [x].
+      Decompose the approved plan into an execution backlog (tasks.md).
+      Behavior depends on config.yaml flags.task_execution_mode:
+      **one-shot**: generate ALL tasks for ALL plan phases in a single tasks.md.
+      **phase-iterative**: generate tasks one plan phase at a time; each phase
+      cycle: generate → eval gate → approve → implement → optional PR → next
+      phase. tasks.md grows incrementally; completed phase tasks stay marked [x].
     inputs:
       - specs.md
       - constitution.md (input — resolved via constitution_md.lookup_order)
@@ -915,18 +1010,20 @@ workflow:
   - id: implementation
     name: Implementation Stage
     description: >-
-      Begins after each phase's tasks in tasks.md are approved (see schema
-      phase_iterative). Implements the current phase's tasks task-by-task, then
-      offers an optional draft PR before cycling back to task-creation for the
+      Begins after tasks in tasks.md are approved. Behavior depends on
+      config.yaml flags.task_execution_mode:
+      **one-shot**: implements all tasks sequentially, then pushes a single draft PR.
+      **phase-iterative**: implements the current phase's tasks task-by-task,
+      offers an optional draft PR, then cycles back to task-creation for the
       next phase. Code generation strategy is determined by config.yaml
       flags.codegen_mode: ai-helpers uses OAPE command routing and code eval
       gate; direct uses plain agent implementation.
       **Default:** The agent asks for fork_repo_url, clones the fork, and drives
-      tasks task-by-task; when the phase completes, optionally pushes a draft PR.
+      tasks task-by-task.
       **Working-folder mode:** Uses the current project checkout (see schema
       working_folder_repo) — no fork, no draft PR.
-      User approval is required after every task. After all phases complete,
-      closes with implementation-report.md and optional deviation-observed.md.
+      User approval is required after every task. Closes with
+      implementation-report.md and optional deviation-observed.md.
     inputs:
       - tasks.md (required — Task Creation complete)
       - constitution.md (required)
@@ -997,8 +1094,11 @@ artifacts:
       ## Process
       1. Read the Specification Analyst preamble and output template in spec.md — follow both.
       2. Read validation.json if available; address missing_elements as assumptions.
-      3. Produce user stories (P1/P2/P3) with Given/When/Then acceptance scenarios.
+      3. Produce user stories with stable IDs (US-001, US-002, …) and priorities (P1/P2/P3)
+         with Given/When/Then acceptance scenarios.
       4. Derive functional requirements (FR-001…), success criteria (SC-001…), assumptions.
+      4a. Build Story → FR Traceability table mapping each US-00x to its FR-00x IDs.
+          Every FR must appear in at least one story mapping.
       5. No implementation details (languages, frameworks, file paths).
       6. Maximum 3 [NEEDS CLARIFICATION] markers.
 
@@ -1010,7 +1110,30 @@ artifacts:
          Do NOT run user_approval_feedback_gate. Do NOT regenerate specs.md.
          Optionally log rejection reason to feedback/specs.yaml. STOP.
          Do not unlock Repo Understanding or any downstream stage.
-      4. ON APPROVE: Lock specs.md as immutable; unlock Repo Understanding Stage.
+      4. ON APPROVE:
+         a. Lock specs.md as immutable.
+         b. **Ask user about Jira Story creation**:
+            Read config.yaml → flags.auto_approve. If true, treat as "Yes" (skip prompt).
+            Otherwise present the list of US-00x stories found in specs.md and ask:
+            > "Specs approved. Create Jira Story tickets for each user story
+            > (US-001, US-002, …) under [epic_key/jira_key]? (Yes / No)"
+            - **Yes** → proceed to step 4c.
+            - **No** → skip Jira ticket creation; write user_stories[] to
+              inputs/jira.yaml with jira_key: SKIPPED for each US. Proceed to 4d.
+         c. **Create Jira Stories** (see schema user_stories_jira_sync):
+            - Parse all US-00x headings from specs.md.
+            - Read inputs/jira.yaml for epic_key / jira_key and existing user_stories.
+            - For each US missing a real jira_key: call Jira MCP create_ticket with:
+              project = prefix of parent key (e.g. "CM" from "CM-800"),
+              issuetype = "Story",
+              parent = epic_key (else jira_key),
+              summary = "[US-001] <title>",
+              description = story narrative + acceptance scenarios + Story→FR lines + change path.
+            - Persist results to inputs/jira.yaml under user_stories[].
+            - If Jira MCP is unavailable, write jira_key: PENDING and surface the error;
+              do NOT block the workflow.
+            - Report created / PENDING keys in the approval summary.
+         d. Unlock Repo Understanding Stage.
     gate:
       type: approval
       evaluated_by: user
@@ -1157,9 +1280,18 @@ artifacts:
       plus mode-specific instructions in templates/tasks-modes/ when generating
       in passes (see stage4_tasks.py multipass modes).
 
-      ## Phase-scoped generation (phase_iterative mode)
-      When `phase_scope` metadata is present in the user message (default when
-      flags.phase_iterative is true), generate tasks for ONE plan phase at a time:
+      ## Task generation modes (config.yaml → flags.task_execution_mode)
+
+      ### One-shot mode (task_execution_mode = "one-shot")
+      When `phase_scope` metadata is ABSENT:
+      - Generate tasks for ALL plan phases in a single tasks.md
+      - §0 maps ALL spec goals across ALL plan phases
+      - §1–§5 contain ALL tasks across ALL phases
+      - Approval gate covers the full tasks.md at once
+      - tasks.md is generated ONCE, not incrementally
+
+      ### Phase-iterative mode (task_execution_mode = "phase-iterative")
+      When `phase_scope` metadata is present in the user message:
       - Read `phase_scope: N` to determine which plan.md phase to expand
       - §0 coverage checklist maps ONLY Phase N spec goals and plan section
       - §1–§3 contain ONLY Phase N tasks
@@ -1171,8 +1303,6 @@ artifacts:
       - Prior phase tasks (marked [x]) are READ-ONLY context — do not re-emit
       - New phase tasks are appended below a `---` separator and phase header
       - Depends On may reference completed tasks from prior phases
-
-      When `phase_scope` is absent: generate all phases (legacy single-shot mode).
 
       ## AGENTS.md
       If AGENTS.md is not in the target repo or change inputs/, ask the user once to
@@ -1186,14 +1316,22 @@ artifacts:
       4. repo-assessment.md (for file paths)
       5. agents.md (routing)
 
+      ## PENDING Jira Story retry
+      Before generating tasks, read inputs/jira.yaml user_stories[]. For each entry
+      with jira_key = PENDING, retry create_ticket once (see schema user_stories_jira_sync).
+      Update jira_key/jira_url on success; leave PENDING on failure. Do not block generation.
+
       ## Required output structure (§0–§5)
-      - §0 Input coverage checklist — map every FR-xx, SC-xx, and plan phase to Task IDs
+      - §0 Input coverage checklist — map every FR-xx, SC-xx, US-00x, and plan phase to Task IDs.
+        §0 must include a "User Stories → Task Coverage" subsection with one bullet per US-00x
+        from specs.md, each listing the Task IDs that cover it (with Jira key when available).
       - §1 Task Dependency Graph (Mermaid) — stable node IDs T1_1, T1_2, …
       - §2 Linear Execution Order — valid topological sort
       - §3 Task Execution Manifest — table columns:
-        Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk
-      - §4 Task Payloads — ### Task <ID>: <Title> with Objective, Target file(s),
-        Non-goals, Implementation notes, Acceptance criteria, Downstream handoff
+        Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story
+      - §4 Task Payloads — ### Task <ID>: <Title> with Covers (US-00x with Jira key),
+        Objective, Target file(s), Non-goals, Implementation notes, Acceptance criteria,
+        Downstream handoff
       - §5 Orchestration notes — Retry Boundaries, Merge Conflict Hotspots,
         Open Questions Requiring SME Before Execution
 
@@ -1242,23 +1380,29 @@ artifacts:
         Only create separate tasks for e2e/integration tests requiring a live cluster.
       - Complexity: Fibonacci 1, 2, 3, 5, 8.
 
-      ## APPROVAL GATE (per phase)
-      After generating this phase's tasks (or full tasks.md in legacy mode):
-      0. **Eval gate** (see schema stage_eval_gate): score the NEW phase's tasks
-         against evals/tasks_eval.yaml; refine artifact if cases fail;
-         write eval-results/tasks-phase-<N>.yaml. Do not edit schema templates.
+      ## APPROVAL GATE
+      After generating tasks:
+
+      **One-shot mode:**
+      0. **Eval gate**: score full tasks.md against evals/tasks_eval.yaml; refine
+         if cases fail; write eval-results/tasks.yaml.
+      1. SUMMARIZE: total tasks, complexity points, high-risk count, parallelisable
+         count, agent distribution, manifest preview (first 5 rows), eval score.
+      2. ASK: see schema user_approval_feedback_gate.approval_prompt
+      3. ON REJECT: regenerate tasks.md; re-run eval gate; re-ask approval.
+      4. ON APPROVE: Lock tasks.md as immutable; unlock Implementation Stage.
+
+      **Phase-iterative mode:**
+      0. **Eval gate**: score the NEW phase's tasks against evals/tasks_eval.yaml;
+         refine if cases fail; write eval-results/tasks-phase-<N>.yaml.
       1. SUMMARIZE: phase number, total tasks for this phase, complexity points,
-         high-risk count, parallelisable count, agent distribution, manifest
-         preview (first 5 rows), eval score.
-      2. ASK: "Approve Phase {N} tasks and proceed to implementation?
-         (Approve / Reject with feedback)"
-      3. ON REJECT: Run user_approval_feedback_gate — update template if required;
-         regenerate this phase's tasks only; write round summary to
-         feedback_stage_artifacts; approved upstream artifacts and prior phase
-         tasks remain immutable. Re-run eval gate; re-ask approval.
+         high-risk count, agent distribution, manifest preview, eval score.
+      2. ASK: "Approve Phase {N} tasks and proceed to implementation?"
+      3. ON REJECT: regenerate this phase's tasks only; prior phase tasks immutable.
+         Re-run eval gate; re-ask approval.
       4. ON APPROVE: Lock this phase's tasks; unlock Implementation Stage for
-         Phase N. After Phase N implementation completes, /opsx-continue
-         generates Phase N+1 tasks (see schema phase_iterative).
+         Phase N. After implementation completes, /opsx-continue generates
+         Phase N+1 tasks.
     gate:
       type: approval
       evaluated_by: user
@@ -1513,9 +1657,20 @@ artifacts:
       - ai-helpers mode: Invoke exactly one allowed OAPE command per task; never
         predict-regressions, review, or any command outside allowed_commands.
 
-      ## Post-loop (all current-phase tasks approved)
-      0. **Phase check** (phase_iterative mode): Verify all tasks for the current
-         plan phase in tasks.md §3 are marked `- [x]`.
+      ## Post-loop
+      Read config.yaml → flags.task_execution_mode.
+
+      **One-shot mode** (all tasks approved):
+      0. Verify all tasks in tasks.md §3 are marked `- [x]`.
+      1. Write implementation-report.md aggregating all task-reports/*.md.
+      2. Write deviation-observed.md if any deviations logged.
+      3. **Default mode:** Push and draft PR (see schema fork_repo.draft_pr).
+      4. **Working-folder mode:** skip push/PR; record in implementation-report.md.
+      5. Final summary: tasks, files, tests, deviations; draft PR URL when applicable.
+      6. Set COMPLETE.
+
+      **Phase-iterative mode** (all current-phase tasks approved):
+      0. Verify all tasks for the current plan phase in §3 are marked `- [x]`.
       1. Present phase summary: tasks completed, files changed, test results.
       2. ASK: "All Phase {N} tasks complete. Raise a draft PR for Phase {N}?
          (Yes / No, continue to Phase {N+1})"
@@ -1570,7 +1725,7 @@ artifacts:
       - **All Files Changed** — grouped by phase (from task reports)
       - **Code Generation Eval Summary** — aggregate pass/fail across all tasks
       - **Test Results Summary**
-      - **Traceability Matrix** — map every file touched to FR-*, SC-*, AC-* IDs from specs.md
+      - **Traceability Matrix** — map every file touched to US-*, FR-*, SC-*, AC-* IDs from specs.md
       - **Deviations / ADRs** — if any (otherwise state "None")
       - **Draft Pull Request** — fork_repo_url, branch name, and PR URL
 

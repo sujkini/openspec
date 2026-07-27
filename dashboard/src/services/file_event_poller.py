@@ -236,6 +236,7 @@ class FileEventPoller:
                 phase_number=event.get("phase_number", 0),
                 phase_name=phase_name,
                 model_id=event.get("model_id", ""),
+                plan_phase=event.get("plan_phase"),
             )
             db.add(phase)
             await db.commit()
@@ -250,6 +251,7 @@ class FileEventPoller:
                     "tokens_out": phase.tokens_out,
                     "quality_score": phase.quality_score,
                     "quality_label": phase.quality_label,
+                    "plan_phase": phase.plan_phase,
                 },
                 run_id=run_id,
             )
@@ -285,6 +287,7 @@ class FileEventPoller:
                     "tokens_out": phase.tokens_out,
                     "quality_score": phase.quality_score,
                     "quality_label": phase.quality_label,
+                    "plan_phase": phase.plan_phase,
                 },
                 run_id=phase.run_id,
             )
@@ -321,6 +324,7 @@ class FileEventPoller:
                     "tokens_out": phase.tokens_out,
                     "quality_score": phase.quality_score,
                     "quality_label": phase.quality_label,
+                    "plan_phase": phase.plan_phase,
                 },
                 run_id=phase.run_id,
             )

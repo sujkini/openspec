@@ -16,7 +16,7 @@ async def list_phases(run_id: str, db: DBSession):
     result = await db.execute(
         select(PhaseExecution)
         .where(PhaseExecution.run_id == run_id)
-        .order_by(PhaseExecution.phase_number)
+        .order_by(PhaseExecution.phase_number, PhaseExecution.plan_phase.asc().nullsfirst())
     )
     return [PhaseOut.model_validate(p) for p in result.scalars().all()]
 
@@ -28,6 +28,7 @@ async def create_phase(payload: PhaseCreate, db: DBSession):
         phase_number=payload.phase_number,
         phase_name=payload.phase_name,
         model_id=payload.model_id,
+        plan_phase=payload.plan_phase,
     )
     db.add(phase)
     await db.commit()
@@ -55,6 +56,7 @@ async def update_phase(phase_id: str, payload: PhaseUpdate, db: DBSession):
             "tokens_out": phase.tokens_out,
             "quality_score": phase.quality_score,
             "quality_label": phase.quality_label,
+            "plan_phase": phase.plan_phase,
         },
         run_id=phase.run_id,
     )

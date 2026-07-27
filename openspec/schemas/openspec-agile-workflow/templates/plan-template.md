@@ -106,7 +106,7 @@ in addition to the generic guidance in this template.
 Before finalizing, verify:
 - [ ] §0 inputs table complete; AgentRoutingMode matches constitution.md
 - [ ] §1 includes **Repo-grounded reality check** (greenfield / delta / mix) citing repo_assessment
-- [ ] Every spec FR and P1 user story maps to ≥1 phase and ≥1 verification matrix row
+- [ ] Every spec FR and P1 user story (US-00x) maps to ≥1 phase and ≥1 verification matrix row
 - [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities, Verification hooks)
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)

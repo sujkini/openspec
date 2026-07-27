@@ -10,6 +10,7 @@ Usage:
     python -m openspec.telemetry.auto on-task-start --change cm-830 --task-id T1_1 --agent API_Agent
     python -m openspec.telemetry.auto on-task-complete --change cm-830 --task-id T1_1 --status passed
     python -m openspec.telemetry.auto on-apply-complete --change cm-830
+    python -m openspec.telemetry.auto on-phase-complete --change cm-830 --phase 1 --stage 5
     python -m openspec.telemetry.auto sync --change cm-830
     python -m openspec.telemetry.auto report --change cm-830
 """
@@ -114,6 +115,42 @@ def _emit_phase_progress(
     _save_state(change, state)
 
 
+def _emit_sub_phase_progress(
+    change: str,
+    state: dict[str, Any],
+    sub_key: str,
+    client,
+    *,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    quality_score: float = 0,
+    quality_label: str = "",
+    iteration_count: int = 1,
+    duration_s: float | None = None,
+) -> None:
+    """Emit a phase_progress event for a plan-phase sub-row."""
+    sub_phases = state.get("sub_phases", {})
+    sub_info = sub_phases.get(sub_key)
+    if not sub_info or sub_info.get("ended"):
+        return
+
+    cum_in = sub_info.get("tokens_in", 0) + tokens_in
+    cum_out = sub_info.get("tokens_out", 0) + tokens_out
+    sub_info["tokens_in"] = cum_in
+    sub_info["tokens_out"] = cum_out
+
+    client.update_phase(
+        sub_info["id"],
+        tokens_in=cum_in,
+        tokens_out=cum_out,
+        quality_score=quality_score,
+        quality_label=quality_label,
+        iteration_count=iteration_count,
+        duration_s=duration_s,
+    )
+    _save_state(change, state)
+
+
 def _out(data: dict[str, Any]) -> None:
     print(json.dumps(data))
 
@@ -168,6 +205,42 @@ def on_new(args: argparse.Namespace) -> None:
     _regenerate_report(args.change)
 
 
+def _sub_phase_key(stage: int, plan_phase: int) -> str:
+    """State key for a plan-phase sub-row under a given stage."""
+    return f"{stage}_pp{plan_phase}"
+
+
+def _ensure_sub_phase(
+    change: str,
+    state: dict[str, Any],
+    run_id: str,
+    stage_number: int,
+    stage_name: str,
+    plan_phase: int,
+) -> str:
+    """Create a sub-phase row for plan_phase under a stage (idempotent)."""
+    sub_key = _sub_phase_key(stage_number, plan_phase)
+    sub_phases = state.setdefault("sub_phases", {})
+    if sub_key in sub_phases and not sub_phases[sub_key].get("ended"):
+        return sub_phases[sub_key]["id"]
+
+    client = _client(change)
+    try:
+        phase_id = client.start_phase(
+            run_id, stage_number, stage_name, plan_phase=plan_phase,
+        )
+        sub_phases[sub_key] = {
+            "id": phase_id,
+            "name": stage_name,
+            "plan_phase": plan_phase,
+            "ended": False,
+        }
+        _save_state(change, state)
+        return phase_id
+    finally:
+        client.close()
+
+
 def on_artifact_start(args: argparse.Namespace) -> None:
     """Called when an artifact creation begins."""
     state = _load_state(args.change)
@@ -185,12 +258,15 @@ def on_artifact_start(args: argparse.Namespace) -> None:
     key = str(phase_number)
     phases = state.setdefault("phases", {})
     batch = getattr(args, "batch", False)
+    plan_phase = getattr(args, "phase", None)
 
     if key in phases and not phases[key].get("ended"):
         if batch and not phases[key].get("batch_mode"):
             _set_batch_mode(state, key)
             _save_state(args.change, state)
         _out({"ok": True, "phase_id": phases[key]["id"], "already_running": True})
+        if plan_phase is not None:
+            _ensure_sub_phase(args.change, state, run_id, phase_number, phase_name, plan_phase)
         return
 
     client = _client(args.change)
@@ -203,6 +279,10 @@ def on_artifact_start(args: argparse.Namespace) -> None:
         _out({"ok": True, "phase_id": phase_id})
     finally:
         client.close()
+
+    if plan_phase is not None:
+        _ensure_sub_phase(args.change, state, run_id, phase_number, phase_name, plan_phase)
+
     _regenerate_report(args.change)
 
 
@@ -380,7 +460,9 @@ def on_apply_start(args: argparse.Namespace) -> None:
         return
 
     batch = getattr(args, "batch", False)
+    plan_phase = getattr(args, "phase", None)
     phases = state.setdefault("phases", {})
+
     if "5" in phases and phases["5"].get("ended"):
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_completed": True})
         return
@@ -389,6 +471,8 @@ def on_apply_start(args: argparse.Namespace) -> None:
             _set_batch_mode(state, "5")
             _save_state(args.change, state)
         _out({"ok": True, "phase_id": phases["5"]["id"], "already_running": True})
+        if plan_phase is not None:
+            _ensure_sub_phase(args.change, state, run_id, 5, "code_generation", plan_phase)
         return
 
     client = _client(args.change)
@@ -401,6 +485,10 @@ def on_apply_start(args: argparse.Namespace) -> None:
         _out({"ok": True, "phase_id": phase_id})
     finally:
         client.close()
+
+    if plan_phase is not None:
+        _ensure_sub_phase(args.change, state, run_id, 5, "code_generation", plan_phase)
+
     _regenerate_report(args.change)
 
 
@@ -412,8 +500,16 @@ def on_task_start(args: argparse.Namespace) -> None:
         _out({"skip": True, "reason": "no run_id"})
         return
 
-    phase_info = state.get("phases", {}).get("5")
-    phase_id = phase_info["id"] if phase_info else ""
+    plan_phase = getattr(args, "phase", None)
+
+    # Use sub-phase id when in phase-iterative mode, else parent stage 5
+    if plan_phase is not None:
+        sub_key = _sub_phase_key(5, plan_phase)
+        sub_info = state.get("sub_phases", {}).get(sub_key)
+        phase_id = sub_info["id"] if sub_info else ""
+    else:
+        phase_info = state.get("phases", {}).get("5")
+        phase_id = phase_info["id"] if phase_info else ""
 
     client = _client(args.change)
     try:
@@ -447,6 +543,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
     if batch:
         _set_batch_mode(state, "5")
 
+    plan_phase = getattr(args, "phase", None)
     loops = read_task_refinement_rounds(CHANGES_DIR / args.change, args.task_id)
 
     client = _client(args.change)
@@ -480,6 +577,18 @@ def on_task_complete(args: argparse.Namespace) -> None:
                 cost_usd=0,
                 self_correction_loops=loops,
             )
+            # Emit progress on the sub-phase when in phase-iterative mode
+            if plan_phase is not None:
+                sub_key = _sub_phase_key(5, plan_phase)
+                sub_info = state.get("sub_phases", {}).get(sub_key)
+                if sub_info and not sub_info.get("ended"):
+                    _emit_sub_phase_progress(
+                        args.change, state, sub_key, client,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                        quality_label=f"task_{args.task_id}_{args.status}",
+                    )
+            # Always update the parent stage 5 progress too
             phase_info = state.get("phases", {}).get("5")
             if phase_info and not phase_info.get("ended"):
                 _emit_phase_progress(
@@ -508,6 +617,48 @@ def _detect_batch_from_tasks(change: str, state: dict[str, Any]) -> bool:
         return False
     ref = estimates[0]
     return all(abs(e - ref) / ref <= 0.05 for e in estimates[1:])
+
+
+def on_phase_complete(args: argparse.Namespace) -> None:
+    """Called when a plan phase finishes in phase-iterative mode.
+
+    Ends the sub-phase row for the given plan_phase under the specified stage.
+    """
+    state = _load_state(args.change)
+    plan_phase = args.phase
+    stage = getattr(args, "stage", 5)
+    sub_key = _sub_phase_key(stage, plan_phase)
+    sub_phases = state.get("sub_phases", {})
+    sub_info = sub_phases.get(sub_key)
+
+    if not sub_info:
+        _out({"skip": True, "reason": f"sub-phase {sub_key} not tracked"})
+        return
+
+    if sub_info.get("ended"):
+        _out({"ok": True, "already_ended": True})
+        return
+
+    pr_raised = getattr(args, "pr_raised", "false") == "true"
+    label = getattr(args, "label", "") or f"plan_phase_{plan_phase}_complete"
+    if pr_raised:
+        label = f"{label} (PR raised)"
+
+    client = _client(args.change)
+    try:
+        client.end_phase(
+            sub_info["id"],
+            status="passed",
+            quality_label=label,
+            tokens_in=sub_info.get("tokens_in", 0),
+            tokens_out=sub_info.get("tokens_out", 0),
+        )
+        sub_info["ended"] = True
+        _save_state(args.change, state)
+        _out({"ok": True, "sub_phase_ended": True, "plan_phase": plan_phase})
+    finally:
+        client.close()
+    _regenerate_report(args.change)
 
 
 def on_apply_complete(args: argparse.Namespace) -> None:
@@ -699,16 +850,19 @@ def build_parser() -> argparse.ArgumentParser:
     sa.add_argument("--change", required=True)
     sa.add_argument("--artifact", required=True)
     sa.add_argument("--batch", action="store_true", help="Batch mode — skip per-artifact token attribution")
+    sa.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     acr = sub.add_parser("on-artifact-created", help="Signal artifact file written to disk")
     acr.add_argument("--change", required=True)
     acr.add_argument("--artifact", required=True)
     acr.add_argument("--batch", action="store_true", help="Batch mode — skip token-bearing phase_progress")
+    acr.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     wa = sub.add_parser("on-waiting-approval", help="Signal artifact presented for user approval")
     wa.add_argument("--change", required=True)
     wa.add_argument("--artifact", required=True)
     wa.add_argument("--score", type=float, default=0)
+    wa.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     ac = sub.add_parser("on-artifact-complete", help="Signal artifact approved/rejected")
     ac.add_argument("--change", required=True)
@@ -718,16 +872,19 @@ def build_parser() -> argparse.ArgumentParser:
     ac.add_argument("--label", default="")
     ac.add_argument("--iterations", type=int, default=1)
     ac.add_argument("--batch", action="store_true", help="Batch mode — use phase-level token estimate")
+    ac.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     ap = sub.add_parser("on-apply-start", help="Signal task loop started")
     ap.add_argument("--change", required=True)
     ap.add_argument("--batch", action="store_true", help="Batch mode — skip per-task token attribution")
+    ap.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     ts = sub.add_parser("on-task-start", help="Signal task execution started")
     ts.add_argument("--change", required=True)
     ts.add_argument("--task-id", required=True)
     ts.add_argument("--title", default="")
     ts.add_argument("--agent", default="")
+    ts.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     tc = sub.add_parser("on-task-complete", help="Signal task approved/failed")
     tc.add_argument("--change", required=True)
@@ -735,10 +892,19 @@ def build_parser() -> argparse.ArgumentParser:
     tc.add_argument("--status", required=True, choices=["passed", "failed"])
     tc.add_argument("--loops", type=int, default=0)
     tc.add_argument("--batch", action="store_true", help="Batch mode — zero-token task end, phase-level attribution")
+    tc.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
 
     apc = sub.add_parser("on-apply-complete", help="Signal all tasks done, end phase 5 + run")
     apc.add_argument("--change", required=True)
     apc.add_argument("--label", default="")
+    apc.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
+
+    pc = sub.add_parser("on-phase-complete", help="Signal a plan phase completed (phase-iterative mode)")
+    pc.add_argument("--change", required=True)
+    pc.add_argument("--phase", type=int, required=True, help="Plan phase number that completed")
+    pc.add_argument("--stage", type=int, default=5, help="Stage number (4=subtask_creation, 5=code_generation)")
+    pc.add_argument("--label", default="")
+    pc.add_argument("--pr-raised", choices=["true", "false"], default="false")
 
     sy = sub.add_parser("sync", help="Sync filesystem state to telemetry")
     sy.add_argument("--change", required=True)
@@ -758,6 +924,7 @@ _DISPATCH = {
     "on-apply-start": on_apply_start,
     "on-task-start": on_task_start,
     "on-task-complete": on_task_complete,
+    "on-phase-complete": on_phase_complete,
     "on-apply-complete": on_apply_complete,
     "sync": sync,
     "report": report_cmd,

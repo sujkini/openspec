@@ -22,8 +22,13 @@ State-machine driven with externalized state at `implementation/state.yaml`.
 ## Architecture: State Machine
 
 ```
-ai-helpers mode:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
-direct mode:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+phase-iterative:
+  ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+  direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+
+one-shot:
+  ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+  direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
 ```
 
 The orchestrator reads state, executes ONE task, writes state, and YIELDS.
@@ -66,6 +71,7 @@ Read `openspec/changes/<name>/implementation/state.yaml`.
 If file doesn't exist, initialize from template.
 
 Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `direct`.
+Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default to `phase-iterative`.
 
 ### 2. Handle current state
 
@@ -73,7 +79,7 @@ Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `di
 |-------|--------|
 | `IDLE` | Pick next pending task → go to step 3 |
 | `AWAITING_APPROVAL` | Read user response (approve/reject) → handle |
-| `PHASE_COMPLETE` | Offer optional PR for this phase → advance to next phase or COMPLETE |
+| `PHASE_COMPLETE` | (phase-iterative only) Offer optional PR → advance to next phase or COMPLETE |
 | `COMPLETE` | Announce done, suggest `/opsx-archive` → STOP |
 | `EXECUTING_TASK` | Resume from crash — re-run current task |
 
@@ -84,10 +90,11 @@ Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `di
 - Clear `current_task_result` and `rejections`
 - **Telemetry — signal task complete** (silent, non-blocking; rolls up phase-5 tokens incrementally):
   ```bash
-  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed --phase <N>
+  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed
   ```
+  Add `--phase <N>` only when task_execution_mode = "phase-iterative".
 - Set state: `IDLE`
-- Check if all tasks done → set `COMPLETE` if yes
+- Check if all tasks done (one-shot) or all current-phase tasks done (phase-iterative)
 - Output EXACTLY: "Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
 - **>>> STOP. END RESPONSE. DO NOT CONTINUE. <<<**
 
@@ -112,10 +119,12 @@ On first run (no state.yaml):
 7. Initialize `state.yaml` with state: IDLE
 8. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
    ```bash
-   python -m openspec.telemetry.auto on-apply-start --change "<name>" --phase <N>
+   python -m openspec.telemetry.auto on-apply-start --change "<name>"
    ```
-   Where `<N>` is `current_plan_phase` from state.yaml.
-9. Pick first pending task for the current phase → continue to step 4
+   Add `--phase <N>` only when task_execution_mode = "phase-iterative" (where `<N>` is `current_plan_phase` from state.yaml).
+9. Pick first pending task → continue to step 4
+   - **phase-iterative**: pick first pending task for the current phase only
+   - **one-shot**: pick first pending task across all phases in §2 order
 
 ### 4. Execute ONE task
 
@@ -126,7 +135,9 @@ Set state: `EXECUTING_TASK`. Write state.yaml.
 
 **Telemetry — signal task start** (silent, non-blocking):
 ```bash
-python -m openspec.telemetry.auto on-task-start --change "<name>" --task-id "<TASK_ID>" --agent "<AGENT_ID>" --title "<task_title>" --phase <N>
+python -m openspec.telemetry.auto on-task-start --change "<name>" --task-id "<TASK_ID>" --agent "<AGENT_ID>" --title "<task_title>"
+```
+Add `--phase <N>` only when task_execution_mode = "phase-iterative".
 ```
 
 ---
@@ -311,7 +322,26 @@ ASK: **"Approve the code changes for task {task_id} ({task_title})? (Approve / R
 **║  The user must send a new message to proceed.               ║**
 **╚══════════════════════════════════════════════════════════════╝**
 
-### 6. Phase boundary (all current-phase tasks complete)
+### 6. Post-loop / Phase boundary
+
+Read `config.yaml → flags.task_execution_mode`.
+
+#### IF task_execution_mode = "one-shot"
+
+When ALL tasks in tasks.md §3 are marked `- [x]`:
+
+1. **Telemetry — signal apply complete** (silent, non-blocking):
+   ```bash
+   python -m openspec.telemetry.auto on-apply-complete --change "<name>"
+   ```
+2. Write `implementation-report.md` aggregating all `task-reports/*.md`
+3. Write `deviation-observed.md` if any deviations logged
+4. **Default mode:** Commit, push feature branch, open draft PR.
+   **Working-folder mode:** skip push/PR; record local changes in implementation-report.md.
+5. Present final summary: tasks, files, tests, deviations; draft PR URL when applicable.
+6. Set state: `COMPLETE`. Write state.yaml.
+
+#### IF task_execution_mode = "phase-iterative"
 
 When all **current phase** tasks are marked complete:
 
@@ -367,8 +397,10 @@ If you find yourself about to start a new task in the same response — STOP. Yo
 
 When the user requests "approve all", "continue all tasks", or similar batch execution that completes multiple tasks in a single session, per-task token estimation is unreliable (file-based estimation repeats the same shared context for every task). Use `--batch` flags on telemetry hooks so tokens are attributed at the phase level only:
 
-1. At batch start: `python -m openspec.telemetry.auto on-apply-start --change "<name>" --phase <N> --batch`
-2. Per task: still call `on-task-start --phase <N>` and `on-task-complete --phase <N> --batch` for each task (records status, agent, eval loops — but tokens_in/out = 0 with attribution = "phase_aggregate")
+1. At batch start: `python -m openspec.telemetry.auto on-apply-start --change "<name>" --batch`
+   Add `--phase <N>` only for phase-iterative mode.
+2. Per task: still call `on-task-start` and `on-task-complete --batch` for each task (records status, agent, eval loops — but tokens_in/out = 0 with attribution = "phase_aggregate").
+   Add `--phase <N>` to both only for phase-iterative mode.
 3. At end: `python -m openspec.telemetry.auto on-apply-complete --change "<name>"` (phase-level tokens computed once, not summed per-task)
 4. Do **not** expect per-task token breakdown in metrics for batch runs
 

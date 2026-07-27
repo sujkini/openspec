@@ -186,6 +186,11 @@ Always generate the report — even for `skip` gates. The report serves as a qua
 
 ## Step 5 — User approval gate
 
+**Auto-approve check**: Read `config.yaml → flags.auto_approve`. If `true`, skip the user
+prompt below and treat the artifact as Approved. Still present the scorecard summary
+(items 1–5) for logging, but do not wait for user input. Proceed directly to the Approve
+path. Exception: specs rejection (`exit_on_reject.specs`) is never auto-triggered.
+
 Present to user:
 
 1. **Artifact**: path + short summary of what was produced/refined
@@ -193,7 +198,7 @@ Present to user:
 3. **Eval scorecard**: overall % + table of cases (pass/fail) + top failures
 4. **Gaps identified**: summary of critical/moderate gaps from the evaluation report
 5. **Refinement**: "Refined after eval" yes/no; what was added/fixed
-6. **Ask**:
+6. **Ask** (skip if `auto_approve: true`):
 
 > Eval score: **{overall_score}%** ({N}/{M} cases pass).  
 > Evaluation report: `openspec/changes/<change>/<artifact-id>_evaluation_report.md`  

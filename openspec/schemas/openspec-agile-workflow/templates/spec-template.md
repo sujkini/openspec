@@ -17,10 +17,13 @@ It must only express user value and business requirements. Planning agents fail 
   non_blockers. When present, address each item explicitly in the generated spec.
 
 ## Task
-1) Extract user stories from the ticket. Assign priorities (P1 critical, P2 important, P3 nice-to-have).
+1) Extract user stories from the ticket. Assign stable IDs (US-001, US-002, …) and priorities
+   (P1 critical, P2 important, P3 nice-to-have).
    Each story must be independently testable with acceptance scenarios in Given/When/Then format.
 2) Derive functional requirements (FR-001, FR-002, ...) from ticket description and acceptance criteria.
    Every requirement must be testable and unambiguous. No implementation details.
+2a) Build a Story → FR Traceability table mapping each US-00x to the FR-00x IDs it requires.
+    Every FR must appear in at least one story mapping.
 3) Identify data/domain entities if the feature involves data (Key Entities section).
 4) Define measurable, technology-agnostic success criteria (SC-001, SC-002, ...).
 5) Document all assumptions — reasonable defaults for anything the ticket does not specify.
@@ -57,7 +60,9 @@ Follow the output template structure exactly.
 <!--
   QUALITY TARGET: ≥95% against the Stage 1 rubric before output is final.
   Self-check (all must pass):
+  - Every user story has a stable ID (US-001, US-002, …).
   - Every FR maps to ≥1 Given/When/Then scenario; every P1 story has ≥2 scenarios.
+  - Story → FR Traceability table is present; every FR appears in ≥1 story mapping.
   - Zero implementation leakage (no languages, frameworks, file paths, API groups, version pins).
   - Success criteria are user-observable outcomes — NOT CI gates, release processes, or internal milestones.
   - Edge cases state concrete outcomes (not open questions); resolve singleton/scope ambiguities in FR text.
@@ -80,7 +85,7 @@ Follow the output template structure exactly.
   - Demonstrated to users independently
 -->
 
-### User Story 1 - [Brief Title] (Priority: P1)
+### US-001: [Brief Title] (Priority: P1)
 
 [Describe this user journey in plain language]
 
@@ -95,7 +100,7 @@ Follow the output template structure exactly.
 
 ---
 
-### User Story 2 - [Brief Title] (Priority: P2)
+### US-002: [Brief Title] (Priority: P2)
 
 [Describe this user journey in plain language]
 
@@ -109,7 +114,7 @@ Follow the output template structure exactly.
 
 ---
 
-### User Story 3 - [Brief Title] (Priority: P3)
+### US-003: [Brief Title] (Priority: P3)
 
 [Describe this user journey in plain language]
 
@@ -123,7 +128,7 @@ Follow the output template structure exactly.
 
 ---
 
-[Add more user stories as needed, each with an assigned priority]
+[Add more user stories as needed, each with US-00x ID and assigned priority]
 
 ### Edge Cases
 
@@ -159,6 +164,18 @@ Follow the output template structure exactly.
 - **FR-003**: Users MUST be able to [key interaction, e.g., "disable the feature without removing unrelated operands"]
 - **FR-004**: System MUST [data requirement, e.g., "preserve existing trust bundles when the feature is disabled"]
 - **FR-005**: System MUST [behavior, e.g., "surface health/degraded status when prerequisites are unmet"]
+
+### Story → FR Traceability *(mandatory)*
+
+<!--
+  Map each user story to the functional requirements it depends on.
+  Every FR must appear in at least one story mapping.
+  A single FR may appear under multiple stories when the capability is shared.
+-->
+
+- **US-001**: FR-001, FR-003, …
+- **US-002**: FR-002, …
+- **US-003**: FR-004, FR-005, …
 
 ### Key Entities *(include if feature involves data)*
 

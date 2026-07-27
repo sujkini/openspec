@@ -19,9 +19,15 @@ phase's tasks. Task IDs use the phase prefix (T{N}_*).
 
 ### Output sections — use these EXACT `##` headings in your response
 
-## 0. Input coverage checklist
+## 0. Input Coverage Checklist
+
+### Functional Requirements → Task Coverage
 One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with the Task IDs that
 cover it. Every spec goal and every plan phase must appear.
+
+### User Stories → Task Coverage
+One bullet per US-00x with covering Task IDs (and Jira key when available).
+Every US-00x from specs.md must appear with ≥1 Task ID.
 
 ## 1. Task Dependency Graph (Mermaid)
 ```mermaid
@@ -39,12 +45,13 @@ graph TD
 ...
 
 ## 3. Task Execution Manifest
-| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk |
-|---------|-----------|---------------|-------|-----------|------------|-----------|------|
-| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] |
+| Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story |
+|---------|-----------|---------------|-------|-----------|------------|-----------|------|------------|
+| T1_1 | [TITLE] | [AGENT_ID] | [PHASE] | none | No | [1-8] | [Low/Med/High] | US-001 |
 
 ## 4. Task Specifications (Payloads)
 ### Task <ID>: <Title>
+- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ...
@@ -59,6 +66,9 @@ graph TD
 
 ### Quality self-check
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
+- [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
+- [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)
 - [ ] §3 manifest row count equals §4 payload subsection count (every ID covered)
 - [ ] §2 linear order is a valid topological sort of §1 DAG
