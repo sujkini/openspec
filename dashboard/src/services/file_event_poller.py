@@ -241,6 +241,44 @@ class FileEventPoller:
             db.add(phase)
             await db.commit()
 
+            new_phase_number = event.get("phase_number", 0)
+            if new_phase_number > 1 and event.get("plan_phase") is None:
+                stale = await db.execute(
+                    select(PhaseExecution).where(
+                        PhaseExecution.run_id == run_id,
+                        PhaseExecution.phase_number < new_phase_number,
+                        PhaseExecution.status == PhaseStatus.running,
+                        PhaseExecution.plan_phase.is_(None),
+                    )
+                )
+                repaired = []
+                for orphan in stale.scalars().all():
+                    orphan.status = PhaseStatus.passed
+                    orphan.completed_at = datetime.now(timezone.utc)
+                    if not orphan.quality_label:
+                        orphan.quality_label = "auto-closed (later phase started)"
+                    repaired.append(orphan)
+                    logger.info(
+                        "Orphan repair: closed phase %s (%s) as passed for run %s",
+                        orphan.phase_number, orphan.phase_name.value, run_id,
+                    )
+                await db.commit()
+                for orphan in repaired:
+                    await sse_broker.publish(
+                        "phase_update",
+                        {
+                            "phase_name": orphan.phase_name.value,
+                            "status": orphan.status.value,
+                            "iteration_count": orphan.iteration_count,
+                            "tokens_in": orphan.tokens_in,
+                            "tokens_out": orphan.tokens_out,
+                            "quality_score": orphan.quality_score,
+                            "quality_label": orphan.quality_label,
+                            "plan_phase": orphan.plan_phase,
+                        },
+                        run_id=run_id,
+                    )
+
             await sse_broker.publish(
                 "phase_update",
                 {
@@ -354,6 +392,17 @@ class FileEventPoller:
             db.add(task)
             await db.commit()
 
+            await sse_broker.publish(
+                "task_update",
+                {
+                    "task_id": task.task_id,
+                    "status": task.status.value,
+                    "phase_id": task.phase_id,
+                    "metadata_json": None,
+                },
+                run_id=run_id,
+            )
+
     async def _handle_task_end(self, change: str, event: dict[str, Any]) -> None:
         task_pk = event.get("task_pk", "")
         if not task_pk:
@@ -369,6 +418,8 @@ class FileEventPoller:
             task.cost_usd = event.get("cost_usd", 0)
             task.self_correction_loops = event.get("self_correction_loops", 0)
             task.token_attribution = event.get("attribution")
+            if event.get("metadata"):
+                task.metadata_json = event["metadata"]
             task.completed_at = datetime.now(timezone.utc)
 
             if task.token_attribution != "phase_aggregate" and task.cost_usd == 0 and (task.tokens_in + task.tokens_out) > 0:
@@ -381,6 +432,17 @@ class FileEventPoller:
 
             run_id = task.run_id
             await db.commit()
+
+            await sse_broker.publish(
+                "task_update",
+                {
+                    "task_id": task.task_id,
+                    "status": task.status.value,
+                    "phase_id": task.phase_id,
+                    "metadata_json": task.metadata_json,
+                },
+                run_id=run_id,
+            )
 
         await self._publish_metrics_update(run_id)
 

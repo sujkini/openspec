@@ -17,6 +17,10 @@ export function useSSE(runId: string | null) {
     string,
     unknown
   > | null>(null);
+  const [lastTaskUpdate, setLastTaskUpdate] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   const connectionRef = useRef<{ close: () => void } | null>(null);
 
@@ -43,6 +47,9 @@ export function useSSE(runId: string | null) {
       case "phase_update":
         setLastPhaseUpdate(data);
         break;
+      case "task_update":
+        setLastTaskUpdate(data);
+        break;
       case "metrics_update":
         setLastMetricsUpdate(data);
         break;
@@ -62,5 +69,5 @@ export function useSSE(runId: string | null) {
     };
   }, [runId, handleEvent]);
 
-  return { logs, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus };
+  return { logs, lastPhaseUpdate, lastTaskUpdate, lastMetricsUpdate, lastPipelineStatus };
 }

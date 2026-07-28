@@ -1572,6 +1572,13 @@ artifacts:
          templates/code-generation-template.md for FILE OPERATIONS format; implement this
          task's payload directly in cwd with minimal scoped edits; log deviations.
       7. **Verify**: Run Acceptance criteria for this task; record pass/fail.
+      7b. **Source integrity checks (Go files)**:
+          - Existing source files must be edited in-place (do not recreate/append full bodies).
+          - Never use append semantics (`>>`, `tee -a`) for source edits.
+          - Before presenting for approval, ensure each changed `.go` file has exactly one
+            `package` clause.
+          - If duplicate package declarations are detected in verify/test output, restore the
+            affected file from git `HEAD`, re-apply intended task edits, and re-run verification.
       8. **Code eval gate** (see schema code_generation_eval_gate and
          stage-gate/CODE_GENERATION_EVAL_PROMPT.md): load evals/code-generation_eval.yaml;
          filter by resolved oape_command; score fork working copy; write
@@ -1653,6 +1660,8 @@ artifacts:
       - fork_repo_url missing → halt and ask user (**skip when use_working_folder_as_repo**).
       - ai-helpers mode: OAPE precheck failure → report, suggest fix, wait for user.
       - Test failure on a task → report; do not advance to next task without user decision.
+      - Duplicate package failure in `.go` file → reset affected file(s) to git `HEAD`,
+        re-apply scoped edits only, re-run verification/tests before asking approval.
       - Never skip task approval gate.
       - ai-helpers mode: Invoke exactly one allowed OAPE command per task; never
         predict-regressions, review, or any command outside allowed_commands.

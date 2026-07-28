@@ -73,6 +73,7 @@ export interface TaskExecution {
   tokens_out: number;
   cost_usd: number;
   token_attribution?: string | null;
+  metadata_json?: Record<string, unknown> | null;
   started_at: string | null;
   completed_at: string | null;
 }

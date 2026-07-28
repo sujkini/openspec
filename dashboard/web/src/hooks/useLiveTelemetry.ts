@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 export function useLiveTelemetry(
   runId: string | null,
   lastPhaseUpdate: Record<string, unknown> | null,
+  lastTaskUpdate: Record<string, unknown> | null,
   lastMetricsUpdate: Record<string, unknown> | null,
   lastPipelineStatus: Record<string, unknown> | null
 ) {
@@ -18,6 +19,11 @@ export function useLiveTelemetry(
     if (!runId || !lastPhaseUpdate) return;
     queryClient.invalidateQueries({ queryKey: ["phases", runId] });
   }, [queryClient, runId, lastPhaseUpdate]);
+
+  useEffect(() => {
+    if (!runId || !lastTaskUpdate) return;
+    queryClient.invalidateQueries({ queryKey: ["tasks", runId] });
+  }, [queryClient, runId, lastTaskUpdate]);
 
   useEffect(() => {
     if (!runId || !lastMetricsUpdate) return;

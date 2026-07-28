@@ -86,6 +86,15 @@ This section is **skipped entirely** when `codegen_mode = direct`.
 7. **Unit test co-generation (mandatory for Tier 1):** Tasks classified as Tier 1 MUST
    include `_test.go` files in FILE OPERATIONS. Co-generate tests BEFORE presenting for
    verification. Test files are permanent — committed alongside production code.
+8. **Existing-path safety:** If a target path already exists in the working copy, you MUST use
+   `EDIT` operations for that path. Use `CREATE` only for genuinely new files.
+9. **No shell append for source edits:** Never use `>>`, `tee -a`, or equivalent append semantics
+   when modifying source files (`.go`, `.py`, `.ts`, `.js`, `.yaml`, `.yml`, `.sh`).
+   Apply in-place edits only.
+10. **Patch failure handling:** If you cannot apply a clean in-place edit for an existing file,
+    STOP and report a blocker in `DEVIATIONS` rather than falling back to full-file rewrite.
+11. **Go package integrity:** For every modified `.go` file, ensure exactly one `package`
+    clause remains before presenting for approval.
 
 ## Required response format
 
@@ -118,6 +127,12 @@ For each file you create, edit, or delete, use one of these formats:
 #### DELETE: `<relative/path/to/file>`
 
 You may include multiple EDIT blocks for the same file.
+
+Safety semantics:
+- `CREATE` is valid only when the file does not already exist.
+- `EDIT` is required for existing files; preserve untouched sections byte-for-byte.
+- Do not emit full-file replacement blocks for existing files unless the task explicitly
+  requires whole-file regeneration.
 
 ### DEVIATIONS (optional)
 

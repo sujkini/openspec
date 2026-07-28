@@ -20,6 +20,7 @@ export function createSSEConnection(
     const eventTypes = [
       "agent_log",
       "phase_update",
+      "task_update",
       "metrics_update",
       "pipeline_status",
       "heartbeat",

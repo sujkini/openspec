@@ -42,8 +42,7 @@ function StatusBadge({ status }: { status: PhaseExecution["status"] }) {
   );
 }
 
-function SubPhaseRow({ phase }: { phase: PhaseExecution }) {
-  const isLooping = phase.iteration_count > 3;
+function LegacySubPhaseRow({ phase }: { phase: PhaseExecution }) {
   return (
     <tr className="border-b border-terminal-border/50 hover:bg-terminal-surface/30 transition-colors">
       <td className="px-4 py-2 text-sm pl-10">
@@ -54,8 +53,7 @@ function SubPhaseRow({ phase }: { phase: PhaseExecution }) {
         <StatusBadge status={phase.status} />
       </td>
       <td className="px-4 py-2 text-sm text-center">
-        {phase.iteration_count} {phase.iteration_count > 1 ? "Iter." : "Iter."}
-        {isLooping && " 🔄"}
+        {phase.iteration_count} Iter.
       </td>
       <td className="px-4 py-2 text-sm text-center">
         {formatDuration(phase.duration_s)}
@@ -97,9 +95,6 @@ export default function PhaseRow({ phase, subPhases }: PhaseRowProps) {
           >
             {statusLabel}
           </span>
-          {phase.phase_name === "code_generation" && phase.status === "running" && (
-            <span className="text-terminal-muted text-xs ml-1">(closes on impl. report)</span>
-          )}
         </td>
         <td className="px-4 py-2.5 text-sm text-center">
           {phase.iteration_count} {phase.iteration_count > 1 ? "Iterations" : "Iteration"}
@@ -116,7 +111,7 @@ export default function PhaseRow({ phase, subPhases }: PhaseRowProps) {
         </td>
       </tr>
       {subPhases?.map((sp) => (
-        <SubPhaseRow key={sp.id} phase={sp} />
+        <LegacySubPhaseRow key={sp.id} phase={sp} />
       ))}
     </>
   );

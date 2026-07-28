@@ -7,7 +7,7 @@ import PhaseWaterfall from "@/components/phases/PhaseWaterfall";
 import WorkerLogs from "@/components/logs/WorkerLogs";
 import TokenBurnChart from "@/components/metrics/TokenBurnChart";
 
-import { useRuns, useRun, usePhases, useEvents } from "@/hooks/useRun";
+import { useRuns, useRun, usePhases, useTasks, useEvents } from "@/hooks/useRun";
 import ArtifactEdits from "@/components/metrics/ArtifactEdits";
 import { useGlobalHealth, useTokenBurn, useArtifactEdits } from "@/hooks/useMetrics";
 import { useSSE } from "@/hooks/useSSE";
@@ -23,13 +23,14 @@ export default function App() {
 
   const { data: run } = useRun(activeRunId);
   const { data: phases } = usePhases(activeRunId);
+  const { data: tasks } = useTasks(activeRunId);
   const { data: metrics } = useGlobalHealth(activeRunId);
   const { data: tokenBurn } = useTokenBurn(activeRunId);
   const { data: artifactEdits } = useArtifactEdits(activeRunId);
   const { data: historicalEvents } = useEvents(activeRunId);
-  const { logs: streamLogs, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus } = useSSE(activeRunId);
+  const { logs: streamLogs, lastPhaseUpdate, lastTaskUpdate, lastMetricsUpdate, lastPipelineStatus } = useSSE(activeRunId);
 
-  useLiveTelemetry(activeRunId, lastPhaseUpdate, lastMetricsUpdate, lastPipelineStatus);
+  useLiveTelemetry(activeRunId, lastPhaseUpdate, lastTaskUpdate, lastMetricsUpdate, lastPipelineStatus);
 
   const allLogs: AgentEvent[] = useMemo(() => {
     const seen = new Set<string>();
@@ -76,7 +77,7 @@ export default function App() {
 
       <GlobalHealthMetrics metrics={metrics ?? null} />
 
-      <PhaseWaterfall phases={phases ?? []} />
+      <PhaseWaterfall phases={phases ?? []} tasks={tasks ?? []} />
 
       <ArtifactEdits data={artifactEdits ?? null} />
 

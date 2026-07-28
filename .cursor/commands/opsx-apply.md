@@ -51,6 +51,8 @@ Initialize from template on first invocation if missing.
 6. **Context windowing** — only load §4 payload for `current_task_id`, not all tasks
 7. **Write state after every transition** — state must survive agent crashes
 8. **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-apply`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
+9. **Edit safety for existing source files** — never append to source files using `>>` / `tee -a`; use in-place edits only.
+10. **No unsafe fallback rewrites** — if an existing file edit cannot be applied cleanly, STOP and request user guidance rather than appending/replacing with full-file dumps.
 
 ## YIELD BOUNDARY — CRITICAL
 
@@ -271,6 +273,11 @@ current_task_result:
 
 ### 5. Present and YIELD
 
+Before setting `AWAITING_APPROVAL`, run a source integrity check for changed Go files:
+- Each changed `.go` file must contain exactly one `package` clause.
+- If any file has duplicate package declarations, treat as a failed verification/refinement outcome.
+- Restore the affected file(s) from `HEAD`, re-apply intended task edits, re-run verification/tests, and only then proceed to presentation.
+
 Set state: `AWAITING_APPROVAL`. Write state.yaml.
 
 #### ai-helpers mode — presentation format
@@ -381,6 +388,8 @@ When all **current phase** tasks are marked complete:
 - **Never advance without a fresh invocation** — even if user says "approve", you stop after recording it
 - On reject: re-run current task only (full loop)
 - **ai-helpers mode**: One OAPE command per task; OAPE in fork/working-folder cwd only
+- **Never append source files** — prohibit `>>` / `tee -a` and similar append semantics for code edits
+- **Duplicate package recovery** — if `go build`/`go test` shows duplicate `package` blocks, reset affected file(s) from git `HEAD` before reapplying task edits
 
 ## Anti-Batching Contract
 

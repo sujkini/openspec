@@ -178,6 +178,7 @@ class TelemetryClient:
         cost_usd: float = 0,
         self_correction_loops: int = 0,
         attribution: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         event: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -192,6 +193,8 @@ class TelemetryClient:
         }
         if attribution:
             event["attribution"] = attribution
+        if metadata:
+            event["metadata"] = metadata
         self._write_event(event)
 
     def log_event(

@@ -110,6 +110,21 @@ verification:
 If any verification command fails: **do not proceed to evals**. Fix the code first,
 then re-run verification. This counts toward the 2-pass refinement budget.
 
+### 2d. Duplicate `package` recovery for Go files (mandatory)
+
+When verification fails for a modified `.go` file and output indicates duplicate package
+declarations (for example multiple `package <name>` blocks in one file):
+
+1. Identify the affected file(s) from compiler output.
+2. Restore each affected file to the branch `HEAD` version before retrying:
+   ```bash
+   git checkout -- <path/to/file.go>
+   ```
+3. Re-apply only the intended task-specific edits using in-place edit operations.
+4. Re-run step 2 verification commands before continuing.
+
+Do NOT continue refinement on a duplicated/corrupted Go file body.
+
 ## Step 3 — Score each applicable eval case
 
 For each filtered case in `evals:`:
@@ -342,6 +357,8 @@ Include all three result sections:
 
 4. **Code eval scorecard** — overall %, cases pass/fail, refinement rounds, eval-driven fixes applied
 5. **Remaining gaps** — if any cases/tests still fail after max refinement passes
+6. **Go package integrity check** — for each changed `.go` file, verify exactly one
+   package clause remains (for example with `rg -n "^package " <file>` expecting one match)
 
 ## Step 8 — User code approval
 
@@ -372,3 +389,4 @@ Ask (substitute task_id, task_title, verification/test results):
 - Score **code in fork cwd** — not markdown under `openspec/changes/`
 - Task reports accumulate under `implementation/task-reports/` for final `implementation-report.md`
 - Refinement budget: **2 passes total** shared across eval failures, verification failures, and test failures
+- **Never** use append-based shell edits (`>>`, `tee -a`) for source-file refinements

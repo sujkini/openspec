@@ -429,6 +429,20 @@ def on_artifact_complete(args: argparse.Namespace) -> None:
                 batch_mode=batch,
             )
             phases[key]["ended"] = True
+            plan_phase = getattr(args, "phase", None)
+            if plan_phase is not None:
+                sub_key = _sub_phase_key(phase_number, plan_phase)
+                sub_phases = state.get("sub_phases", {})
+                sub_info = sub_phases.get(sub_key)
+                if sub_info and not sub_info.get("ended"):
+                    client.end_phase(
+                        sub_info["id"],
+                        status="passed" if args.status == "passed" else "failed",
+                        quality_label=getattr(args, "label", "") or f"plan_phase_{plan_phase}_complete",
+                        tokens_in=sub_info.get("tokens_in", 0),
+                        tokens_out=sub_info.get("tokens_out", 0),
+                    )
+                    sub_info["ended"] = True
             _save_state(args.change, state)
             _out({"ok": True, "phase_ended": True, "tokens_in": cum_in, "tokens_out": cum_out, "batch_mode": batch})
         else:
