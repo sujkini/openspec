@@ -8,6 +8,10 @@ description: Implement tasks — one task per invocation, state machine driven (
 Implement an OpenSpec change. **ONE task per invocation.**
 State-machine driven with externalized state at `implementation/state.yaml`.
 
+> **`auto_approve` does NOT apply here.** The `config.yaml → flags.auto_approve` flag
+> controls artifact-level approval in `/opsx-continue` only. Task-level code approval
+> in `/opsx-apply` **always** requires explicit user approval. Never skip the approval prompt.
+
 **Mode**: Read `codegen_mode` from `openspec/config.yaml` → `flags.codegen_mode`:
 - `ai-helpers` — OAPE command routing + code-generation eval gate
 - `direct` — plain agent implementation, no OAPE commands, no code eval gate
@@ -390,6 +394,7 @@ When all **current phase** tasks are marked complete:
 - **ai-helpers mode**: One OAPE command per task; OAPE in fork/working-folder cwd only
 - **Never append source files** — prohibit `>>` / `tee -a` and similar append semantics for code edits
 - **Duplicate package recovery** — if `go build`/`go test` shows duplicate `package` blocks, reset affected file(s) from git `HEAD` before reapplying task edits
+- **auto_approve ignored** — `config.yaml → flags.auto_approve` does NOT affect `/opsx-apply`. Task approval always requires explicit user confirmation. Never read or check `auto_approve` in this command.
 
 ## Anti-Batching Contract
 

@@ -381,23 +381,27 @@ task_sizing:
 # ---------------------------------------------------------------------------
 # task_execution_mode — one-shot vs phase-iterative task generation/implementation
 # ---------------------------------------------------------------------------
-# auto_approve — skip all user approval prompts
+# auto_approve — auto-approve artifacts in /opsx-continue (not tasks)
 # ---------------------------------------------------------------------------
 auto_approve:
   description: >-
-    When true, all user approval gates are auto-approved without prompting.
-    Applies to: artifact approval (specs, repo-assessment, plan, tasks),
-    per-task approval during implementation, and the Jira Story creation prompt.
+    When true, artifact approval gates in /opsx-continue are auto-approved
+    without prompting. The agent loops through all ready artifacts automatically
+    (validation → specs → repo-assessment → constitution → plan → tasks.md)
+    using batch telemetry, stopping only after tasks.md is approved.
     Evals still run and artifacts are still refined — only the user prompt is skipped.
     Exception: specs rejection (exit_on_reject) still requires explicit user action.
     auto_approve only auto-approves, never auto-rejects.
+    DOES NOT AFFECT /opsx-apply: per-task code approval during implementation
+    always requires explicit user approval regardless of this flag.
   config_key: flags.auto_approve
-  default: false
+  default: true
   affects:
-    - user_approval_feedback_gate.approval_prompt
+    - user_approval_feedback_gate.approval_prompt (artifact-level only)
     - user_approval_feedback_gate.exit_on_reject.specs (NOT affected — rejection is always explicit)
-    - implementation task approval (code_generation_eval_gate.task_approval_prompt)
     - user_stories_jira_sync Jira Story creation prompt
+  does_not_affect:
+    - implementation task approval (code_generation_eval_gate.task_approval_prompt — always prompted)
 
 # ---------------------------------------------------------------------------
 task_execution_mode:
@@ -506,11 +510,10 @@ code_generation_eval_gate:
   flow: >-
     execute_oape_or_manual → verify_task_criteria → run_code_generation_evals →
     refine_code_until_pass_or_max_passes → present_task_summary_with_scorecard →
-    check_auto_approve → (auto_approve=true → write_task_report → next_task) |
-    (auto_approve=false → user_code_approval → write_task_report → next_task)
+    user_code_approval → write_task_report → next_task
   task_approval_prompt: >-
-    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
-    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    auto_approve does NOT apply to task approval — always prompt the user.
+    Ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   skip_when:
@@ -866,14 +869,14 @@ oape_routing:
           pass or max_refinement_passes (2); do NOT ask user approval before this completes
         - Present task summary with code eval scorecard
         - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt);
-          if config.yaml → flags.auto_approve is true, skip prompt and treat as Approve
+          auto_approve does NOT apply — always prompt the user for task approval
         - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
         - >-
           On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`
         - Advance to next pending task in §2 order
   task_approval_prompt: >-
-    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
-    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    auto_approve does NOT apply to task approval — always prompt the user.
+    Ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   command_order:

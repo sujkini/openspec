@@ -5,7 +5,7 @@ category: Workflow
 description: Continue agile-workflow change - create next artifact, eval gate, refine, approve (OPSX)
 ---
 
-Continue working on a change by creating the **next** artifact (one per invocation), then **eval → refine artifact → user approval**.
+Continue working on a change by creating the **next** artifact, then **eval → refine artifact → approval**. When `config.yaml → flags.auto_approve` is `true`, auto-loops through **all** remaining artifacts without prompting (see "Auto-approve loop" section). When `false`, processes one artifact per invocation.
 
 **Input**: Optional change name after `/opsx-continue` (e.g. `/opsx-continue cm-830`).
 
@@ -168,15 +168,40 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 | tasks | `evals/tasks_eval.yaml` |
 
 
+## Auto-approve loop
+
+Read `config.yaml → flags.auto_approve` at the start of execution.
+
+**When `auto_approve` is `true`:**
+
+After step 11 completes with `--status passed`, **do NOT stop**. Instead:
+
+1. Re-run `openspec status --change "<name>" --json` to refresh artifact statuses.
+2. If another artifact has `status: "ready"`, loop back to **step 5** and process it.
+   Use `--batch` flags on all telemetry hooks (see "Batch / Continue-All Telemetry" below).
+3. Continue looping until **no more artifacts** have `status: "ready"` (all approved or
+   the final artifact `tasks.md` is approved).
+4. When the loop ends, print a summary of all artifacts processed and their eval scores.
+
+This means a single `/opsx-continue` invocation with `auto_approve: true` will process
+**all** remaining artifacts (validation → specs → repo-assessment → constitution → plan → tasks)
+in sequence, stopping only after the last one is approved.
+
+**When `auto_approve` is `false`:**
+
+Process ONE artifact per invocation (original behavior). Stop after user approval/rejection
+of the current artifact.
+
 ## Guardrails
 
-- ONE artifact per invocation (includes eval + refine + approval for that artifact)
+- When `auto_approve` is `false`: ONE artifact per invocation (includes eval + refine + approval)
+- When `auto_approve` is `true`: loop through ALL ready artifacts in a single invocation
 - Do not skip eval gate for artifacts with `gate: stage_evals`
 - Do not skip user approval (unless `config.yaml → flags.auto_approve` is `true`)
 - Do not refine **templates** during eval gate — refine the **change artifact** only
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
-- Do not create the next artifact until the user approves the current one (auto_approve bypasses the prompt, not the approval gate itself)
+- Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 
 ## Batch / Continue-All Telemetry
