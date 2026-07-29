@@ -1,6 +1,6 @@
-# openspec-agile-workflow- one shot/phase
+# OpenSpec Agile Workflow
 
-Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two code-generation strategies: **ai-helpers** (OAPE command routing + eval gate) and **direct** (plain agent implementation).
+Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two execution strategies (**phase-iterative** and **one-shot**), two code-generation modes (**ai-helpers** and **direct**), per-phase Jira traceability, and a post-CI E2E test generation pipeline.
 
 ---
 
@@ -16,22 +16,21 @@ git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /
 
 This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
-### 2. Choose code generation mode (`openspec/config.yaml`)
-
-Set `flags.codegen_mode` before you start implementing tasks:
+### 2. Configure execution mode (`openspec/config.yaml`)
 
 ```yaml
 # openspec/config.yaml
 flags:
-  codegen_mode: ai-helpers   # or: direct
+  codegen_mode: ai-helpers        # or: direct
+  task_execution_mode: phase-iterative  # or: one-shot
+  auto_approve: false             # true for fully autonomous runs
 ```
 
-| Mode | When to use | What `/opsx-apply` does |
-|------|-------------|-------------------------|
-| **`ai-helpers`** (default) | API/controller/e2e work that benefits from specialized OAPE Cursor commands and a code eval gate | design-bundle → OAPE command → verify → code eval → refine → approve |
-| **`direct`** | Straightforward tasks; simpler/faster path | agent reads context → FILE OPERATIONS → verify → approve (no OAPE, no code eval) |
-
-Change the flag anytime; `/opsx-apply` reads it on each invocation. Details below under [Configuration](#configuration-openspecconfigyaml).
+| Flag | Options | Purpose |
+|------|---------|---------|
+| `codegen_mode` | `ai-helpers` / `direct` | Code generation strategy |
+| `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
+| `auto_approve` | `true` / `false` | Skip manual approval gates |
 
 ### 3. Start the Dashboard
 
@@ -51,6 +50,74 @@ Restart Cursor so slash commands load from `.cursor/commands/`.
 ```
 /opsx-new PROJ-123
 ```
+
+---
+
+## Task Execution Modes
+
+### Phase-Iterative (default)
+
+Tasks are executed one phase at a time. After each phase completes:
+- A draft PR is raised scoped to that phase
+- A Jira Story ticket is created for the phase (linked to the epic)
+- The user can trigger `/opsx-e2e --phase N` after CI passes
+- `/opsx-continue` generates next-phase tasks
+
+### One-Shot
+
+All tasks across all phases are executed sequentially in a single run. A single PR is raised at the end covering the entire implementation. After CI passes, trigger `/opsx-e2e` for the final PR.
+
+---
+
+## E2E Exclusion Policy
+
+E2E phases and tasks are **excluded from OAPE planning, task generation, and code generation**. They are handled separately by the `/opsx-e2e` post-CI pipeline instead.
+
+A phase or task is classified as e2e when any of these match:
+- Assigned Agent is `Testing_Agent`
+- Title/objective contains "e2e" or "end-to-end"
+- Target files are under `test/` (e2e, ginkgo, integration paths)
+- Acceptance criteria references `make test-e2e`
+
+E2e coverage is still documented in `plan.md` §6 (Verification matrix) for reference but is never generated during `/opsx-apply`.
+
+---
+
+## E2E Test Generation (Post-CI)
+
+After a phase or final PR is raised and CI passes, trigger the E2E pipeline:
+
+```
+/opsx-e2e <change-name> --phase N    # phase-iterative: specific phase
+/opsx-e2e <change-name>              # one-shot: final PR
+/opsx-e2e --pr <URL>                 # direct PR URL
+```
+
+The pipeline runs five stages, each with a user approval gate:
+
+| Stage | Output | Description |
+|-------|--------|-------------|
+| Pre-analysis | `e2e-analysis.md` | Scoping analysis from PR diff + review comments |
+| Test plan | `test-plan.md` | Full tiered plan (15–20 cases) with traceability |
+| Consolidation | `revised-test-plan.md` | Journey consolidation to configured limit |
+| Code generation | `*_test.go` | Executable Ginkgo/Go test code |
+| Execute | Push + run | Commit tests to PR branch, optionally execute |
+
+All artifacts are written to `openspec/changes/<name>/e2e/`.
+
+---
+
+## Jira Integration
+
+### Per-Phase Jira Tickets (phase-iterative mode)
+
+After tasks for a phase are approved, a Jira Story ticket is created:
+- Linked to the epic from `inputs/jira.yaml`
+- Summary: `[Phase N] <phase title>`
+- Description includes phase goal, dependencies, target files, task manifest, and acceptance criteria
+- Stored in `inputs/jira.yaml` → `plan_phases[]`
+
+If Jira creation fails, the phase is marked `PENDING` and retried once at `/opsx-apply` start.
 
 ---
 
@@ -91,7 +158,7 @@ The bundled `agents.md` ships with a reference. Replace it entirely with your op
 /opsx-continue              → specs.md             [approve]
 /opsx-continue              → repo-assessment.md   [approve] (constitution.md resolved as input)
 /opsx-continue              → plan.md              [approve]
-/opsx-continue              → tasks.md             [approve]
+/opsx-continue              → tasks.md             [approve] (+ Jira phase ticket in phase-iterative)
 ```
 
 Each artifact is:
@@ -105,7 +172,7 @@ If you **reject**, the agent refines and re-runs evals until you approve. Previo
 ### Implement tasks
 
 ```
-/opsx-apply                 → task T1 [approve] → task T2 [approve] → … → done
+/opsx-apply                 → task T1 [approve] → task T2 [approve] → … → phase PR → next phase
 ```
 
 The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
@@ -125,6 +192,12 @@ The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 3. Verify against acceptance criteria
 4. Present task summary → user approval
 5. On approve: mark task complete, next task
+
+### Generate E2E tests (post-CI)
+
+```
+/opsx-e2e <change-name> --phase N
+```
 
 ### Archive
 
@@ -163,6 +236,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
 | `/opsx-continue` | Create next artifact; eval gate; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
+| `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-explore` | Explore ideas without creating artifacts |
 
@@ -191,7 +265,9 @@ Key flags you can tune:
 
 ```yaml
 flags:
-  codegen_mode: ai-helpers       # "ai-helpers" or "direct"
+  codegen_mode: ai-helpers              # "ai-helpers" or "direct"
+  task_execution_mode: phase-iterative  # "phase-iterative" or "one-shot"
+  auto_approve: false                   # true for autonomous execution
   max_feedback_rounds: 3
   exit_on_all_tasks_complete: true
 ```
@@ -199,14 +275,22 @@ flags:
 | Flag | Default | What it does |
 |------|---------|--------------|
 | `codegen_mode` | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
-| `max_feedback_rounds` | 3 | Max rejection + refinement loops per artifact before halting |
-| `exit_on_all_tasks_complete` | true | Auto-exit implementation when all tasks marked `[x]` |
+| `task_execution_mode` | `phase-iterative` | `phase-iterative`: one phase at a time with per-phase PRs and Jira tickets. `one-shot`: all tasks in one run, single PR |
+| `auto_approve` | `false` | When `true`, skip manual approval gates — tasks auto-approve after verification |
+| `max_feedback_rounds` | `3` | Max rejection + refinement loops per artifact before halting |
+| `exit_on_all_tasks_complete` | `true` | Auto-exit implementation when all tasks marked `[x]` |
 
 ### Code generation modes
 
 **`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
 
 **`direct`** — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
+
+### Task execution modes
+
+**`phase-iterative`** — Tasks are grouped by plan phase. After each phase completes: a draft PR is raised, a Jira Story ticket is created for the phase, and `/opsx-continue` generates next-phase tasks. E2E tests can be triggered per phase after CI passes.
+
+**`one-shot`** — All tasks execute sequentially across all phases. A single draft PR is raised at the end. E2E tests are triggered once after the final CI passes.
 
 ---
 
@@ -285,7 +369,7 @@ Update `eval-generation/input/feature-bundle.yaml` with the next completed featu
 ## Pipeline Overview
 
 ```
-validation → specs → repo-assessment → [resolve constitution.md] → plan → tasks → implementation → archive
+validation → specs → repo-assessment → [resolve constitution.md] → plan → tasks → implementation → [E2E] → archive
 ```
 
 | Stage | Artifacts | Purpose |
@@ -293,9 +377,10 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 | **Spec understanding** | `validation.json`, `specs.md` | Validate Jira spec before repo work |
 | **Repo understanding** | `repo-assessment.md` | Ground planning in the target repository |
 | **Constitution (input)** | `constitution.md` (resolved) | Non-negotiable guardrails |
-| **Planning** | `plan.md` | Phased implementation plan |
-| **Task creation** | `tasks.md` | Executable task manifest with agents |
-| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval (ai-helpers or direct mode) |
+| **Planning** | `plan.md` | Phased implementation plan (e2e phases excluded) |
+| **Task creation** | `tasks.md` + Jira phase ticket | Executable task manifest with agents (e2e tasks excluded) |
+| **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval |
+| **E2E (post-CI)** | `e2e-analysis.md`, `test-plan.md`, `*_test.go` | E2E test generation triggered by `/opsx-e2e` |
 | **Archive** | archived change | Close out |
 
 ---
@@ -325,12 +410,17 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 │   ├── schemas/openspec-agile-workflow/   # Schema, templates, stage-gate, evals
 │   │   ├── schema.yaml                    # Workflow definition
 │   │   ├── templates/                     # Generic artifact templates (*-template.md)
+│   │   ├── e2e-workflow/                  # E2E test generation pipeline templates
+│   │   │   ├── pre-analysis-gate.md       # PR scoping and approval gate
+│   │   │   ├── test-plan-generation.md    # Tiered test plan + consolidation + code gen
+│   │   │   └── qe-behaviour.md           # Project-specific QE context
 │   │   ├── evals/                         # Stage eval cases (quality gates)
 │   │   ├── stage-gate/                    # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/      # Format spec for rejection rounds
+│   ├── telemetry/                         # Telemetry collection (change metrics, reports)
 │   └── changes/                           # Active changes (created per /opsx-new)
 ├── .cursor/                               # Pre-built — Cursor loads immediately
-│   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, eval-loop
+│   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, opsx-e2e, eval-loop
 │   └── skills/                            # openspec-*, effective-go, e2e-test-generator
 ├── eval-generation/                       # Retrospective eval loop
 │   ├── input/                             # feature-bundle.yaml (your input)
