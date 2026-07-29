@@ -431,6 +431,7 @@ When all **current phase** tasks are marked complete:
    **If `auto_approve` is `true`:**
    Skip prompt. Auto-commit and push a draft PR for this phase (default mode). Skip push/PR in working-folder mode.
 5. If yes (or auto-approved): commit, push, open draft PR scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+   **E2E hint:** After CI passes on the phase PR, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests.
 6. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
@@ -440,13 +441,14 @@ When all **current phase** tasks are marked complete:
      - Write `implementation-report.md` aggregating all `task-reports/*.md`
      - Write `deviation-observed.md` if any deviations logged
      - Present final summary with all phase PR URLs
+     - **E2E hint (one-shot mode):** "All implementation complete. After CI passes on the final PR, run `/opsx-e2e <change-name>` to generate E2E tests."
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
      - Skip discarded e2e phase numbers: if `N+1` is in `discarded_e2e_phases`,
        advance `current_plan_phase` until a non-e2e phase is reached (or all done).
      - **If `auto_approve` is `false`:**
-       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks."
+       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks. Once this phase's PR CI passes, run `/opsx-e2e --phase {N}` for E2E tests."
        YIELD.
      - **If `auto_approve` is `true`:**
        Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."

@@ -187,6 +187,71 @@ e2e_exclusion:
     - tasks artifact (do NOT generate e2e tasks in §3/§4)
     - opsx-apply (skip guard — if e2e task slips through, mark SKIPPED_E2E)
     - phases_jira_sync (non-e2e phases only)
+    - e2e_workflow (e2e tests generated from excluded phases via /opsx-e2e post-CI)
+
+# ---------------------------------------------------------------------------
+# e2e_workflow — post-CI E2E test generation pipeline (triggered by /opsx-e2e)
+# ---------------------------------------------------------------------------
+e2e_workflow:
+  description: >-
+    After a phase PR (phase-iterative) or final PR (one-shot) is raised and CI
+    passes, the user triggers /opsx-e2e to generate E2E test plans and executable
+    test code. This pipeline is decoupled from /opsx-apply and has its own
+    approval gates. E2E phases excluded from OAPE are covered here instead.
+  command: /opsx-e2e
+  trigger:
+    phase_iterative: "After phase PR raised + CI green — user invokes /opsx-e2e"
+    one_shot: "After final PR raised + CI green — user invokes /opsx-e2e"
+  templates:
+    pre_analysis_gate: e2e-workflow/pre-analysis-gate.md
+    test_plan_generation: e2e-workflow/test-plan-generation.md
+    qe_behaviour: e2e-workflow/qe-behaviour.md
+  artifacts_dir: openspec/changes/<change>/e2e/
+  stages:
+    - id: pre-analysis
+      template: e2e-workflow/pre-analysis-gate.md
+      output: e2e-analysis.md
+      approval_required: true
+      description: "Lean scoping analysis from PR diff + review comments"
+    - id: test-plan
+      template: e2e-workflow/test-plan-generation.md
+      output: test-plan.md
+      approval_required: true
+      description: "Full tiered test plan (15-20 cases) with traceability"
+    - id: consolidation
+      template: e2e-workflow/test-plan-generation.md#section-12
+      output: revised-test-plan.md
+      approval_required: true
+      config_input: "config.yaml → qe.max_test_cases"
+      description: "Journey consolidation to configured limit"
+    - id: code-generation
+      template: e2e-workflow/test-plan-generation.md#section-13
+      output: "generated/*_test.go"
+      approval_required: true
+      description: "Executable Ginkgo/Go test code from consolidated journeys"
+    - id: execute
+      description: "Push generated code to PR branch and optionally run tests"
+      approval_required: true
+  state_tracking:
+    stored_in: openspec/changes/<change>/implementation/state.yaml
+    fields:
+      e2e_status:
+        type: string
+        enum: [not_started, pre_analysis_done, test_plan_done, consolidated, code_generated, pushed, tests_passed, tests_failed]
+        default: not_started
+      e2e_pr_url:
+        type: string
+        description: "PR URL being targeted for E2E generation"
+      e2e_phase:
+        type: integer
+        description: "Phase number being tested (phase-iterative mode)"
+  guardrails:
+    - "CI must pass before /opsx-e2e runs"
+    - "User approval gate after every stage"
+    - "Respect pre-analysis exclusions in all downstream stages"
+    - "Match target repo test style (framework, helpers, constants)"
+    - "No hardcoded durations — use repo constants"
+    - "DeferCleanup for every created resource"
 
 # ---------------------------------------------------------------------------
 # phases_jira_sync — Jira Story tickets created per phase after tasks approval

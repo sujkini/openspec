@@ -1,0 +1,166 @@
+# QE Behavioral Guidelines
+
+Behavioral guidelines to reduce common LLM mistakes in QE workflows. Apply to all tasks: test writing, code review, test plan generation, and debugging.
+
+**Tradeoff:** These guidelines bias toward precision and traceability over speed. For trivial tasks, use judgment.
+
+## 1. Ask Before Assuming
+
+**Don't invent requirements. Surface confusion early.**
+
+- If the ADR or PR diff is ambiguous, ask — don't fabricate requirements.
+- If multiple test approaches exist, present options — don't pick silently.
+- If scope is unclear, state your interpretation and confirm before proceeding.
+- If something contradicts the ADR, stop and flag the conflict.
+- In PR Mode, if design intent is unclear from code alone, flag it as a gap.
+
+## 2. Precision Over Volume
+
+**One test per observable behavior. No padding.**
+
+- Every test step must name a specific action AND a specific observable outcome.
+- Never use vague verbs ("verify", "ensure", "check") without a named observable (e.g. condition `Ready=True`, HTTP 200, specific field value).
+- Don't generate redundant tests that cover the same observable in multiple tiers.
+- If you write 10 tests and 5 cover the same behavior, consolidate to 5.
+
+Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, deduplicate.
+
+## 3. Surgical Scope
+
+**Test only what the change covers. Nothing speculative.**
+
+- Only test what the ADR's scope covers (or what the PR diff changes in PR Mode).
+- Respect Non-Goals — don't generate tests for excluded behavior unless guarding against regression.
+- Match existing test style (Ginkgo v2, Eventually/Consistently patterns, DeferCleanup).
+- Never inline K8s resource specs (Pod, Deployment, etc.) in test files — use or create a builder helper in `test/e2e/utils/`. Duplicated specs drift silently (e.g. missing SecurityContext, wrong image).
+- Before adding a DeferCleanup, check if the setup helper (e.g. `SetupAttestationTest`) already registers cleanup for that resource. Don't revert a field on a resource that will be deleted entirely by the helper's cleanup — the revert is redundant.
+- Never hardcode time durations (timeouts, polling intervals) in test files — use constants from `test/e2e/utils/constants.go` (e.g. `DefaultTimeout`, `ShortTimeout`, `DefaultInterval`, `ShortInterval`). If no suitable constant exists, add one to `constants.go` first.
+- Don't refactor existing tests unless asked.
+
+**Validation:** Every test case should trace directly to the ADR's stated goals/risks or the PR's changed behaviors.
+
+## 3a. Operator Deployment Context (OLM-Managed)
+
+**The ZTWIM operator is installed and managed via OLM (Operator Lifecycle Manager). Never assume direct deployment control.**
+
+- The operator is deployed via a **ClusterServiceVersion (CSV)**, not a standalone Deployment.
+- **Never use `oc scale deployment`** to change replica count — OLM will immediately revert it. Use CSV patch instead:
+  ```
+  oc patch csv <csv-name> -n zero-trust-workload-identity-manager \
+    --type=json -p '[{"op":"replace","path":"/spec/install/spec/deployments/0/spec/replicas","value":N}]'
+  ```
+- **Never use `oc edit deployment`** to change container args/env — patch the CSV or Subscription instead.
+- To add environment variables (e.g., `CREATE_ONLY_MODE`), patch the **Subscription**:
+  ```
+  oc patch subscription openshift-zero-trust-workload-identity-manager \
+    -n zero-trust-workload-identity-manager --type='merge' \
+    -p '{"spec":{"config":{"env":[{"name":"ENV_VAR","value":"value"}]}}}'
+  ```
+- Operator namespace: `zero-trust-workload-identity-manager`
+- CSV name pattern: `zero-trust-workload-identity-manager.v<VERSION>`
+- Operand CRs: SpireServer, SpireAgent, SpiffeCSIDriver, SpireOIDCDiscoveryProvider, ZeroTrustWorkloadIdentityManager
+- All operands use the name `cluster` (e.g., `oc get spireagent cluster`)
+- When writing test steps involving scaling, env changes, or operator config, always use the OLM-appropriate method (CSV/Subscription patch), not direct deployment manipulation.
+
+## 3b. ZTWIM Quality Gates (Domain-Specific)
+
+**Critical quality gates that tests must cover for the ZTWIM operator. Use these to validate test coverage.**
+
+### Operator Lifecycle
+| Gate | Observable |
+|------|------------|
+| Installation | CSV phase = `Succeeded`, all CRDs `Established=True` |
+| Operator Health | Deployment `Available=True`, pod `Running` |
+| Recovery | New pod `Running` within 60s after deletion |
+
+### Operand Health (All Must Be Ready)
+| Operand | Observable |
+|---------|------------|
+| SpireServer | `Ready=True` condition, StatefulSet pods `1/1` |
+| SpireAgent | `Ready=True` condition, DaemonSet on all nodes |
+| SpiffeCSIDriver | `Ready=True` condition, CSIDriver registered |
+| SpireOIDCDiscoveryProvider | `Ready=True` condition, Route accessible |
+| ZeroTrustWorkloadIdentityManager | `OperandsAvailable=True`, `Ready=True` |
+
+### Identity & Attestation (SPIFFE/SPIRE Core)
+| Gate | Observable |
+|------|------------|
+| SVID Issuance | `svid.pem` exists with valid X.509 certificate |
+| SPIFFE ID Format | URI SAN = `spiffe://<trustDomain>/ns/<ns>/sa/<sa>` |
+| Bundle Distribution | `bundle.pem` contains CA certificates |
+| Certificate Chain | `cert.Verify()` succeeds against bundle |
+| SVID Rotation | Serial number changes before TTL expiry |
+
+### Security
+| Gate | Observable |
+|------|------------|
+| UID/GID Compliance | spire-agent: RunAsAny (UID determined by image default), non-root recommended; GID within namespace range |
+| SCC Applied | Pod annotation shows correct SCC |
+| RBAC Minimal | ClusterRole has no wildcard permissions |
+
+### OLM Integration
+| Gate | Observable |
+|------|------------|
+| Upgradeable=True | When all operands healthy |
+| Upgradeable=False | When any operand fails or CreateOnlyMode enabled |
+| CreateOnlyMode | Condition reflects `CREATE_ONLY_MODE` env var |
+
+### Resilience
+| Gate | Observable |
+|------|------------|
+| Server Recovery | StatefulSet pod recreated, `Ready=True` after deletion |
+| Agent Recovery | DaemonSet pod recreated on node after deletion |
+| Config Reconciliation | Operator restores modified ConfigMaps/Secrets |
+| Multi-Failure Recovery | All operands recover to `Ready=True` |
+
+**When writing tests:** Ensure critical gates (Operator Lifecycle, Operand Health, SVID Issuance) are covered. For feature PRs, map new functionality to relevant gates.
+
+## 4. Traceability Always
+
+**Every test traces back to a source. No orphan tests.**
+
+- In ADR Mode: every test traces to an ADR section or Jira acceptance criteria.
+- In PR Mode: every test traces to a specific diff location (`file.go:L42`) or PR description.
+- Never trace to commits or unrelated PRs.
+- Every requirement traces to at least one test or has an explicit "NOT COVERED" with justification.
+- Use stable IDs (REQ-001, PR-REQ-001, UT-001, E2E-001) that remain consistent across revisions.
+
+## 5. Self-Verify Before Outputting
+
+**Define success criteria. Loop until they pass.**
+
+- Run quality gates before returning any test plan.
+- If a gate fails, fix and re-verify — don't output a failing plan.
+- Count coverage by tier and priority before finishing.
+- For multi-step tasks, state a brief plan with verification checkpoints:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+## Stop Conditions (non-negotiable)
+
+- No ADR and no PR provided → STOP, ask for ADR or PR link
+- ADR has no "How" section → WARN user, generate with reduced Tier 1/2 coverage
+- Jira conflicts with ADR → Document conflict, follow ADR, ask user to resolve
+- More than 3 ambiguous requirements → STOP, list ambiguities, ask for clarification
+- PR-only mode: more than 3 low-confidence requirements → WARN user, recommend ADR review
+
+## Good vs Bad Examples
+
+```
+BAD step:  "Verify the operator works correctly"
+GOOD step: "Assert status condition Ready=True on SpireServer CR within 60s"
+
+BAD step:  "Check security"
+GOOD step: "Exec into spire-server pod; confirm process runs as UID 1000 (non-root)"
+
+BAD step:  "Ensure cleanup happens"
+GOOD step: "Delete SpireServer CR; assert finalizer removes spire-agent DaemonSet within 30s"
+```
+
+---
+
+**These guidelines are working if:** test plans have zero vague steps, every test traces to a requirement, no redundant tests exist across tiers, and clarifying questions come before generation rather than after mistakes.
