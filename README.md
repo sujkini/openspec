@@ -1,4 +1,4 @@
-# openspec-agile-workflow
+# openspec-agile-workflow- one shot/phase
 
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two code-generation strategies: **ai-helpers** (OAPE command routing + eval gate) and **direct** (plain agent implementation).
 
