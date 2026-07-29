@@ -36,20 +36,22 @@ Continue working on a change by creating the **next** artifact, then **eval → 
      - **Do not** create repo-assessment or constitution until `target_repo` is recorded.
    - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
 5. Pick first artifact with `status: "ready"`.
-5a. **Retry PENDING Jira Stories** (ONLY when next ready artifact is `tasks`):
-    - Read `inputs/jira.yaml` for `user_stories`.
-    - For each entry with `jira_key: PENDING`: retry `create_ticket` once using the
-      same parameters from schema `user_stories_jira_sync`. Update `jira_key` / `jira_url`
-      on success; leave PENDING on failure (do not block task generation).
 
 5b. **Task execution mode check** (ONLY when next ready artifact is `tasks`):
     - Read `config.yaml → flags.task_execution_mode` (default: `phase-iterative`).
 
     **IF task_execution_mode = "phase-iterative":**
       - Read `implementation/state.yaml` (or initialize if missing) to get
-        `current_plan_phase` (default: 1) and `total_plan_phases`.
-      - If `current_plan_phase > total_plan_phases`: all phases done — skip task
-        generation; proceed to archive. STOP.
+        `current_plan_phase` (default: 1), `total_plan_phases`, and
+        `discarded_e2e_phases` (default: []).
+      - **E2e phase filtering:** Read `plan.md` §5 phases. Classify each phase
+        using schema `e2e_exclusion.phase_criteria`. Phases matching e2e criteria
+        are added to `discarded_e2e_phases` in state.yaml and skipped.
+        `total_plan_phases` counts only NON-e2e phases.
+      - If `current_plan_phase` is a discarded e2e phase, advance past it
+        until a non-e2e phase is reached (or all phases done).
+      - If `current_plan_phase > total_plan_phases` (counting non-e2e only):
+        all phases done — skip task generation; proceed to archive. STOP.
       - Read `plan.md` and extract Phase N details (goal, target files,
         dependencies, verification hooks).
       - Set `phase_scope: N` in generation context metadata.
@@ -129,28 +131,31 @@ Continue working on a change by creating the **next** artifact, then **eval → 
     Use `--status failed` if the user rejects the artifact.
     Add `--phase <N>` only for phase-iterative mode tasks artifact.
 
-12. **Post-approve: create Jira Stories** (ONLY when artifact is `specs` AND `--status passed`):
-    - Parse all `US-00x` headings from the approved `specs.md`.
+12. **Post-approve: create Jira Phase ticket** (ONLY when artifact is `tasks` AND `task_execution_mode = phase-iterative` AND `--status passed`):
+    - Read `current_plan_phase` from `implementation/state.yaml` (or `phase_scope` from context).
+    - Phase N should already be non-e2e (e2e phases are skipped in step 5b).
+    - Parse `plan.md` Phase N section (Goal, Dependencies, Target files, Required capabilities, Verification hooks).
+    - Parse `tasks.md` §3/§4 for Phase N task IDs and covered user stories.
     - Read `config.yaml → flags.auto_approve`. If `true`, treat as "Yes" (skip prompt).
       Otherwise ask:
-      > "Specs approved. Create Jira Story tickets for each user story
-      > (US-001, US-002, …) under [epic_key/jira_key]? (Yes / No)"
-    - **No** → write `user_stories[]` to `inputs/jira.yaml` with `jira_key: SKIPPED`.
-      Skip to reporting.
+      > "Phase {N} tasks approved. Create Jira Story ticket for Phase {N} under [epic_key/jira_key]? (Yes / No)"
+    - **No** → write `plan_phases[]` entry with `jira_key: SKIPPED`. Proceed.
     - **Yes** →
-      - Read `inputs/jira.yaml` for `epic_key` / `jira_key` and any existing `user_stories`.
-      - For each US-00x missing a real `jira_key`: call Jira MCP `create_ticket`:
+      - Read `inputs/jira.yaml` for `epic_key` / `jira_key`.
+      - Call Jira MCP `create_ticket`:
         - `project`: prefix of parent key (e.g. `CM` from `CM-800`)
         - `issuetype`: `Story`
         - `parent`: `epic_key` if present, else `jira_key`
-        - `summary`: `[US-001] <title>`
-        - `description`: story narrative, acceptance scenarios, Story→FR lines,
-          OpenSpec change path, parent key
-      - Write / update `user_stories` array in `inputs/jira.yaml` (see schema `user_stories_jira_sync`).
+        - `summary`: `[Phase N] <phase title from plan.md>`
+        - `description`: developer-style phase ticket assembled from plan.md Phase N
+          (Goal, Dependencies, Target files, Verification hooks) plus tasks.md §3/§4
+          for Phase N (task list, acceptance criteria, covered US-xx / FR-xx, OpenSpec
+          change path, parent epic reference).
+      - Persist to `inputs/jira.yaml` → `plan_phases[]` (see schema `phases_jira_sync`).
       - If Jira MCP is unavailable, set `jira_key: PENDING`; surface the error but
-        do NOT block the workflow. PENDING entries are retried once at tasks-start (step 5a).
-    - Report created / PENDING / SKIPPED keys in the approval summary.
-    - Skip this step entirely for non-`specs` artifacts.
+        do NOT block the workflow. PENDING entries are retried once at /opsx-apply start.
+    - Report created / PENDING / SKIPPED key in the approval summary.
+    - Skip this step entirely for non-`tasks` artifacts and for one-shot mode.
 
 ## Artifact order (openspec-agile-workflow)
 

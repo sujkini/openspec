@@ -144,12 +144,16 @@ Present:
 5. **Round summary path** — `feedback_stage_artifacts/.../round-<N>.yaml`
 6. **Immutable inputs** — confirm no upstream approved artifacts were modified
 
-Ask:
+**Auto-approve check**: Read `config.yaml → flags.auto_approve`. If `true`, skip the
+prompt below and treat the artifact as Approved. Still present items 1–6 for logging,
+but do not wait for user input. Proceed directly to the Approve path.
+
+Ask (skip if `auto_approve: true`):
 
 > Approve this artifact and proceed to the next stage?  
 > **(Approve / Reject with feedback)**
 
-- **Approve** → mark artifact done; lock as immutable; STOP
+- **Approve** (or auto-approved) → mark artifact done; lock as immutable; STOP
 - **Reject with feedback** → return to **Step 1** with new feedback (increment round)
 
 ---

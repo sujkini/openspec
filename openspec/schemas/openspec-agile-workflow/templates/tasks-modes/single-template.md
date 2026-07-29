@@ -26,8 +26,9 @@ One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with 
 cover it. Every spec goal and every plan phase must appear.
 
 ### User Stories → Task Coverage
-One bullet per US-00x with covering Task IDs (and Jira key when available).
+One bullet per US-00x with covering Task IDs.
 Every US-00x from specs.md must appear with ≥1 Task ID.
+Note any e2e coverage as "e2e — out of OAPE scope".
 
 ## 1. Task Dependency Graph (Mermaid)
 ```mermaid
@@ -51,7 +52,7 @@ graph TD
 
 ## 4. Task Specifications (Payloads)
 ### Task <ID>: <Title>
-- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
+- **Covers:** US-001 — user story IDs this task covers
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ...
@@ -67,6 +68,8 @@ graph TD
 ### Quality self-check
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
 - [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] §0 notes any discarded e2e coverage as "out of OAPE scope"
+- [ ] No e2e or Testing_Agent tasks in §3 manifest
 - [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
 - [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)

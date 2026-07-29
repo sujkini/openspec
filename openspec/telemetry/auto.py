@@ -560,6 +560,14 @@ def on_task_complete(args: argparse.Namespace) -> None:
     plan_phase = getattr(args, "phase", None)
     loops = read_task_refinement_rounds(CHANGES_DIR / args.change, args.task_id)
 
+    metadata: dict[str, Any] | None = None
+    raw_meta = getattr(args, "metadata", None)
+    if raw_meta:
+        try:
+            metadata = json.loads(raw_meta)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Invalid --metadata JSON for task %s: %s", args.task_id, raw_meta)
+
     client = _client(args.change)
     try:
         if batch:
@@ -571,6 +579,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
                 cost_usd=0,
                 self_correction_loops=loops,
                 attribution="phase_aggregate",
+                metadata=metadata,
             )
             run_id = state.get("run_id", "")
             client.log_event(
@@ -590,6 +599,7 @@ def on_task_complete(args: argparse.Namespace) -> None:
                 tokens_out=tokens_out,
                 cost_usd=0,
                 self_correction_loops=loops,
+                metadata=metadata,
             )
             # Emit progress on the sub-phase when in phase-iterative mode
             if plan_phase is not None:
@@ -907,6 +917,7 @@ def build_parser() -> argparse.ArgumentParser:
     tc.add_argument("--loops", type=int, default=0)
     tc.add_argument("--batch", action="store_true", help="Batch mode — zero-token task end, phase-level attribution")
     tc.add_argument("--phase", type=int, default=None, help="Plan phase number (phase-iterative mode)")
+    tc.add_argument("--metadata", default=None, help='JSON string with verification/test metadata, e.g. \'{"build_status":"passed","test_status":"passed","verify_status":"passed"}\'')
 
     apc = sub.add_parser("on-apply-complete", help="Signal all tasks done, end phase 5 + run")
     apc.add_argument("--change", required=True)

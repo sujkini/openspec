@@ -67,10 +67,12 @@ When `phase_scope` is absent (task_execution_mode = "one-shot"): generate all ph
    - Tier 2 (run existing): Packages with existing test coverage
    - Tier 3 (build verify): Pure struct definitions, codegen output
    - Tier 4 (non-Go): YAML, scripts, manifests — make verify only
-   **Exception:** Create separate tasks ONLY for e2e/integration tests requiring a live cluster.
-5) **Parallelism safety:** only mark tasks parallel if they touch **disjoint file sets** OR the plan
+5) **E2e exclusion (mandatory):** Do NOT create e2e or Testing_Agent tasks — e2e is out of
+   OAPE scope. Note discarded e2e coverage in §0 as "e2e — out of OAPE scope" but do not
+   emit rows in §3 or payloads in §4.
+6) **Parallelism safety:** only mark tasks parallel if they touch **disjoint file sets** OR the plan
    explicitly provides stable contracts/mocks. Otherwise default to sequential.
-6) **No false precision:** if repo_assessment was partial, mark affected tasks `Evidence: PARTIAL`
+7) **No false precision:** if repo_assessment was partial, mark affected tasks `Evidence: PARTIAL`
    and include a short discovery sub-task.
 
 ## Forbidden outputs
@@ -103,9 +105,10 @@ Short bullet list mapping spec goals + plan phases → task coverage (prove noth
 One bullet per FR-xx / SC-xx / AC-xx with covering Task IDs.
 
 ### User Stories → Task Coverage
-One bullet per US-00x with covering Task IDs (and Jira key from inputs/jira.yaml when available).
+One bullet per US-00x with covering Task IDs.
 Derive by unioning each story's FR task coverage from Story → FR Traceability in specs.md,
 or assign directly. Every US-00x from specs.md must appear with ≥1 Task ID.
+Note any e2e coverage as "e2e — out of OAPE scope" (do not assign Task IDs for e2e).
 
 ## 1. Task Dependency Graph (Mermaid)
 Use `graph TD` (or `flowchart LR`) with stable node IDs like `T1_1`, `T1_2`, ... matching Task IDs.
@@ -124,7 +127,7 @@ User Story: comma-separated US-00x IDs this task covers (e.g. "US-001, US-002").
 For EACH Task ID, emit a subsection:
 
 ### Task <ID>: <Title>
-- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
+- **Covers:** US-001 — user story IDs this task covers
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)
@@ -179,6 +182,8 @@ decomposition), then apply these consolidation rules to the result.
 Before finalizing, verify:
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
 - [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] §0 notes any discarded e2e coverage as "out of OAPE scope"
+- [ ] No e2e or Testing_Agent tasks in §3 manifest
 - [ ] Every §4 payload includes **Covers:** with ≥1 US-00x
 - [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)
@@ -269,8 +274,9 @@ One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with 
 cover it. Every spec goal and every plan phase must appear.
 
 #### User Stories → Task Coverage
-One bullet per US-00x with covering Task IDs (and Jira key when available).
+One bullet per US-00x with covering Task IDs.
 Every US-00x from specs.md must appear with ≥1 Task ID.
+Note any e2e coverage as "e2e — out of OAPE scope".
 
 ### § 1. Task Dependency Graph (Mermaid)
 ```mermaid
@@ -309,7 +315,7 @@ Provisional agent IDs when AgentRoutingMode is PROVISIONAL:
 ### § 4. Task Specifications (Payloads)
 
 #### Task T1_1: [TITLE]
-- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
+- **Covers:** US-001 — user story IDs this task covers
 - **Objective:** [WHAT_THIS_TASK_ACCOMPLISHES]
 - **Target file(s):** [FILE_PATHS_FROM_REPO_ASSESSMENT_OR_PLAN]
 - **Non-goals / forbidden edits:** [WHAT_NOT_TO_TOUCH]

@@ -109,6 +109,7 @@ Before finalizing, verify:
 - [ ] Every spec FR and P1 user story (US-00x) maps to ≥1 phase and ≥1 verification matrix row
 - [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities, Verification hooks)
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
+- [ ] §5 contains NO standalone e2e-only phases (e2e belongs in §6 only)
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)
 - [ ] §7 risks derived from repo_assessment §5 and §11.1 UNVERIFIED items
 - [ ] §8 complete — every open question has owner + default assumption; no truncated rows
@@ -178,8 +179,12 @@ OLM/CSV ownership rules, bundle layout, image references, feature gates/TechPrev
 Number phases sequentially. Each phase uses the phase template above. Phases MUST NOT contain
 assignee names, ticket IDs, or "do X in PR" task lists. Typical ordering for operator projects
 (adapt as needed): API/CRD → codegen/deepcopy → controller/operand logic → manifest refresh →
-RBAC/webhook wiring → unit/integration tests → e2e + CI → packaging/bundle + docs.
+RBAC/webhook wiring → unit/integration tests → packaging/bundle + docs.
 For other project types, derive phase ordering from repo_assessment.md and AGENTS.md.
+
+**E2e exclusion:** Do NOT create standalone e2e-only phases. E2e/cluster verification belongs
+in §6 Verification matrix only — it is out of OAPE scope. Unit and integration test
+co-generation stays inside implementation phases/tasks.
 
 ### § 6. Verification matrix (maps to spec acceptance)
 

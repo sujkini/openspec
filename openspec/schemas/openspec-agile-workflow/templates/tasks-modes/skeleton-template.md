@@ -23,8 +23,9 @@ One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with 
 cover it.
 
 ### User Stories → Task Coverage
-One bullet per US-00x with covering Task IDs (and Jira key when available).
+One bullet per US-00x with covering Task IDs.
 Every US-00x from specs.md must appear with ≥1 Task ID.
+Note any e2e coverage as "e2e — out of OAPE scope".
 
 ## 1. Task Dependency Graph (Mermaid)
 Use `graph TD` (or `flowchart LR`) with stable node IDs like `T1_1`, `T1_2`, ... matching Task IDs.
@@ -89,6 +90,8 @@ Output structure:
 ### Quality self-check
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
 - [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
+- [ ] §0 notes any discarded e2e coverage as "out of OAPE scope"
+- [ ] No e2e or Testing_Agent tasks in §3 manifest
 - [ ] §3 manifest User Story column is populated for every row
 - [ ] AgentRoutingMode matches constitution.md (PROVIDED vs PROVISIONAL)
 - [ ] §2 linear order is a valid topological sort of §1 DAG

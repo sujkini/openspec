@@ -13,46 +13,62 @@ interface TaskRowProps {
   task: TaskExecution;
 }
 
+type BadgeStatus = "passed" | "failed" | "skipped";
+
+function resolveBadgeStatus(value: unknown): BadgeStatus | null {
+  if (value === undefined) return null;
+  if (value === "passed" || value === true) return "passed";
+  if (value === "skipped") return "skipped";
+  return "failed";
+}
+
+const BADGE_STYLES: Record<BadgeStatus, string> = {
+  passed: "bg-green-900/40 text-green-400 border border-green-700/50",
+  failed: "bg-red-900/40 text-red-400 border border-red-700/50",
+  skipped: "bg-zinc-800/40 text-zinc-500 border border-zinc-700/50",
+};
+
+const BADGE_ICONS: Record<BadgeStatus, string> = {
+  passed: "✓",
+  failed: "✗",
+  skipped: "–",
+};
+
 function VerificationBadge({ metadata }: { metadata?: Record<string, unknown> | null }) {
   if (!metadata) return null;
 
-  const badges: { label: string; ok: boolean }[] = [];
+  const fields: { key: string; label: string }[] = [
+    { key: "build_status", label: "Build" },
+    { key: "test_status", label: "Test" },
+    { key: "verify_status", label: "Verify" },
+  ];
 
-  if (metadata.build_status !== undefined) {
-    badges.push({
-      label: "Build",
-      ok: metadata.build_status === "passed" || metadata.build_status === true,
-    });
-  }
-  if (metadata.test_status !== undefined) {
-    badges.push({
-      label: "Test",
-      ok: metadata.test_status === "passed" || metadata.test_status === true,
-    });
-  }
-  if (metadata.verify_status !== undefined) {
-    badges.push({
-      label: "Verify",
-      ok: metadata.verify_status === "passed" || metadata.verify_status === true,
-    });
-  }
+  const badges = fields
+    .map(({ key, label }) => {
+      const status = resolveBadgeStatus(metadata[key]);
+      return status ? { label, status } : null;
+    })
+    .filter((b): b is { label: string; status: BadgeStatus } => b !== null);
 
   if (badges.length === 0) return null;
 
+  const evalScore = typeof metadata.eval_score === "number" ? metadata.eval_score : null;
+
   return (
-    <span className="ml-2 inline-flex gap-1">
+    <span className="ml-2 inline-flex gap-1 items-center">
       {badges.map((b) => (
         <span
           key={b.label}
-          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-            b.ok
-              ? "bg-green-900/40 text-green-400 border border-green-700/50"
-              : "bg-red-900/40 text-red-400 border border-red-700/50"
-          }`}
+          className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${BADGE_STYLES[b.status]}`}
         >
-          {b.ok ? "✓" : "✗"} {b.label}
+          {BADGE_ICONS[b.status]} {b.label}
         </span>
       ))}
+      {evalScore !== null && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-900/40 text-blue-400 border border-blue-700/50">
+          {evalScore}%
+        </span>
+      )}
     </span>
   );
 }
@@ -93,7 +109,11 @@ export default function TaskRow({ task }: TaskRowProps) {
           ? `${task.self_correction_loops} fix${task.self_correction_loops > 1 ? "es" : ""}`
           : "—"}
       </td>
-      <td className="px-4 py-1.5 text-xs text-center text-terminal-muted">—</td>
+      <td className="px-4 py-1.5 text-xs text-center">
+        {task.metadata_json && typeof task.metadata_json.eval_score === "number"
+          ? <span className="text-blue-400 font-mono">{task.metadata_json.eval_score}%</span>
+          : <span className="text-terminal-muted">—</span>}
+      </td>
       <td className="px-4 py-1.5 text-xs text-center font-mono">
         {task.tokens_in > 0 || task.tokens_out > 0
           ? `${formatTokens(task.tokens_in)} / ${formatTokens(task.tokens_out)}`

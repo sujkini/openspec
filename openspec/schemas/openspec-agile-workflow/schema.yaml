@@ -157,33 +157,67 @@ jira_metadata:
     jira_key/epic_key when explicit URLs are missing.
 
 # ---------------------------------------------------------------------------
-# user_stories_jira_sync — Jira Story tickets created after specs approval
+# e2e_exclusion — workflow-wide policy: discard e2e phases and tasks
 # ---------------------------------------------------------------------------
-user_stories_jira_sync:
+e2e_exclusion:
   description: >-
-    After specs.md is approved, one Jira Story ticket is created per US-00x
-    user story under the epic (or input ticket). Results are persisted in
-    inputs/jira.yaml under user_stories[]. The workflow does not hard-stop
-    on Jira MCP failure — stories are marked jira_key: PENDING and retried
-    once at the start of the tasks stage.
+    E2e phases and e2e tasks are discarded from OAPE planning, task generation,
+    code generation, and Jira sync. E2e coverage remains in plan.md §6
+    Verification matrix for human/SME reference only — it is out of OAPE scope.
+  task_criteria:
+    ref: e2e_task.when_any
+    when_any:
+      - Assigned Agent (tasks.md §3) is Testing_Agent
+      - Acceptance criteria references make test-e2e or test-e2e-wait-for-stable-state
+      - Target file(s) under test/ (e2e, ginkgo, or *_test.go integration/e2e paths)
+      - Task Title or Objective contains "e2e" or "end-to-end" (case-insensitive)
+      - OAPE command would be e2e-generate
+  phase_criteria:
+    when_any:
+      - Phase heading or Goal contains "e2e", "end-to-end", or "E2E"
+      - Verification hooks are e2e/cluster-only with no unit/integration deliverables
+      - All tasks in the phase would match task_criteria
+      - Phase matches typical trailing pattern (e2e + CI, e2e tests, cluster verification)
+  state_tracking:
+    stored_in: openspec/changes/<change>/implementation/state.yaml
+    field: discarded_e2e_phases
+    type: "array of integer"
+  applies_to:
+    - plan artifact (§5 MUST NOT emit standalone e2e-only phases)
+    - tasks artifact (do NOT generate e2e tasks in §3/§4)
+    - opsx-apply (skip guard — if e2e task slips through, mark SKIPPED_E2E)
+    - phases_jira_sync (non-e2e phases only)
+
+# ---------------------------------------------------------------------------
+# phases_jira_sync — Jira Story tickets created per phase after tasks approval
+# ---------------------------------------------------------------------------
+phases_jira_sync:
+  description: >-
+    In phase-iterative mode, after tasks.md for Phase N is approved, create one
+    Jira Story ticket per non-e2e plan phase. Results are persisted in
+    inputs/jira.yaml under plan_phases[]. The workflow does not hard-stop on
+    Jira MCP failure — phases are marked jira_key: PENDING and retried once
+    at /opsx-apply start for that phase.
   stored_in: openspec/changes/<change>/inputs/jira.yaml
-  populated_at: specs-approval
-  retry_at: tasks-start
+  populated_at: tasks-approval-per-phase
+  retry_at: apply-start-for-phase
+  applies_when: "flags.task_execution_mode = phase-iterative"
+  skip_when: "one-shot mode (deferred — not implemented)"
   fields:
-    user_stories:
+    plan_phases:
       type: array
       description: >-
-        One entry per US-00x from specs.md. Created after specs approval.
+        One entry per non-e2e plan phase. Created after that phase's tasks are approved.
       items:
-        id:
-          type: string
-          description: "Stable story ID from specs.md (e.g. US-001)"
+        phase_number:
+          type: integer
+          description: "Plan phase number from plan.md §5"
         summary:
           type: string
-          description: "Story title from the US-00x heading"
-        priority:
+          description: "Phase title from plan.md heading"
+        goal:
           type: string
-          description: "P1 / P2 / P3 from specs.md"
+          description: "Phase Goal bullet from plan.md"
         jira_key:
           type: string
           description: "Created Jira issue key (e.g. CM-901) or PENDING if creation failed"
@@ -195,17 +229,26 @@ user_stories_jira_sync:
           type: string
           description: "ISO8601 timestamp of Jira ticket creation"
           optional: true
+        task_ids:
+          type: array
+          description: "Task IDs in this phase slice (e.g. [T1_1, T1_2])"
+        covered_user_stories:
+          type: array
+          description: "User story IDs covered by this phase (e.g. [US-001, US-002])"
   create_ticket_spec:
     project: "Prefix of epic_key or jira_key (e.g. CM from CM-800)"
     issuetype: Story
     parent: "epic_key from jira.yaml; fallback to jira_key"
-    summary: "[US-001] <title from specs.md heading>"
+    summary: "[Phase N] <phase title from plan.md>"
     description: >-
-      Story narrative + acceptance scenarios + Story→FR traceability lines
-      + OpenSpec change path + parent key reference.
+      Developer-style phase ticket assembled from plan.md Phase N
+      (Goal, Dependencies, Target files, Required capabilities, Verification hooks)
+      plus tasks.md §3 manifest and §4 payloads for Phase N tasks
+      (task list, acceptance criteria, covered US-xx / FR-xx).
+      Include OpenSpec change path and parent epic reference.
   idempotency: >-
-    If user_stories[].jira_key already set and not PENDING, skip recreate.
-    If PENDING, retry create_ticket once.
+    If plan_phases[].jira_key already set and not PENDING, skip recreate.
+    If PENDING, retry create_ticket once at /opsx-apply start.
 
 # ---------------------------------------------------------------------------
 # target_repo — upstream GitHub repo for assessment and planning
@@ -381,27 +424,30 @@ task_sizing:
 # ---------------------------------------------------------------------------
 # task_execution_mode — one-shot vs phase-iterative task generation/implementation
 # ---------------------------------------------------------------------------
-# auto_approve — auto-approve artifacts in /opsx-continue (not tasks)
+# auto_approve — skip ALL user approval prompts across the entire workflow
 # ---------------------------------------------------------------------------
 auto_approve:
   description: >-
-    When true, artifact approval gates in /opsx-continue are auto-approved
-    without prompting. The agent loops through all ready artifacts automatically
-    (validation → specs → repo-assessment → constitution → plan → tasks.md)
-    using batch telemetry, stopping only after tasks.md is approved.
-    Evals still run and artifacts are still refined — only the user prompt is skipped.
+    When true, all user approval gates are auto-approved without prompting.
+    Applies to:
+      - /opsx-continue: artifact approval (specs, repo-assessment, constitution,
+        plan, tasks). The agent loops through all ready artifacts automatically
+        using batch telemetry.
+      - /opsx-apply: per-task code approval during implementation. The agent
+        auto-approves each task after eval/verification and immediately proceeds
+        to the next task. At phase boundary, auto-triggers /opsx-continue.
+      - Jira Phase creation prompt after tasks approval (phase-iterative).
+    Evals still run and artifacts/code are still refined — only the user prompt
+    is skipped. auto_approve only auto-approves, never auto-rejects.
     Exception: specs rejection (exit_on_reject) still requires explicit user action.
-    auto_approve only auto-approves, never auto-rejects.
-    DOES NOT AFFECT /opsx-apply: per-task code approval during implementation
-    always requires explicit user approval regardless of this flag.
   config_key: flags.auto_approve
   default: true
   affects:
-    - user_approval_feedback_gate.approval_prompt (artifact-level only)
+    - user_approval_feedback_gate.approval_prompt (artifact-level in /opsx-continue)
+    - code_generation_eval_gate.task_approval_prompt (task-level in /opsx-apply)
+    - phases_jira_sync Jira Phase creation prompt
+    - phase boundary PR prompt in /opsx-apply
     - user_approval_feedback_gate.exit_on_reject.specs (NOT affected — rejection is always explicit)
-    - user_stories_jira_sync Jira Story creation prompt
-  does_not_affect:
-    - implementation task approval (code_generation_eval_gate.task_approval_prompt — always prompted)
 
 # ---------------------------------------------------------------------------
 task_execution_mode:
@@ -414,6 +460,8 @@ task_execution_mode:
       description: >-
         Generate ALL tasks for ALL plan phases in a single tasks.md. Implement
         all tasks sequentially. Single PR at the end. No phase cycling.
+        E2e exclusion still applies: do not generate e2e tasks.
+      phases_jira_sync: "deferred — not implemented for one-shot mode"
       flow: >-
         plan.md approved → "How many total tasks?" →
         generate tasks.md (all phases) → eval gate → user approval →
@@ -426,27 +474,31 @@ task_execution_mode:
     phase-iterative:
       description: >-
         After plan.md approval, tasks are generated and implemented one plan phase
-        at a time. Each phase cycle: generate tasks → eval gate → user approval →
-        implement (task-by-task with co-gen tests) → optional PR → next phase.
-        tasks.md uses append strategy: completed phase tasks stay marked [x].
+        at a time. E2e-only phases are discarded (see e2e_exclusion) and never
+        enter the loop. Each phase cycle: generate tasks → eval gate → user
+        approval → Jira ticket → implement (task-by-task with co-gen tests) →
+        optional PR → next phase. tasks.md uses append strategy: completed phase
+        tasks stay marked [x].
       tasks_file_strategy: append
       pr_between_phases: optional
       phase_approval_gate: full
+      phases_jira_sync: "deferred in one-shot; active in phase-iterative"
       phase_tracking:
         stored_in: openspec/changes/<change>/implementation/state.yaml
         fields:
           current_plan_phase: integer
-          total_plan_phases: integer
+          total_plan_phases: "integer — count of NON-e2e plan phases only"
           completed_phases: "array of integer"
+          discarded_e2e_phases: "array of integer — e2e phases excluded from OAPE loop"
           phase_pr_urls: "map of phase_number to url"
       flow: >-
-        plan.md approved →
+        plan.md approved → classify phases (discard e2e-only) →
         generate tasks for Phase 1 → eval gate → user approval →
-        /opsx-apply Phase 1 tasks (task-by-task) →
+        Jira ticket for Phase 1 → /opsx-apply Phase 1 tasks (task-by-task) →
         phase complete → optional PR →
         generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
-        /opsx-apply Phase 2 tasks →
-        ... repeat for all phases →
+        Jira ticket for Phase 2 → /opsx-apply Phase 2 tasks →
+        ... repeat for all non-e2e phases →
         final implementation-report.md → archive
       phase_boundary:
         on_all_phase_tasks_complete:
@@ -510,10 +562,11 @@ code_generation_eval_gate:
   flow: >-
     execute_oape_or_manual → verify_task_criteria → run_code_generation_evals →
     refine_code_until_pass_or_max_passes → present_task_summary_with_scorecard →
-    user_code_approval → write_task_report → next_task
+    check_auto_approve → (auto_approve=true → write_task_report → next_task) |
+    (auto_approve=false → user_code_approval → write_task_report → next_task)
   task_approval_prompt: >-
-    auto_approve does NOT apply to task approval — always prompt the user.
-    Ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
+    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   skip_when:
@@ -869,14 +922,14 @@ oape_routing:
           pass or max_refinement_passes (2); do NOT ask user approval before this completes
         - Present task summary with code eval scorecard
         - Request user code approval (task_approval_gate / code_generation_eval_gate.task_approval_prompt);
-          auto_approve does NOT apply — always prompt the user for task approval
+          if config.yaml → flags.auto_approve is true, skip prompt and treat as Approve
         - On reject: REVISION FEEDBACK in design-bundle; re-run current task only
         - >-
           On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`
         - Advance to next pending task in §2 order
   task_approval_prompt: >-
-    auto_approve does NOT apply to task approval — always prompt the user.
-    Ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
+    Read config.yaml → flags.auto_approve. If true, skip this prompt and treat as Approve.
+    Otherwise ask: Code eval score: {overall_score}% ({cases_pass}/{cases_total} cases pass).
     Approve the code changes for task {task_id} ({task_title}) and proceed to the
     next task? (Approve / Reject with feedback)
   command_order:
@@ -1115,28 +1168,7 @@ artifacts:
          Do not unlock Repo Understanding or any downstream stage.
       4. ON APPROVE:
          a. Lock specs.md as immutable.
-         b. **Ask user about Jira Story creation**:
-            Read config.yaml → flags.auto_approve. If true, treat as "Yes" (skip prompt).
-            Otherwise present the list of US-00x stories found in specs.md and ask:
-            > "Specs approved. Create Jira Story tickets for each user story
-            > (US-001, US-002, …) under [epic_key/jira_key]? (Yes / No)"
-            - **Yes** → proceed to step 4c.
-            - **No** → skip Jira ticket creation; write user_stories[] to
-              inputs/jira.yaml with jira_key: SKIPPED for each US. Proceed to 4d.
-         c. **Create Jira Stories** (see schema user_stories_jira_sync):
-            - Parse all US-00x headings from specs.md.
-            - Read inputs/jira.yaml for epic_key / jira_key and existing user_stories.
-            - For each US missing a real jira_key: call Jira MCP create_ticket with:
-              project = prefix of parent key (e.g. "CM" from "CM-800"),
-              issuetype = "Story",
-              parent = epic_key (else jira_key),
-              summary = "[US-001] <title>",
-              description = story narrative + acceptance scenarios + Story→FR lines + change path.
-            - Persist results to inputs/jira.yaml under user_stories[].
-            - If Jira MCP is unavailable, write jira_key: PENDING and surface the error;
-              do NOT block the workflow.
-            - Report created / PENDING keys in the approval summary.
-         d. Unlock Repo Understanding Stage.
+         b. Unlock Repo Understanding Stage.
     gate:
       type: approval
       evaluated_by: user
@@ -1319,20 +1351,22 @@ artifacts:
       4. repo-assessment.md (for file paths)
       5. agents.md (routing)
 
-      ## PENDING Jira Story retry
-      Before generating tasks, read inputs/jira.yaml user_stories[]. For each entry
-      with jira_key = PENDING, retry create_ticket once (see schema user_stories_jira_sync).
-      Update jira_key/jira_url on success; leave PENDING on failure. Do not block generation.
+      ## E2e exclusion (see schema e2e_exclusion)
+      Do NOT generate e2e tasks. Tasks whose Assigned Agent would be Testing_Agent,
+      whose title/objective contains "e2e" or "end-to-end", or whose target files
+      are under test/ e2e paths are out of OAPE scope. Note discarded e2e coverage
+      in §0 as "e2e — out of OAPE scope" but do not emit rows in §3 or payloads in §4.
 
       ## Required output structure (§0–§5)
       - §0 Input coverage checklist — map every FR-xx, SC-xx, US-00x, and plan phase to Task IDs.
         §0 must include a "User Stories → Task Coverage" subsection with one bullet per US-00x
-        from specs.md, each listing the Task IDs that cover it (with Jira key when available).
+        from specs.md, each listing the Task IDs that cover it.
+        Note any e2e coverage as "out of OAPE scope" (do not assign Task IDs for e2e).
       - §1 Task Dependency Graph (Mermaid) — stable node IDs T1_1, T1_2, …
       - §2 Linear Execution Order — valid topological sort
       - §3 Task Execution Manifest — table columns:
         Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story
-      - §4 Task Payloads — ### Task <ID>: <Title> with Covers (US-00x with Jira key),
+      - §4 Task Payloads — ### Task <ID>: <Title> with Covers (US-00x),
         Objective, Target file(s), Non-goals, Implementation notes, Acceptance criteria,
         Downstream handoff
       - §5 Orchestration notes — Retry Boundaries, Merge Conflict Hotspots,
@@ -1380,7 +1414,8 @@ artifacts:
       - Do NOT invent file paths not in repo-assessment.md or plan.md.
       - Mark Evidence: PARTIAL when repo-assessment confidence is low.
       - Unit tests are co-generated WITH each implementation task (not separate tasks).
-        Only create separate tasks for e2e/integration tests requiring a live cluster.
+      - Do NOT create e2e or Testing_Agent tasks — e2e is out of OAPE scope
+        (see schema e2e_exclusion).
       - Complexity: Fibonacci 1, 2, 3, 5, 8.
 
       ## APPROVAL GATE
@@ -1403,9 +1438,12 @@ artifacts:
       2. ASK: "Approve Phase {N} tasks and proceed to implementation?"
       3. ON REJECT: regenerate this phase's tasks only; prior phase tasks immutable.
          Re-run eval gate; re-ask approval.
-      4. ON APPROVE: Lock this phase's tasks; unlock Implementation Stage for
-         Phase N. After implementation completes, /opsx-continue generates
-         Phase N+1 tasks.
+      4. ON APPROVE: Lock this phase's tasks; create Jira Phase ticket
+         (see schema phases_jira_sync — prompt unless auto_approve; assemble
+         description from plan.md Phase N + tasks.md §3/§4; persist to
+         inputs/jira.yaml → plan_phases[]; on MCP failure write PENDING);
+         unlock Implementation Stage for Phase N. After implementation
+         completes, /opsx-continue generates Phase N+1 tasks.
     gate:
       type: approval
       evaluated_by: user

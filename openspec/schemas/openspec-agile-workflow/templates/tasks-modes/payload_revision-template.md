@@ -12,7 +12,7 @@ the user's feedback. Do not emit §0–§3 or §5. Address every point in the fe
 ### § 4. Task Specifications — payload format
 
 ### Task <ID>: <Title>
-- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
+- **Covers:** US-001 — user story IDs this task covers
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)

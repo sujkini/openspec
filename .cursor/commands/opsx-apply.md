@@ -5,19 +5,25 @@ category: Workflow
 description: Implement tasks — one task per invocation, state machine driven (supports ai-helpers and direct modes)
 ---
 
-Implement an OpenSpec change. **ONE task per invocation.**
-State-machine driven with externalized state at `implementation/state.yaml`.
+Implement an OpenSpec change. State-machine driven with externalized state at `implementation/state.yaml`.
 
-> **`auto_approve` does NOT apply here.** The `config.yaml → flags.auto_approve` flag
-> controls artifact-level approval in `/opsx-continue` only. Task-level code approval
-> in `/opsx-apply` **always** requires explicit user approval. Never skip the approval prompt.
+Read `config.yaml → flags.auto_approve` at the start of every invocation.
+
+> **When `auto_approve` is `false` (default behaviour):** ONE task per invocation.
+> After presenting a task for approval, YIELD and wait for the user to approve/reject.
+>
+> **When `auto_approve` is `true`:** Auto-approve each task after eval/verification,
+> immediately proceed to the next task within the same invocation. Continue until all
+> tasks in the current phase (phase-iterative) or all tasks (one-shot) are complete.
+> At phase boundary, auto-trigger `/opsx-continue` to generate next-phase tasks.
 
 **Mode**: Read `codegen_mode` from `openspec/config.yaml` → `flags.codegen_mode`:
 - `ai-helpers` — OAPE command routing + code-generation eval gate
 - `direct` — plain agent implementation, no OAPE commands, no code eval gate
 
-**Per-task flow (ai-helpers):** OAPE → verify → tests → eval gate → refine → present → YIELD → wait for next invocation.
-**Per-task flow (direct):** implement → verify → present → YIELD → wait for next invocation.
+**Per-task flow (ai-helpers, auto_approve=false):** OAPE → verify → tests → eval gate → refine → present → YIELD → wait for next invocation.
+**Per-task flow (direct, auto_approve=false):** implement → verify → present → YIELD → wait for next invocation.
+**Per-task flow (auto_approve=true, either mode):** execute → verify → tests → eval gate → refine → present (log only) → auto-approve → next task (no YIELD).
 
 **Reference (ai-helpers only):** schema `oape_routing`, `code_generation_eval_gate`, `{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`
 
@@ -26,17 +32,26 @@ State-machine driven with externalized state at `implementation/state.yaml`.
 ## Architecture: State Machine
 
 ```
-phase-iterative:
-  ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
-  direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+auto_approve=false (default):
+  phase-iterative:
+    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+  one-shot:
+    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
 
-one-shot:
-  ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
-  direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+auto_approve=true:
+  phase-iterative:
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → PHASE_COMPLETE → auto-trigger /opsx-continue → ...
+  one-shot:
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → COMPLETE
 ```
 
-The orchestrator reads state, executes ONE task, writes state, and YIELDS.
+**When `auto_approve` is `false`:** The orchestrator reads state, executes ONE task, writes state, and YIELDS.
 It NEVER advances to the next task within the same response.
+
+**When `auto_approve` is `true`:** The orchestrator executes ALL pending tasks in a loop within a single response.
+AWAITING_APPROVAL state is skipped — tasks are auto-approved after eval/verification.
 
 ## State File
 
@@ -49,18 +64,20 @@ Initialize from template on first invocation if missing.
 
 1. **Read `state.yaml` FIRST** — before any other action, every single invocation
 2. **Read `codegen_mode`** — from `openspec/config.yaml` → `flags.codegen_mode` (default: `direct`)
-3. **ONE task per invocation** — you MUST NOT execute more than one task in a single response. When you finish presenting a task for approval, your response is DONE. Period.
-4. **YIELD = END YOUR RESPONSE** — after the approval question, you MUST stop generating text. Do not read the next task. Do not compose the next design bundle. Do not think about what comes next. YOUR RESPONSE ENDS.
-5. **On user "approve"** — write task report, mark complete, update state to IDLE, then STOP. Tell the user to run `/opsx-apply` again. Do NOT start the next task.
-6. **Context windowing** — only load §4 payload for `current_task_id`, not all tasks
-7. **Write state after every transition** — state must survive agent crashes
-8. **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-apply`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
-9. **Edit safety for existing source files** — never append to source files using `>>` / `tee -a`; use in-place edits only.
-10. **No unsafe fallback rewrites** — if an existing file edit cannot be applied cleanly, STOP and request user guidance rather than appending/replacing with full-file dumps.
+3. **Read `auto_approve`** — from `openspec/config.yaml` → `flags.auto_approve` (default: `true`)
+4. **When `auto_approve` is `false`: ONE task per invocation** — you MUST NOT execute more than one task in a single response. When you finish presenting a task for approval, your response is DONE. Period.
+5. **When `auto_approve` is `true`: ALL tasks in a loop** — auto-approve each task after eval/verification, write task report, and immediately proceed to the next task. Do NOT YIELD between tasks. Use `--batch` telemetry flags.
+6. **YIELD = END YOUR RESPONSE** (only when `auto_approve` is `false`) — after the approval question, you MUST stop generating text. YOUR RESPONSE ENDS. When `auto_approve` is `true`, there is no YIELD — you loop through all tasks.
+7. **On user "approve"** (only when `auto_approve` is `false`) — write task report, mark complete, update state to IDLE, then STOP. Tell the user to run `/opsx-apply` again. Do NOT start the next task.
+8. **Context windowing** — only load §4 payload for `current_task_id`, not all tasks
+9. **Write state after every transition** — state must survive agent crashes
+10. **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-apply`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
+11. **Edit safety for existing source files** — never append to source files using `>>` / `tee -a`; use in-place edits only.
+12. **No unsafe fallback rewrites** — if an existing file edit cannot be applied cleanly, STOP and request user guidance rather than appending/replacing with full-file dumps.
 
-## YIELD BOUNDARY — CRITICAL
+## YIELD BOUNDARY — CRITICAL (only when `auto_approve` is `false`)
 
-When you reach the approval question, you have TWO possible next actions:
+When `auto_approve` is `false` and you reach the approval question, you have TWO possible next actions:
 - If user has NOT yet responded → END YOUR RESPONSE after the question
 - If user says "approve" → write report, mark done, say "Run `/opsx-apply` for next task", then END YOUR RESPONSE
 - If user says "reject" → re-run THIS task only (not the next one)
@@ -68,6 +85,25 @@ When you reach the approval question, you have TWO possible next actions:
 **WHAT YIELD MEANS:** You literally stop generating output. No "let me also...", no "now moving to...", no "next up...". The response terminates. The user must send a NEW message or re-invoke `/opsx-apply` to trigger the next task.
 
 **WHY:** Without YIELD, you will batch tasks together. This destroys the per-task approval flow. The user MUST be able to review each task's code in isolation before the next one starts.
+
+## AUTO-APPROVE LOOP (only when `auto_approve` is `true`)
+
+When `auto_approve` is `true`, do NOT YIELD or prompt the user. Instead:
+
+1. After presenting the task summary (Step 5), treat it as automatically approved.
+2. Write task report, mark task `- [x]`, update state to `IDLE`.
+3. Fire `on-task-complete --batch` telemetry.
+4. Check if more pending tasks remain for the current phase (phase-iterative) or overall (one-shot).
+5. If tasks remain → pick next pending task, loop back to **Step 4** (execute next task).
+6. If all tasks done → proceed to **Step 6** (post-loop / phase boundary).
+
+At **phase boundary** (phase-iterative, phases remain):
+- Auto-commit and push if applicable.
+- Instead of telling the user "Run `/opsx-continue`", **automatically invoke `/opsx-continue`**
+  to generate next-phase tasks. Since `auto_approve` is `true`, `/opsx-continue` will also
+  auto-loop through artifact approval and return with `tasks.md` approved.
+- Then loop back and execute the new phase's tasks.
+- Continue until ALL phases are complete.
 
 ## Steps
 
@@ -96,13 +132,20 @@ Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default
 - Clear `current_task_result` and `rejections`
 - **Telemetry — signal task complete** (silent, non-blocking; rolls up phase-5 tokens incrementally):
   ```bash
-  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed
+  python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed --metadata '{"build_status":"<passed|failed>","test_status":"<passed|failed|skipped>","verify_status":"<passed|failed|skipped>","eval_score":<N>}'
   ```
+  Populate `build_status`, `test_status`, `verify_status` from the task's verification/test
+  results in `current_task_result`. Use `"skipped"` when a check was not applicable (e.g.
+  Tier 3/4 tasks have no unit tests → `test_status: "skipped"`).
   Add `--phase <N>` only when task_execution_mode = "phase-iterative".
 - Set state: `IDLE`
 - Check if all tasks done (one-shot) or all current-phase tasks done (phase-iterative)
-- Output EXACTLY: "Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
-- **>>> STOP. END RESPONSE. DO NOT CONTINUE. <<<**
+- **If `auto_approve` is `false`:**
+  Output EXACTLY: "Task {id} approved. Report written. State: IDLE.\n\nRun `/opsx-apply` to execute the next task."
+  **>>> STOP. END RESPONSE. DO NOT CONTINUE. <<<**
+- **If `auto_approve` is `true`:**
+  Output: "Task {id} auto-approved. Report written."
+  Then immediately pick next pending task and loop back to step 4 (no YIELD).
 
 **On reject** (from AWAITING_APPROVAL):
 - Append feedback to `rejections[]`
@@ -123,16 +166,27 @@ On first run (no state.yaml):
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
 7. Initialize `state.yaml` with state: IDLE
-8. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
+8. **Retry PENDING phase Jira ticket** (phase-iterative only):
+   - Read `inputs/jira.yaml` → `plan_phases[]` for current phase.
+   - If entry exists with `jira_key: PENDING`: retry `create_ticket` once using
+     schema `phases_jira_sync.create_ticket_spec`. Update `jira_key` / `jira_url`
+     on success; leave PENDING on failure (do not block implementation).
+9. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
    ```bash
    python -m openspec.telemetry.auto on-apply-start --change "<name>"
    ```
    Add `--phase <N>` only when task_execution_mode = "phase-iterative" (where `<N>` is `current_plan_phase` from state.yaml).
-9. Pick first pending task → continue to step 4
+10. Pick first pending task → continue to step 4
    - **phase-iterative**: pick first pending task for the current phase only
    - **one-shot**: pick first pending task across all phases in §2 order
 
 ### 4. Execute ONE task
+
+**E2e guard:** Before executing, classify the current task using schema `e2e_exclusion.task_criteria`.
+If it matches (Testing_Agent, e2e in title/objective, e2e target files, would use e2e-generate):
+mark `- [x]` in tasks.md with note `SKIPPED_E2E`, write minimal task-report with
+`status: skipped_e2e`, signal `on-task-complete --status skipped`, and proceed to the
+next pending task — do NOT invoke `e2e-generate` or any OAPE command.
 
 **Context windowing**: Read ONLY the §4 payload for `current_task_id` from tasks.md.
 Do NOT read payloads for other tasks.
@@ -204,8 +258,11 @@ current_task_result:
   oape_command: <command>
   files_changed: [...]
   verification_pass: true/false
+  build_status: passed/failed        # go build + go vet result
   test_command: "..."
   test_result: PASS/FAIL
+  test_status: passed/failed/skipped # go test result (skipped for Tier 3/4)
+  verify_status: passed/failed/skipped # make verify result (skipped if not applicable)
   test_output_summary: "..."
   eval_score: <N>
   eval_cases_pass: <N>
@@ -264,8 +321,11 @@ current_task_result:
   task_id: <id>
   files_changed: [...]
   verification_pass: true/false
+  build_status: passed/failed        # go build + go vet result
   test_command: "..."
   test_result: PASS/FAIL
+  test_status: passed/failed/skipped # go test result (skipped for Tier 3/4)
+  verify_status: passed/failed/skipped # make verify result (skipped if not applicable)
   test_output_summary: "..."
 ```
 
@@ -305,7 +365,7 @@ Score: N% (pass/total cases) | Refinement rounds: N
 ### Deviations (if any)
 ```
 
-ASK: **"Code eval score: {N}% ({pass}/{total} cases pass). Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
+ASK (skip if `auto_approve: true`): **"Code eval score: {N}% ({pass}/{total} cases pass). Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
 
 #### direct mode — presentation format
 
@@ -322,9 +382,13 @@ Phase: <phase> | Task <index>/<total>
 ### Deviations (if any)
 ```
 
-ASK: **"Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
+ASK (skip if `auto_approve: true`): **"Approve the code changes for task {task_id} ({task_title})? (Approve / Reject with feedback)"**
 
 ---
+
+**IF `auto_approve` is `true`:** Do NOT YIELD. Treat as approved → write task report, mark complete, proceed to next task (see AUTO-APPROVE LOOP above).
+
+**IF `auto_approve` is `false`:**
 
 **╔══════════════════════════════════════════════════════════════╗**
 **║  >>> YIELD — STOP GENERATING. END YOUR RESPONSE NOW. <<<   ║**
@@ -362,8 +426,11 @@ When all **current phase** tasks are marked complete:
    ```bash
    python -m openspec.telemetry.auto on-phase-complete --change "<name>" --phase <N> --pr-raised <true|false>
    ```
-4. ASK: **"All Phase {N} tasks complete. Raise a draft PR for Phase {N}? (Yes / No, continue to Phase {N+1})"**
-5. If yes: commit, push, open draft PR scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+4. **If `auto_approve` is `false`:**
+   ASK: **"All Phase {N} tasks complete. Raise a draft PR for Phase {N}? (Yes / No, continue to Phase {N+1})"**
+   **If `auto_approve` is `true`:**
+   Skip prompt. Auto-commit and push a draft PR for this phase (default mode). Skip push/PR in working-folder mode.
+5. If yes (or auto-approved): commit, push, open draft PR scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
 6. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
@@ -376,29 +443,38 @@ When all **current phase** tasks are marked complete:
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
-     - Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks."
-7. YIELD
+     - Skip discarded e2e phase numbers: if `N+1` is in `discarded_e2e_phases`,
+       advance `current_plan_phase` until a non-e2e phase is reached (or all done).
+     - **If `auto_approve` is `false`:**
+       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks."
+       YIELD.
+     - **If `auto_approve` is `true`:**
+       Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."
+       Automatically invoke `/opsx-continue <change-name>` to generate next-phase tasks.
+       Since `auto_approve` is `true`, `/opsx-continue` will auto-loop through artifact
+       approval and return with `tasks.md` approved.
+       Then loop back to **Step 4** to execute the new phase's tasks.
+7. YIELD (only when `auto_approve` is `false`; when `true`, the loop continues)
 
 ## Guardrails
 
 - **Read state.yaml FIRST** — every invocation, no exceptions
-- **Read codegen_mode** — from config.yaml, every invocation
-- **ONE task per response** — NEVER implement two tasks in one invocation, even if the user approves inline
-- **YIELD after approval question** — HARD STOP. End your response. No exceptions.
-- **YIELD after processing approval** — write report, say "run /opsx-apply", then HARD STOP. Do NOT start next task.
-- **Context windowing** — only §4 for current task, never load all task payloads
+- **Read codegen_mode and auto_approve** — from config.yaml, every invocation
+- **When `auto_approve` is `false`: ONE task per response** — NEVER implement two tasks in one invocation
+- **When `auto_approve` is `true`: ALL tasks in a loop** — auto-approve each task and immediately proceed to the next; no YIELD between tasks
+- **YIELD after approval question** (only when `auto_approve` is `false`) — HARD STOP. End your response.
+- **YIELD after processing approval** (only when `auto_approve` is `false`) — write report, say "run /opsx-apply", then HARD STOP.
+- **Context windowing** — only §4 for current task, never load all task payloads at once
 - **Write state on every transition** — crash recovery
 - **Mandatory test execution** — never skip verification or tests
-- **Never advance without a fresh invocation** — even if user says "approve", you stop after recording it
-- On reject: re-run current task only (full loop)
+- On reject (only possible when `auto_approve` is `false`): re-run current task only (full loop)
 - **ai-helpers mode**: One OAPE command per task; OAPE in fork/working-folder cwd only
 - **Never append source files** — prohibit `>>` / `tee -a` and similar append semantics for code edits
 - **Duplicate package recovery** — if `go build`/`go test` shows duplicate `package` blocks, reset affected file(s) from git `HEAD` before reapplying task edits
-- **auto_approve ignored** — `config.yaml → flags.auto_approve` does NOT affect `/opsx-apply`. Task approval always requires explicit user confirmation. Never read or check `auto_approve` in this command.
 
-## Anti-Batching Contract
+## Anti-Batching Contract (only when `auto_approve` is `false`)
 
-You are PROHIBITED from:
+When `auto_approve` is `false`, you are PROHIBITED from:
 - Executing task N+1 in the same response where task N was approved
 - Reading §4 payload for any task other than current_task_id
 - Composing a design bundle for the next task after an approval (ai-helpers mode)
@@ -406,6 +482,8 @@ You are PROHIBITED from:
 - Any action that advances the workflow after presenting an approval question or processing an approval
 
 If you find yourself about to start a new task in the same response — STOP. You are violating the contract.
+
+When `auto_approve` is `true`, the anti-batching contract does NOT apply — you are expected to loop through all tasks.
 
 ## Batch / Apply-All Telemetry
 

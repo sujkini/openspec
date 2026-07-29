@@ -13,7 +13,7 @@ shorten Implementation notes and Acceptance criteria rather than omitting a task
 For EACH Task ID, emit:
 
 ### Task <ID>: <Title>
-- **Covers:** US-001 (CM-901) — user story IDs (with Jira key when available)
+- **Covers:** US-001 — user story IDs this task covers
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)

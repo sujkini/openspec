@@ -362,26 +362,43 @@ Include all three result sections:
 
 ## Step 8 — User code approval
 
-Ask (substitute task_id, task_title, verification/test results):
+**Auto-approve check**: Read `config.yaml → flags.auto_approve`. If `true`, skip the user
+prompt below and treat the task as Approved. Still present the scorecard summary
+(items 1–6 from Step 7) for logging, but do not wait for user input. Proceed directly
+to Step 9.
+
+Ask (skip if `auto_approve: true` — substitute task_id, task_title, verification/test results):
 
 > **Code eval score: {overall_score}%** ({N}/{M} cases pass).
 > **Verification: {V_pass}/{V_total} commands pass. Tests: {T_pass}/{T_total} pass.**
 > Approve the **code changes** for task {task_id} ({task_title}) and proceed to the next task?
 > **(Approve / Reject with feedback)**
 
-- **Approve** → step 9
+- **Approve** (or auto-approved) → step 9
 - **Reject** → add REVISION FEEDBACK to design-bundle; re-run task from step 1 (including full eval + verification + test gate)
 
 ## Step 9 — On approve (record and advance)
 
 1. Mark task `- [x]` in tasks.md
 2. Write **`implementation/task-reports/<task-id>.md`** using `templates/implementation-task-report-template.md`
-3. Advance to next pending task
+3. **Collect verification/test metadata** from the eval results recorded in Step 6:
+   - `build_status`: `"passed"` if all `go build` + `go vet` commands passed, else `"failed"`
+   - `test_status`: `"passed"` if all `go test` commands passed, `"failed"` if any failed,
+     `"skipped"` if no tests were applicable (Tier 3/4 tasks)
+   - `verify_status`: `"passed"` if all `make verify` / `make targets` passed, `"failed"` if any failed,
+     `"skipped"` if no make targets were applicable
+   - `eval_score`: the `overall_score` from the eval results YAML
+4. Pass metadata to the `on-task-complete` telemetry hook (called by `/opsx-apply`):
+   ```bash
+   python -m openspec.telemetry.auto on-task-complete --change "<name>" --task-id "<TASK_ID>" --status passed \
+     --metadata '{"build_status":"passed","test_status":"passed","verify_status":"skipped","eval_score":95}'
+   ```
+5. Advance to next pending task
 
 ## Guardrails
 
 - **Never** present user approval before running code-generation evals AND verification AND test execution
-- **Never** advance to the next task without user Approve
+- **Never** advance to the next task without approval (user Approve or auto-approved via `config.yaml → flags.auto_approve`)
 - **Never** report "PASSED" for commands that were not actually executed — capture real exit codes
 - **Always** run `go build` + `go vet` for every task that produces or modifies Go source files
 - **Always** co-generate `_test.go` files for controller logic tasks (`api-implement` modifying `pkg/controller/`)
