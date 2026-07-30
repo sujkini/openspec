@@ -427,11 +427,11 @@ When all **current phase** tasks are marked complete:
    python -m openspec.telemetry.auto on-phase-complete --change "<name>" --phase <N> --pr-raised <true|false>
    ```
 4. **If `auto_approve` is `false`:**
-   ASK: **"All Phase {N} tasks complete. Raise a draft PR for Phase {N}? (Yes / No, continue to Phase {N+1})"**
+   ASK: **"All Phase {N} tasks complete. Would you like to raise a draft PR to `main` for Phase {N}? This will trigger CI jobs on the PR. (Yes / No, continue to Phase {N+1})"**
    **If `auto_approve` is `true`:**
    Skip prompt. Auto-commit and push a draft PR for this phase (default mode). Skip push/PR in working-folder mode.
-5. If yes (or auto-approved): commit, push, open draft PR scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
-   **E2E hint:** After CI passes on the phase PR, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests.
+5. If yes (or auto-approved): commit, push, open draft PR to `main` scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+   Output: **"Draft PR raised: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
 6. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
@@ -441,14 +441,14 @@ When all **current phase** tasks are marked complete:
      - Write `implementation-report.md` aggregating all `task-reports/*.md`
      - Write `deviation-observed.md` if any deviations logged
      - Present final summary with all phase PR URLs
-     - **E2E hint (one-shot mode):** "All implementation complete. After CI passes on the final PR, run `/opsx-e2e <change-name>` to generate E2E tests."
+     - Output: **"All implementation complete. Draft PR(s) raised — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
      - Skip discarded e2e phase numbers: if `N+1` is in `discarded_e2e_phases`,
        advance `current_plan_phase` until a non-e2e phase is reached (or all done).
      - **If `auto_approve` is `false`:**
-       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks. Once this phase's PR CI passes, run `/opsx-e2e --phase {N}` for E2E tests."
+       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks. Once this phase's PR CI passes, run `/opsx-e2e --phase {N}` to generate E2E tests — the generated code will be pushed to the PR, triggering CI again."
        YIELD.
      - **If `auto_approve` is `true`:**
        Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."

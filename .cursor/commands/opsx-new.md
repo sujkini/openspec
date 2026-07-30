@@ -11,12 +11,11 @@ Start a new change for the **openspec-agile-workflow** pipeline.
 
 | Input | Required at `/opsx-new`? | Required later? | When |
 |-------|--------------------------|-----------------|------|
-| **Jira ticket key** | **YES** | — | Always the first input |
+| **Jira ticket key or URL** | **YES** | — | Always the first input |
+| **Target GitHub repo URL** | **YES** | — | Asked during `/opsx-new` if not provided inline |
+| **Fork GitHub repo URL** | No | **YES** | Before `/opsx-apply` (skip in working-folder mode) |
 | **Change name** (kebab-case) | No | — | Optional; defaults to lowercase ticket slug (`PROJ-123` → `proj-123`) |
-| **Target GitHub repo URL** | **NO** | **YES** | Before **repo-assessment** (`/opsx-continue` ~3rd artifact) |
 | **AGENTS.md** | No | No | Optional |
-
-**At `/opsx-new` you only need the Jira key.** Do not ask for the repo URL unless the user includes it inline.
 
 ## Command syntax
 
@@ -24,18 +23,26 @@ Start a new change for the **openspec-agile-workflow** pipeline.
 /opsx-new CM-830
 /opsx-new CM-830 my-change-name
 /opsx-new CM-830 my-change-name https://github.com/org/repo
+/opsx-new https://issues.redhat.com/browse/CM-830
+/opsx-new https://issues.redhat.com/browse/CM-830 https://github.com/org/repo
 ```
 
 Jira key pattern: `[A-Z][A-Z0-9]+-\d+`.
+Jira URL pattern: `https://<host>/browse/<KEY>` — extract the key from the URL.
 
-If no Jira key, ask once. Do **not** proceed without it.
+If no Jira key or URL, ask once. Do **not** proceed without it.
 
 ## Steps
 
-1. Parse Jira key (required), optional change name, optional repo URL.
-2. `openspec new change "<name>"` — uses `openspec-agile-workflow` from `openspec/config.yaml`.
-3. Write `openspec/changes/<name>/inputs/jira.yaml` with `jira_key`, `target_repo`, `created_at`.
-4. **Fetch ticket + epic metadata** → `inputs/jira-spec.md` + enrich `inputs/jira.yaml`:
+1. Parse Jira key or URL (required), optional change name, optional repo URL.
+   - If a Jira URL is provided (e.g. `https://issues.redhat.com/browse/CM-830`), extract the key from the path.
+2. **Ask for target repo URL** (if not provided inline):
+   ASK: **"What is the target GitHub repository URL? (e.g. https://github.com/org/repo)"**
+   - Store in `inputs/jira.yaml` → `target_repo`
+   - This is needed for repo-assessment and implementation stages
+3. `openspec new change "<name>"` — uses `openspec-agile-workflow` from `openspec/config.yaml`.
+4. Write `openspec/changes/<name>/inputs/jira.yaml` with `jira_key`, `jira_url`, `target_repo`, `created_at`.
+5. **Fetch ticket + epic metadata** → `inputs/jira-spec.md` + enrich `inputs/jira.yaml`:
    - Use Jira MCP `jira_get_issue` with `issue_key: "<JIRA-KEY>"` and
      `fields: "summary,status,issuetype,parent,customfield_10014"`.
    - From the response, extract and persist to `inputs/jira.yaml`:
@@ -51,16 +58,17 @@ If no Jira key, ask once. Do **not** proceed without it.
    - **Note:** Spec-understanding phase telemetry does NOT start here — it begins at
      `/opsx-continue` step 6 (`on-artifact-start --artifact validation`). `/opsx-new` only
      registers the run.
-5. **Telemetry — register run** (silent, non-blocking):
+6. **Telemetry — register run** (silent, non-blocking):
    ```bash
    python -m openspec.telemetry.auto on-new --change "<name>" --jira-key "<JIRA-KEY>"
    ```
-6. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
-7. **STOP** — do not create artifacts yet.
+7. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
+8. **STOP** — do not create artifacts yet.
 
 Prompt: `/opsx-continue` to create `validation.json`.
 
 ## Guardrails
 
-- Jira key required; repo URL optional at this step
+- Jira key or URL required; extract key from URL if URL provided
+- Target repo URL required — ask if not provided inline
 - No planning artifacts in this command
