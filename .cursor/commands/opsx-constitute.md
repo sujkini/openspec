@@ -1,0 +1,331 @@
+---
+name: /opsx-constitute
+id: opsx-constitute
+category: Workflow
+description: Bootstrap constitution.md from a target repo's agentic documents (AGENTS.md) and repo structure
+---
+
+Bootstrap `openspec/inputs/constitution.md` and `openspec/inputs/agents.md` from a target
+GitHub repository. Extracts agentic governance documents and lightweight repo structure,
+then generates a constitution as non-negotiable guardrails for all downstream agents.
+
+This command is **independent of any change** — it runs before `/opsx-new`. It does NOT
+require specs.md, repo-assessment.md, or any other workflow artifact.
+
+## Command syntax
+
+```
+/opsx-constitute https://github.com/openshift/cert-manager-operator
+/opsx-constitute https://github.com/openshift/cert-manager-operator master
+/opsx-constitute https://github.com/openshift/cert-manager-operator cert-manager-1.18
+```
+
+Arguments:
+1. **repo URL** (required) — GitHub HTTPS URL of the target operator repo
+2. **branch** (optional) — branch to analyze (default: repo default branch)
+
+## Steps
+
+### 1. Parse and validate inputs
+
+- Extract org/repo from the URL (support `https://github.com/<org>/<repo>` and
+  `https://github.com/<org>/<repo>.git`)
+- Branch defaults to repo default (main/master) if not provided
+- If no repo URL is given, ASK once: "Provide the target GitHub repository URL
+  (e.g. https://github.com/org/repo)"
+
+### 2. Fetch repo content
+
+Try `gh api` first for speed. Fall back to shallow clone if `gh` is not authenticated.
+
+**Option A — gh api (preferred):**
+
+```bash
+# Fetch repo tree
+gh api repos/{org}/{repo}/git/trees/{branch}?recursive=1 --jq '.tree[].path' > /tmp/opsx-constitute-tree.txt
+
+# Fetch specific files by content
+gh api repos/{org}/{repo}/contents/AGENTS.md?ref={branch} --jq '.content' | base64 -d
+gh api repos/{org}/{repo}/contents/agents.md?ref={branch} --jq '.content' | base64 -d
+# Repeat for go.mod, Makefile, Dockerfile, README.md, .golangci.yaml, CONTRIBUTING.md, CLAUDE.md
+```
+
+**Option B — shallow clone (fallback):**
+
+```bash
+WORK_DIR=$(mktemp -d /tmp/opsx-constitute-XXXXXX)
+git clone --depth 1 --single-branch ${BRANCH:+--branch "$BRANCH"} "$REPO_URL" "$WORK_DIR/repo"
+```
+
+Record:
+- Resolved branch name
+- HEAD commit SHA (short)
+
+### 2b. Check for existing constitution in repo
+
+After fetching, check if the repo already ships a constitution:
+- `{repo}/constitution.md`
+- `{repo}/CONSTITUTION.md`
+
+If found:
+  ASK: **"This repo already contains constitution.md. Use the existing one
+  (copy to openspec/inputs/) or generate a fresh one from AGENTS.md?"**
+  - **Use existing** → copy directly to `openspec/inputs/constitution.md`, skip to Step 6
+  - **Generate fresh** → proceed to Step 3
+
+### 3. Extract agentic documents (PRIMARY source)
+
+Scan the repo for governance/agentic documents. These are the PRIMARY
+source for deriving constitution principles.
+
+| Priority | Path pattern | What to extract |
+|----------|-------------|-----------------|
+| 1 | `AGENTS.md`, `agents.md` | Agent roster, architecture, routing, conventions, test patterns |
+| 2 | `CLAUDE.md` | Claude-specific coding rules and conventions |
+| 3 | `.cursor/rules/*.mdc` | Cursor rule files with repo-specific conventions |
+| 4 | `CONTRIBUTING.md` | Development workflow, PR process, review norms |
+
+**Read all found agentic documents in full.** These drive the constitution content.
+
+If NO agentic documents are found:
+- WARN: "No agentic governance documents found in {repo}. Constitution will
+  be derived from repo structure only — quality will be lower. Consider adding
+  AGENTS.md to your repo."
+- Set `AgentRoutingMode: PROVISIONAL`
+- Proceed with repo-structure-only generation
+
+### 4. Extract repo structure (EVIDENCE backing only)
+
+Collect the following from the repo. This is NOT for deep analysis —
+it provides file-path evidence citations for constitution principles.
+
+| File / Pattern | What to extract |
+|---------------|-----------------|
+| Directory tree (3 levels) | Directories excluding `.git`, `vendor`, `node_modules` |
+| `go.mod` | Go version, module path, key dependency lines |
+| `Makefile` | Target names, key variables |
+| `Dockerfile` | Base image, USER directive, build constraints |
+| `README.md` | First 100 lines (project overview) |
+| `.golangci.yaml` / `.golangci.yml` | Linter config, enabled linters, build tags |
+| `hack/` listing | Script names (verify/update patterns) |
+| `api/` listing | CRD type file names |
+| `pkg/` listing (2 levels) | Package structure |
+| `config/rbac/` listing | RBAC manifest names |
+| `bundle/` listing | OLM bundle presence |
+| `bindata/` listing | Embedded manifest structure |
+| `.github/workflows/` listing | CI workflow file names |
+| Recent git log | `git log --oneline -10` |
+
+### 5. Generate constitution.md
+
+Using the agentic documents (Step 3) as primary source and repo structure
+(Step 4) as evidence backing, generate the constitution following the
+generation prompt and output structure defined in this command.
+
+---
+
+#### Constitution Generation Prompt
+
+You are the "Constitution Agent": a repository governance analyst bootstrapping
+non-negotiable guardrails for a spec-driven development pipeline.
+
+##### Mission
+
+Produce `constitution.md` — a document of core principles, coding conventions,
+development workflow, and governance rules derived from the repository's agentic
+documents and codebase structure. This document is injected into all downstream
+agents (Planning, Task Creation, Code Generation) as non-negotiable guardrails.
+
+##### Why this matters
+
+Downstream agents must follow the repo's EXISTING patterns. The constitution
+prevents agents from introducing incompatible patterns, ignoring existing
+conventions, or duplicating logic.
+
+##### Inputs
+
+1. **Agentic documents** (PRIMARY) — AGENTS.md, CLAUDE.md, cursor rules,
+   CONTRIBUTING.md found in the target repo. These contain the architecture,
+   controller patterns, test conventions, coding rules, and agent routing
+   defined by the repo maintainers. Derive ALL principles from these.
+
+2. **Repo structure** (EVIDENCE BACKING) — directory tree, go.mod, Makefile,
+   Dockerfile, hack/ listing, git log. Use ONLY for `**Evidence:**` citations
+   to ground each principle in observable file paths and patterns.
+
+##### Task
+
+1. Derive Core Principles from the agentic documents' ACTUAL conventions —
+   each principle must map to a concrete pattern or rule stated in the agentic
+   docs, backed by an observable file path or structure in the repo. No generic
+   best-practice platitudes. Prefer 5–10 substantive principles over padding.
+
+2. Record Additional Constraints: tech stack requirements (Go version, linter
+   config, vendor mode, container base image, import ordering), compliance
+   standards, deployment policies — all derived from agentic docs or repo config.
+
+3. Document Development Workflow: code review requirements, testing gates,
+   CI/CD process, verification commands, codegen refresh — as actually
+   documented in the agentic docs or observable in the Makefile/hack/ scripts.
+
+4. Agent Routing:
+   - If AGENTS.md was found: set `AgentRoutingMode: PROVIDED` and record all
+     agent IDs, scopes, and routing rules from AGENTS.md.
+   - If AGENTS.md was NOT found: set `AgentRoutingMode: PROVISIONAL` and list
+     provisional IDs (API_Agent, OperatorController_Agent, ManifestsBindata_Agent,
+     WebhookTLS_Agent, RBACSecurity_Agent, OLMRelease_Agent, Testing_Agent,
+     Docs_Agent).
+
+5. Governance section: how this constitution relates to companion docs
+   (AGENTS.md, CLAUDE.md, CONTRIBUTING.md) — which takes precedence for what.
+
+##### Quality rules
+
+- Every principle must cite evidence from the repo (file path or pattern).
+  Do not invent principles not supported by the agentic documents or repo.
+- Do not include implementation decisions for any specific feature.
+- Do not include file inventories, risk analysis, or target file lists.
+- Do not reference specs.md, repo-assessment.md, plan.md, or any workflow
+  artifact — this constitution is workflow-independent.
+
+##### Output
+
+Output ONLY the complete constitution.md markdown document.
+No preamble, no explanation, no code fences — just the document.
+Follow the output structure below exactly.
+
+---
+
+#### Constitution Output Structure
+
+<!-- Generated by /opsx-constitute from {REPO_URL} @ {BRANCH} ({COMMIT_SHA}) -->
+
+The generated constitution MUST follow this exact structure:
+
+```
+# [PROJECT_NAME] Constitution
+
+**AgentRoutingMode:** PROVIDED | PROVISIONAL
+<!-- PROVIDED when AGENTS.md exists in repo; PROVISIONAL otherwise -->
+
+**Version**: 1.0.0 | **Ratified**: [TODAY_DATE] | **Last Amended**: [TODAY_DATE]
+
+<!--
+  Self-check (all must pass):
+  - Every principle cites observable repo evidence (file path or pattern).
+  - No generic best practices — only patterns from the agentic docs and codebase.
+  - AgentRoutingMode matches whether AGENTS.md was found.
+  - No feature-specific implementation decisions.
+  - No file inventories or risk analysis.
+-->
+
+## Core Principles
+
+### I. [PRINCIPLE_NAME]
+[PRINCIPLE_DESCRIPTION — what to do and why, grounded in agentic doc content]
+
+**Evidence:** `[path/to/file]` — [one-line observation from actual repo structure]
+
+### II. [PRINCIPLE_NAME]
+[PRINCIPLE_DESCRIPTION]
+
+**Evidence:** `[path/to/file]` — [observation]
+
+<!-- 5–10 principles, each with Evidence citation. Only add principles
+     supported by the agentic documents and observable repo structure. -->
+
+## Additional Constraints
+
+<!-- Tech stack, compliance, deployment policies, naming conventions -->
+
+- **[Constraint category]:** [Rule derived from agentic docs or repo config] — **Evidence:** `[path]`
+- **[Constraint category]:** [Rule] — **Evidence:** `[path]`
+
+## Development Workflow
+
+<!-- How work actually flows: verify, test, lint, codegen, review, CI -->
+
+| Activity | Requirement | Evidence |
+|----------|-------------|----------|
+| Local unit tests | [e.g., `make test`] | `Makefile` |
+| Full verify | [e.g., `make verify` or `hack/verify-*`] | `hack/` |
+| Lint | [e.g., `make lint`] | `.golangci.yaml` |
+| Codegen refresh | [when required] | `[path]` |
+| PR / review | [from agentic docs or CONTRIBUTING.md] | `[path]` |
+
+## Agent Routing
+
+<!-- PROVIDED: summarize AGENTS.md agent IDs and routing rules.
+     PROVISIONAL: list provisional IDs. -->
+
+| Agent ID | Scope | When to route |
+|----------|-------|---------------|
+| [AGENT_ID] | [capability] | [task types] |
+
+## Governance
+
+- This constitution supersedes ad-hoc conventions for downstream Planning, Task Creation, and Code Generation agents.
+- **Amendments:** require documented evidence of repo change; bump Version and Last Amended date.
+- **Conflicts:** if a feature spec contradicts constitution, escalate — do not silently override.
+- **Companion docs:** AGENTS.md / CLAUDE.md / CONTRIBUTING.md — [which takes precedence for what].
+- **Complexity:** new patterns must justify deviation from existing repo conventions with explicit rationale.
+```
+
+---
+
+### 6. Write outputs
+
+1. **Check for existing files** before writing:
+   - If `openspec/inputs/constitution.md` already exists:
+     ASK: **"constitution.md already exists in openspec/inputs/. Overwrite? (Yes / No)"**
+   - If `openspec/inputs/agents.md` already exists:
+     ASK: **"agents.md already exists in openspec/inputs/. Overwrite? (Yes / No)"**
+
+2. **Write constitution**: Save the generated constitution to `openspec/inputs/constitution.md`
+
+3. **Copy agents.md**: If AGENTS.md / agents.md was found in the repo, copy it to
+   `openspec/inputs/agents.md`
+
+### 7. Cleanup
+
+Remove any temp directories created during clone (Option B).
+
+```bash
+rm -rf "$WORK_DIR"
+```
+
+### 8. Summary
+
+Present:
+
+```
+## Constitution Bootstrap Complete
+
+**Repo:** {org}/{repo} @ {branch} ({commit_sha_short})
+**Agentic docs found:** [list of files found]
+**AgentRoutingMode:** PROVIDED | PROVISIONAL
+**Principles generated:** [count]
+**Additional constraints:** [count]
+
+**Files written:**
+- openspec/inputs/constitution.md ✓
+- openspec/inputs/agents.md ✓ (or "not found in repo")
+
+**Next:** Run `/opsx-new <JIRA-KEY> {REPO_URL}` to start a change.
+```
+
+## Guardrails
+
+- This command is **pre-workflow** — do NOT create a change directory
+- Do NOT generate specs.md, repo-assessment.md, plan.md, or any workflow artifact
+- Do NOT modify any existing change under `openspec/changes/`
+- Do NOT reference or read `templates/constitution-template.md` — this command
+  is fully self-contained
+- AGENTS.md is the PRIMARY source — repo structure is evidence backing only
+- Every principle must be traceable to the agentic documents or repo structure
+- Clean up temp clone directory even on failure
+- If the repo has no agentic docs, warn the user and proceed with PROVISIONAL mode
+- **Template sync note:** If the constitution output structure changes in the
+  future, update this command's output structure to match. This command is
+  intentionally decoupled from `templates/constitution-template.md` to avoid
+  agent confusion during generation.
