@@ -27,14 +27,27 @@ Continue working on a change by creating the **next** artifact, then **eval → 
    - **Working-folder mode:** If the user directs using the working folder as the repo,
      set `use_working_folder_as_repo: true` in `inputs/jira.yaml`, record
      `working_folder_path`, analyze cwd — do not ask for GitHub URL or clone separately.
-   - **Default mode:** If the next ready artifact is `repo-assessment` (or `constitution`) and
+   - **Default mode:** If the next ready artifact is `repo-assessment` and
      `target_repo` is absent or empty in `jira.yaml`:
      - Ask the user once: "Provide the URL of the target GitHub repository
        (e.g. https://github.com/org/repo)."
      - Persist `target_repo` to `inputs/jira.yaml`.
      - Verify the repository is accessible before creating repo-assessment.
-     - **Do not** create repo-assessment or constitution until `target_repo` is recorded.
+     - **Do not** create repo-assessment until `target_repo` is recorded.
    - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
+
+4b. **Constitution check before planning** (ONLY when next ready artifact is `plan`):
+    - Read `openspec/inputs/constitution.md`.
+    - If the file does NOT exist or is EMPTY:
+      STOP and output:
+      **"constitution.md is required before planning but was not found (or is empty) at
+      `openspec/inputs/constitution.md`. Please provide it using one of these options:
+      1. Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo
+      2. Place your constitution.md manually in `openspec/inputs/constitution.md`
+      Then re-run `/opsx-continue`."**
+      Do NOT proceed. Do NOT auto-generate from a template.
+    - If the file exists and has content: proceed to step 5.
+
 5. Pick first artifact with `status: "ready"`.
 
 5b. **Task execution mode check** (ONLY when next ready artifact is `tasks`):
@@ -159,7 +172,11 @@ Continue working on a change by creating the **next** artifact, then **eval → 
 
 ## Artifact order (openspec-agile-workflow)
 
-validation.json → specs.md → repo-assessment.md → constitution.md → plan.md → tasks.md → …
+validation.json → specs.md → repo-assessment.md → [constitution.md check] → plan.md → tasks.md → …
+
+**Note:** constitution.md is NOT a generated artifact. It is checked as a prerequisite before
+plan.md. If `openspec/inputs/constitution.md` does not exist or is empty, the workflow stops
+and prompts the user to provide it (via `/opsx-constitute` or manually).
 
 ## Eval gate by artifact
 
@@ -168,7 +185,6 @@ validation.json → specs.md → repo-assessment.md → constitution.md → plan
 | validation | Rubric in `templates/validation-template.md` only |
 | specs | Skip (no stage eval) |
 | repo-assessment | `evals/repo-assessment_eval.yaml` |
-| constitution | Skip (input, not evaluated) |
 | plan | `evals/plan_eval.yaml` |
 | tasks | `evals/tasks_eval.yaml` |
 
@@ -189,7 +205,7 @@ After step 11 completes with `--status passed`, **do NOT stop**. Instead:
 4. When the loop ends, print a summary of all artifacts processed and their eval scores.
 
 This means a single `/opsx-continue` invocation with `auto_approve: true` will process
-**all** remaining artifacts (validation → specs → repo-assessment → constitution → plan → tasks)
+**all** remaining artifacts (validation → specs → repo-assessment → plan → tasks)
 in sequence, stopping only after the last one is approved.
 
 **When `auto_approve` is `false`:**

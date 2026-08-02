@@ -85,17 +85,17 @@ constitution_md:
     Pre-approved constitution document provided as an input. Contains non-negotiable
     guardrails, coding conventions, development workflow, and governance rules derived
     from the operator's codebase. Used as input for Planning, Task Creation, and
-    Implementation stages. NOT generated as an artifact — provided by the operator team.
+    Implementation stages. NOT generated as an artifact — must be provided by the
+    operator team or bootstrapped via /opsx-constitute.
   lookup_order:
-    - "{target_repo}/constitution.md"
-    - "{target_repo}/CONSTITUTION.md"
     - "openspec/inputs/constitution.md"
   when_missing: >-
-    Before starting planning (plan.md), resolve constitution.md using lookup_order.
-    Check target repo first, then openspec/inputs/. If still not found, ask the user
-    once to provide constitution.md. If the user declines, generate one using
-    templates/constitution-template.md as a one-time generation step (not a standard artifact
-    stage), save to openspec/inputs/constitution.md, and proceed.
+    Before starting planning (plan.md), check openspec/inputs/constitution.md.
+    If the file does not exist or is empty, STOP and prompt the user:
+    "constitution.md is required but not found (or empty) at openspec/inputs/constitution.md.
+    Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo, or
+    provide constitution.md manually in openspec/inputs/constitution.md."
+    Do NOT auto-generate from a template. Do NOT proceed to planning without it.
   used_in_stages:
     - id: planning
       required: true
@@ -113,11 +113,11 @@ constitution_md:
         code eval gate. direct mode: verified via acceptance criteria tests.
   not_used_in_stages:
     - spec-understanding
-  template_for_generation: templates/constitution-template.md
   note: >-
-    The constitution.md template remains in templates/ for reference and for one-time
-    generation if no pre-approved constitution exists. But in normal operation,
-    constitution is an INPUT — not a generated artifact.
+    constitution.md is strictly an INPUT — never auto-generated. Use /opsx-constitute
+    to bootstrap it from the target repo's agentic documents (AGENTS.md, CLAUDE.md,
+    .cursor/rules, CONTRIBUTING.md). If the operator team has a pre-existing
+    constitution.md, place it directly in openspec/inputs/.
 
 # ---------------------------------------------------------------------------
 # jira_metadata — enriched Jira fields fetched at /opsx-new via Jira MCP
@@ -321,7 +321,6 @@ phases_jira_sync:
 target_repo:
   description: >-
     Upstream GitHub repository URL used for repo-assessment, plan, and tasks.
-    Also checked for constitution.md (see constitution_md.lookup_order).
     Distinct from fork_repo_url (user's fork for implementation).
   collected_at: repo-understanding
   stored_in: openspec/changes/<change>/inputs/jira.yaml
@@ -495,7 +494,7 @@ auto_approve:
   description: >-
     When true, all user approval gates are auto-approved without prompting.
     Applies to:
-      - /opsx-continue: artifact approval (specs, repo-assessment, constitution,
+      - /opsx-continue: artifact approval (specs, repo-assessment,
         plan, tasks). The agent loops through all ready artifacts automatically
         using batch telemetry.
       - /opsx-apply: per-task code approval during implementation. The agent
@@ -1096,11 +1095,11 @@ workflow:
     description: >-
       Technical planning using approved repo assessment, constitution (input), and specs.
       Planning approach is evaluated by the user before plan.md is finalized.
-      Constitution.md is resolved via schema constitution_md.lookup_order before this stage.
+      Constitution.md must exist in openspec/inputs/constitution.md before this stage.
     inputs:
       - specs.md
       - repo-assessment.md
-      - constitution.md (input — resolved via constitution_md.lookup_order; see schema constitution_md)
+      - constitution.md (input — read from openspec/inputs/constitution.md; see schema constitution_md)
       - AGENTS.md (optional — ask user if missing; see agents_md.when_missing)
       - validation.json
     outputs:

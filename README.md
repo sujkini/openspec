@@ -156,8 +156,8 @@ The bundled `agents.md` ships with a reference. Replace it entirely with your op
 ```
 /opsx-continue              → validation.json      [approve]
 /opsx-continue              → specs.md             [approve]
-/opsx-continue              → repo-assessment.md   [approve] (constitution.md resolved as input)
-/opsx-continue              → plan.md              [approve]
+/opsx-continue              → repo-assessment.md   [approve]
+/opsx-continue              → plan.md              [approve] (requires constitution.md in inputs/)
 /opsx-continue              → tasks.md             [approve] (+ Jira phase ticket in phase-iterative)
 ```
 
@@ -369,14 +369,14 @@ Update `eval-generation/input/feature-bundle.yaml` with the next completed featu
 ## Pipeline Overview
 
 ```
-validation → specs → repo-assessment → [resolve constitution.md] → plan → tasks → implementation → [E2E] → archive
+validation → specs → repo-assessment → [constitution.md required] → plan → tasks → implementation → [E2E] → archive
 ```
 
 | Stage | Artifacts | Purpose |
 |-------|-----------|---------|
 | **Spec understanding** | `validation.json`, `specs.md` | Validate Jira spec before repo work |
 | **Repo understanding** | `repo-assessment.md` | Ground planning in the target repository |
-| **Constitution (input)** | `constitution.md` (resolved) | Non-negotiable guardrails |
+| **Constitution (input)** | `constitution.md` (from `inputs/`) | Non-negotiable guardrails |
 | **Planning** | `plan.md` | Phased implementation plan (e2e phases excluded) |
 | **Task creation** | `tasks.md` + Jira phase ticket | Executable task manifest with agents (e2e tasks excluded) |
 | **Implementation** | code + `implementation-report.md` | Task-by-task execution with per-task approval |
@@ -449,13 +449,21 @@ validation → specs → repo-assessment → [resolve constitution.md] → plan 
 3. `openspec/inputs/agents.md`
 4. `{schema_root}/agents.md` (bundled fallback)
 
-## constitution.md Resolution (lookup order)
+## constitution.md Resolution
 
-1. `{target_repo}/constitution.md`
-2. `{target_repo}/CONSTITUTION.md`
-3. `openspec/inputs/constitution.md`
+`constitution.md` is read from a single location:
 
-If not found, the agent generates one using `templates/constitution-template.md`.
+```
+openspec/inputs/constitution.md
+```
+
+If this file does not exist or is empty, the workflow **stops before planning** and prompts you to provide it.
+
+**How to create it:**
+- Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo's agentic documents (AGENTS.md, CLAUDE.md, .cursor/rules, CONTRIBUTING.md)
+- Or place a pre-existing `constitution.md` directly in `openspec/inputs/`
+
+The workflow will **never** auto-generate a constitution from a template.
 
 ---
 
