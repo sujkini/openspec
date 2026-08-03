@@ -2,13 +2,12 @@
 name: /opsx-constitute
 id: opsx-constitute
 category: Workflow
-description: Bootstrap constitution.md from harness-docs and a target repo's agentic documents
+description: Generate constitution.md from harness-docs (with optional repo structure evidence)
 ---
 
-Bootstrap `openspec/inputs/constitution.md` and `openspec/inputs/agents.md` from local
-operator harness documentation (`harness-evals/harness-docs/`) and a target GitHub repository.
-Extracts agentic governance documents and lightweight repo structure, then generates a
-constitution as non-negotiable guardrails for all downstream agents.
+Generate `openspec/inputs/constitution.md` and `openspec/inputs/agents.md` from local
+operator harness documentation (`harness-evals/harness-docs/`). Optionally fetches a target
+GitHub repository for supplementary repo structure evidence (directory layout, build targets).
 
 This command is **independent of any change** — it runs before `/opsx-new`. It does NOT
 require specs.md, repo-assessment.md, or any other workflow artifact.
@@ -16,26 +15,38 @@ require specs.md, repo-assessment.md, or any other workflow artifact.
 ## Command syntax
 
 ```
+/opsx-constitute
 /opsx-constitute https://github.com/openshift/cert-manager-operator
-/opsx-constitute https://github.com/openshift/cert-manager-operator master
 /opsx-constitute https://github.com/openshift/cert-manager-operator cert-manager-1.18
 ```
 
 Arguments:
-1. **repo URL** (required) — GitHub HTTPS URL of the target operator repo
+1. **repo URL** (optional) — GitHub HTTPS URL of the target operator repo for supplementary
+   repo structure evidence (directory layout, go.mod, Makefile targets). If omitted, the
+   constitution is generated purely from `harness-evals/harness-docs/`.
 2. **branch** (optional) — branch to analyze (default: repo default branch)
 
 ## Steps
 
-### 1. Parse and validate inputs
+### 1. Read harness-docs (REQUIRED)
 
-- Extract org/repo from the URL (support `https://github.com/<org>/<repo>` and
-  `https://github.com/<org>/<repo>.git`)
-- Branch defaults to repo default (main/master) if not provided
-- If no repo URL is given, ASK once: "Provide the target GitHub repository URL
-  (e.g. https://github.com/org/repo)"
+Read all `.md` files in `harness-evals/harness-docs/`.
 
-### 2. Fetch repo content
+- If the directory exists AND contains at least one `.md` file:
+  - Load all documents as the SOLE governance source for constitution generation
+  - Proceed to Step 2
+
+- If `harness-evals/harness-docs/` does not exist or is empty:
+  STOP and output:
+  **"No harness documentation found in `harness-evals/harness-docs/`. Place your
+  operator documentation (architecture guides, coding conventions, testing patterns, etc.)
+  in that folder and re-run `/opsx-constitute`."**
+  Do NOT proceed.
+
+### 2. Fetch repo structure (OPTIONAL — only if repo URL provided)
+
+If a repo URL was provided, fetch lightweight repo structure for supplementary evidence.
+If no repo URL was provided, skip to Step 3 (generate purely from harness-docs).
 
 Try `gh api` first for speed. Fall back to shallow clone if `gh` is not authenticated.
 
@@ -45,10 +56,9 @@ Try `gh api` first for speed. Fall back to shallow clone if `gh` is not authenti
 # Fetch repo tree
 gh api repos/{org}/{repo}/git/trees/{branch}?recursive=1 --jq '.tree[].path' > /tmp/opsx-constitute-tree.txt
 
-# Fetch specific files by content
-gh api repos/{org}/{repo}/contents/AGENTS.md?ref={branch} --jq '.content' | base64 -d
-gh api repos/{org}/{repo}/contents/agents.md?ref={branch} --jq '.content' | base64 -d
-# Repeat for go.mod, Makefile, Dockerfile, README.md, .golangci.yaml, CONTRIBUTING.md, CLAUDE.md
+# Fetch structural files only (for evidence, not governance)
+gh api repos/{org}/{repo}/contents/go.mod?ref={branch} --jq '.content' | base64 -d
+# Repeat for Makefile, Dockerfile, README.md, .golangci.yaml
 ```
 
 **Option B — shallow clone (fallback):**
@@ -58,60 +68,41 @@ WORK_DIR=$(mktemp -d /tmp/opsx-constitute-XXXXXX)
 git clone --depth 1 --single-branch ${BRANCH:+--branch "$BRANCH"} "$REPO_URL" "$WORK_DIR/repo"
 ```
 
-Record:
+Record (if repo URL provided):
 - Resolved branch name
 - HEAD commit SHA (short)
 
-### 2b. Check for local harness-docs (PRIMARY source)
+### 2b. Check for existing constitution in repo (only if repo URL provided)
 
-Before fetching from the remote repo, check for local operator documentation:
-
-- Read all `.md` files in `harness-evals/harness-docs/`
-- If the directory exists AND contains at least one `.md` file:
-  - Use these documents as the SOLE governance source for generating constitution.md
-  - Fetch the remote repo (Step 2c) ONLY for lightweight repo structure evidence
-    (go.mod, Makefile targets, directory layout) — NOT for agentic documents
-  - Proceed to Step 3 with harness-docs content loaded
-
-- If `harness-evals/harness-docs/` does not exist or is empty:
-  STOP and output:
-  **"No harness documentation found in `harness-evals/harness-docs/`. Place your
-  operator documentation (architecture guides, coding conventions, testing patterns, etc.)
-  in that folder and re-run `/opsx-constitute`."**
-  Do NOT proceed with remote-only analysis.
-
-### 2c. Check for existing constitution in repo
-
-After fetching, check if the repo already ships a constitution:
+If a repo URL was provided, check if the repo already ships a constitution:
 - `{repo}/constitution.md`
 - `{repo}/CONSTITUTION.md`
 
 If found:
   ASK: **"This repo already contains constitution.md. Use the existing one
-  (copy to openspec/inputs/) or generate a fresh one from harness-docs + AGENTS.md?"**
-  - **Use existing** → copy directly to `openspec/inputs/constitution.md`, skip to Step 6
+  (copy to openspec/inputs/) or generate a fresh one from harness-docs?"**
+  - **Use existing** → copy directly to `openspec/inputs/constitution.md`, skip to Step 5
   - **Generate fresh** → proceed to Step 3
 
-### 3. Extract agentic documents (from harness-docs ONLY)
+### 3. Generate constitution (from harness-docs ONLY)
 
 The constitution is derived exclusively from `harness-evals/harness-docs/`:
 
-**Source — Local harness-docs (sole governance source):**
-
-Read ALL `.md` files in `harness-evals/harness-docs/`. These are operator-owner-defined
+Read ALL `.md` files loaded in Step 1. These are operator-owner-defined
 architecture guides, coding conventions, testing patterns, and operational rules.
 They are the ONLY source for governance principles in the constitution.
 
-Remote repo content (go.mod, Makefile, directory structure) serves ONLY as structural
-evidence for file paths and build targets — NOT as a source of governance rules.
+If a repo URL was provided (Step 2), repo structure (go.mod, Makefile, directory layout)
+serves ONLY as structural evidence for file paths and build targets — NOT as governance rules.
 
-If NO `.md` files are found in `harness-evals/harness-docs/`:
-- This should not happen (Step 2b stops if empty). If reached:
-  STOP: "harness-evals/harness-docs/ is empty. Cannot generate constitution."
+If NO repo URL was provided: generate the constitution purely from harness-docs content
+without any repo structure evidence.
 
-### 4. Extract repo structure (EVIDENCE backing only)
+### 4. Extract repo structure (EVIDENCE backing only — skip if no repo URL)
 
-Collect the following from the repo. This is NOT for deep analysis —
+If no repo URL was provided, skip this step entirely.
+
+Otherwise, collect the following from the repo. This is NOT for deep analysis —
 it provides file-path evidence citations for constitution principles.
 
 | File / Pattern | What to extract |

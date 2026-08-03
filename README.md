@@ -14,7 +14,7 @@ git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
-This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
+This copies `openspec/`, `.cursor/`, `eval-generation/`, `harness-evals/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
 ### 2. Configure execution mode (`openspec/config.yaml`)
 
@@ -32,7 +32,17 @@ flags:
 | `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
 | `auto_approve` | `true` / `false` | Skip manual approval gates |
 
-### 3. Start the Dashboard
+### 3. Add operator documentation (`harness-evals/harness-docs/`)
+
+Place your operator's documentation in `harness-evals/harness-docs/`:
+
+```bash
+cp /path/to/your-docs/*.md harness-evals/harness-docs/
+```
+
+These docs (architecture guides, coding conventions, testing patterns) are used by `/opsx-constitute` to generate your constitution. Without them, `/opsx-constitute` will not proceed.
+
+### 4. Start the Dashboard
 
 ```bash
 cd /path/to/your-operator-repo
@@ -41,11 +51,11 @@ cd /path/to/your-operator-repo
 
 Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
-### 4. Restart Cursor
+### 5. Restart Cursor
 
 Restart Cursor so slash commands load from `.cursor/commands/`.
 
-### 5. Run your first change
+### 6. Run your first change
 
 ```
 /opsx-new PROJ-123
@@ -130,7 +140,35 @@ After installation, configure two files in `openspec/inputs/`:
 | **`openspec/inputs/agents.md`** | Agent routing, repository architecture, test patterns, verification matrix |
 | **`openspec/inputs/constitution.md`** | Coding guardrails, CI gates, governance rules |
 
+And populate the `harness-evals/` directory:
+
+| Directory | What to place |
+|-----------|---------------|
+| **`harness-evals/harness-docs/`** | Operator documentation (architecture guides, coding conventions, testing patterns). Used by `/opsx-constitute` to generate constitution.md |
+| **`harness-evals/evals/`** | Stage eval cases (populated by `/eval-loop` or placed manually). Used as quality gates during `/opsx-continue` and `/opsx-apply` |
+
 These are the **only operator-specific files**. Everything else is generic.
+
+### Harness-Evals Structure
+
+```
+harness-evals/
+├── harness-docs/                    # Operator documentation (sole source for /opsx-constitute)
+│   ├── architecture.md              # System design, component relationships
+│   ├── coding-conventions.md        # Style guides, patterns, naming
+│   ├── testing-patterns.md          # Test strategies, exemplars, fixtures
+│   └── ...                          # Any .md files — all are read
+│
+└── evals/                           # Stage eval cases (quality gates)
+    ├── repo-assessment_eval.yaml    # Repo assessment scoring
+    ├── plan_eval.yaml               # Plan quality scoring
+    ├── tasks_eval.yaml              # Task breakdown scoring
+    └── code-generation_eval.yaml    # Per-task code quality scoring
+```
+
+- **Evals are optional.** If not present, eval scoring is skipped and the workflow proceeds with verification/tests and user approval only.
+- **Harness-docs are required for `/opsx-constitute`.** The command will stop if no documentation is found.
+- **`/eval-loop` auto-syncs** generated evals to `harness-evals/evals/`.
 
 Your `agents.md` should define:
 - **Repository layout** — directory structure, key packages
@@ -163,7 +201,7 @@ The bundled `agents.md` ships with a reference. Replace it entirely with your op
 
 Each artifact is:
 1. Generated from the template
-2. Evaluated against stage evals
+2. Evaluated against stage evals (skipped if `harness-evals/evals/` has no eval file for that stage)
 3. Refined if needed
 4. Presented for your approval
 
@@ -233,6 +271,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 
 | Command | Purpose |
 |---------|---------|
+| `/opsx-constitute <url>` | Generate constitution.md from harness-docs + repo |
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
 | `/opsx-continue` | Create next artifact; eval gate; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
@@ -402,41 +441,43 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 
 ```
 .
-├── openspec/                              # Pre-built — ready to use after install
-│   ├── config.yaml                        # Workflow configuration and flags
-│   ├── inputs/                            # Operator-specific inputs (edit these)
-│   │   ├── agents.md                      # Agent routing, architecture, test patterns
-│   │   └── constitution.md                # Coding guardrails, CI gates, governance
-│   ├── schemas/openspec-agile-workflow/   # Schema, templates, stage-gate, evals
-│   │   ├── schema.yaml                    # Workflow definition
-│   │   ├── templates/                     # Generic artifact templates (*-template.md)
-│   │   ├── e2e-workflow/                  # E2E test generation pipeline templates
-│   │   │   ├── pre-analysis-gate.md       # PR scoping and approval gate
-│   │   │   ├── test-plan-generation.md    # Tiered test plan + consolidation + code gen
-│   │   │   └── qe-behaviour.md           # Project-specific QE context
-│   │   ├── evals/                         # Stage eval cases (quality gates)
-│   │   ├── stage-gate/                    # Eval gate prompts and artifact map
-│   │   └── feedback_stage_artifacts/      # Format spec for rejection rounds
-│   ├── telemetry/                         # Telemetry collection (change metrics, reports)
-│   └── changes/                           # Active changes (created per /opsx-new)
-├── .cursor/                               # Pre-built — Cursor loads immediately
-│   ├── commands/                          # opsx-new, opsx-continue, opsx-apply, opsx-e2e, eval-loop
-│   └── skills/                            # openspec-*, effective-go, e2e-test-generator
-├── eval-generation/                       # Retrospective eval loop
-│   ├── input/                             # feature-bundle.yaml (your input)
-│   ├── output-evals/                      # Generated evals per stage (auto-synced)
-│   ├── output-refined-templates/          # Refined templates (review before applying)
-│   └── eval-generation-workflow/          # Internal workflow machinery
-│       ├── template-gaps/                 # Gap reports per template
-│       ├── outputs/                       # Epic-bug-analysis + patches
-│       ├── rounds/                        # Round snapshots
-│       └── generation-phase/              # SYSTEM_PROMPT, template-inventory
-├── dashboard/                             # Observability dashboard (optional)
-│   ├── config.json                        # Dashboard configuration
-│   ├── start.sh                           # One-command launcher
-│   ├── src/                               # FastAPI backend (ingest + UI)
-│   └── web/                               # React + TypeScript SPA
-├── install.sh                             # Installer script
+├── harness-evals/                            # Operator-owned (evals + documentation)
+│   ├── harness-docs/                         # Operator docs (read by /opsx-constitute)
+│   └── evals/                                # Stage eval YAMLs (quality gates)
+├── openspec/                                 # Pre-built — ready to use after install
+│   ├── config.yaml                           # Workflow configuration and flags
+│   ├── inputs/                               # Operator-specific inputs (edit these)
+│   │   ├── agents.md                         # Agent routing, architecture, test patterns
+│   │   └── constitution.md                   # Coding guardrails, CI gates, governance
+│   ├── schemas/openspec-agile-workflow/      # Schema, templates, stage-gate
+│   │   ├── schema.yaml                       # Workflow definition
+│   │   ├── templates/                        # Generic artifact templates (*-template.md)
+│   │   ├── e2e-workflow/                     # E2E test generation pipeline templates
+│   │   │   ├── pre-analysis-gate.md          # PR scoping and approval gate
+│   │   │   ├── test-plan-generation.md       # Tiered test plan + consolidation + code gen
+│   │   │   └── qe-behaviour.md              # Project-specific QE context
+│   │   ├── stage-gate/                       # Eval gate prompts and artifact map
+│   │   └── feedback_stage_artifacts/         # Format spec for rejection rounds
+│   ├── telemetry/                            # Telemetry collection (change metrics, reports)
+│   └── changes/                              # Active changes (created per /opsx-new)
+├── .cursor/                                  # Pre-built — Cursor loads immediately
+│   ├── commands/                             # opsx-new, opsx-continue, opsx-apply, opsx-e2e, eval-loop
+│   └── skills/                               # openspec-*, effective-go, e2e-test-generator
+├── eval-generation/                          # Retrospective eval loop
+│   ├── input/                                # feature-bundle.yaml (your input)
+│   ├── output-evals/                         # Generated evals per stage (auto-synced to harness-evals/)
+│   ├── output-refined-templates/             # Refined templates (review before applying)
+│   └── eval-generation-workflow/             # Internal workflow machinery
+│       ├── template-gaps/                    # Gap reports per template
+│       ├── outputs/                          # Epic-bug-analysis + patches
+│       ├── rounds/                           # Round snapshots
+│       └── generation-phase/                 # SYSTEM_PROMPT, template-inventory
+├── dashboard/                                # Observability dashboard (optional)
+│   ├── config.json                           # Dashboard configuration
+│   ├── start.sh                              # One-command launcher
+│   ├── src/                                  # FastAPI backend (ingest + UI)
+│   └── web/                                  # React + TypeScript SPA
+├── install.sh                                # Installer script
 └── README.md
 ```
 
@@ -460,8 +501,10 @@ openspec/inputs/constitution.md
 If this file does not exist or is empty, the workflow **stops before planning** and prompts you to provide it.
 
 **How to create it:**
-- Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo's agentic documents (AGENTS.md, CLAUDE.md, .cursor/rules, CONTRIBUTING.md)
+- Run `/opsx-constitute <repo-url>` — reads documentation from `harness-evals/harness-docs/` and generates a constitution based on your operator's governance rules
 - Or place a pre-existing `constitution.md` directly in `openspec/inputs/`
+
+**Important:** `/opsx-constitute` requires documentation in `harness-evals/harness-docs/`. If that directory is empty, the command will stop and ask you to add your operator docs first.
 
 The workflow will **never** auto-generate a constitution from a template.
 
