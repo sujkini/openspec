@@ -10,7 +10,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ```bash
 rm -rf /tmp/openspec-workflow
-git clone -b openspec-operator-generic https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b openspec-v1-restructured https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
