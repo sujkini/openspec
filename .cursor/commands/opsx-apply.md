@@ -329,6 +329,45 @@ current_task_result:
   test_output_summary: "..."
 ```
 
+##### 4f. Write eval results (direct mode equivalent)
+
+Write a lightweight eval result YAML so telemetry can track refinement rounds
+and verification/test outcomes consistently across both modes:
+
+```
+openspec/changes/<name>/eval-results/code-generation-<task-id>.yaml
+```
+
+```yaml
+task_id: <id>
+stage: code-generation
+mode: direct
+scored_at: <ISO8601>
+refinement_rounds: <N>
+verification:
+  commands:
+    - cmd: "<command executed>"
+      exit_code: <N>
+      pass: true/false
+  overall_pass: true/false
+test_execution:
+  strategy: <co_generated_tests|existing_tests|build_only|make_verify>
+  commands:
+    - cmd: "<test command>"
+      exit_code: <N>
+      pass: true/false
+      tests_run: <N>
+      tests_passed: <N>
+      tests_failed: <N>
+  overall_pass: true/false
+  test_files_generated: [...]
+```
+
+Track `refinement_rounds`:
+- Start at 0
+- Each time code/tests are fixed and re-run in steps 4c/4d, increment by 1
+- Max value: 2 (matching the 2-attempt retry limit)
+
 ---
 
 <!-- ╔══════════════════════════════════════════════════════════════╗ -->

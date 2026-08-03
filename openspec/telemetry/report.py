@@ -226,6 +226,7 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "tokens_out": 0,
                 "self_correction_loops": 0,
                 "attribution": None,
+                "metadata": None,
             }
         elif etype == "task_end":
             tpk = ev.get("task_pk", "")
@@ -239,6 +240,8 @@ def _reconstruct_tasks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
                 if ev.get("attribution"):
                     update["attribution"] = ev["attribution"]
+                if ev.get("metadata"):
+                    update["metadata"] = ev["metadata"]
                 tasks[tpk].update(update)
 
     all_tasks = [tasks[tid] for tid in order if tid in tasks]
