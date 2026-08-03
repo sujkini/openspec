@@ -352,10 +352,10 @@ These are the templates used by the OpenSpec workflow for all future artifact ge
 
 ### Step 6: Evals are auto-synced
 
-The generated evals in `eval-generation/output-evals/` are automatically copied to:
+The generated evals in `eval-generation/output-evals/` are automatically synced to:
 
 ```
-openspec/schemas/openspec-agile-workflow/evals/
+harness-evals/evals/
 ```
 
 These evals run as quality gates during `/opsx-continue` for every future artifact.

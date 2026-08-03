@@ -2,11 +2,11 @@
 
 Continuous improvement loop for **openspec-agile-workflow**: derive evals from completed feature bundles, identify template gaps, refine templates, and accumulate learnings.
 
-**Stage evals for `/opsx-continue`** ship with the schema package — not under `eval-generation/`:
+**Stage evals for `/opsx-continue`** are read from the operator-owned harness directory:
 
-`openspec/schemas/openspec-agile-workflow/evals/*_eval.yaml`
+`harness-evals/evals/*_eval.yaml`
 
-`/eval-loop` writes eval cases to `eval-generation/output-evals/` **and** syncs copies to the schema `evals/` directory.
+`/eval-loop` writes eval cases to `eval-generation/output-evals/` **and** syncs copies to `harness-evals/evals/`.
 
 ---
 
@@ -78,7 +78,7 @@ Edit `eval-generation/input/feature-bundle.yaml` with data from **one completed 
 - **`eval-generation/eval-generation-workflow/template-gaps/`** — gap reports per template and agents.md
 - **`eval-generation/output-refined-templates/`** — refined templates (review and apply back to sources)
 - **`eval-generation/output-evals/<stage>/`** — cumulative eval cases per stage
-- **`openspec/schemas/.../evals/*_eval.yaml`** — synced for forward workflow
+- **`harness-evals/evals/*_eval.yaml`** — synced for forward workflow
 
 ### 4. Apply refinements (manual)
 
@@ -106,7 +106,7 @@ output-evals/<stage>_eval.yaml ──┴────────► Eval Generat
                                             ├──► template-gaps/<template>-gaps.md (per template)
                                             ├──► PATCH output-refined-templates/ in place
                                             ├──► output-evals/<stage>/<stage>_eval.yaml
-                                            └──► openspec/schemas/.../evals/<stage>_eval.yaml (sync)
+                                            └──► harness-evals/evals/<stage>_eval.yaml (sync)
 ```
 
 **Round 2+:** Eval Generation reads **output-refined-templates/** and **template-gaps/** and **consolidated stage eval files** from prior rounds.
@@ -119,8 +119,8 @@ After `/eval-loop`, the forward workflow (`/opsx-continue` and `/opsx-apply`) re
 
 | Forward workflow reads | Populated by |
 |------------------------|--------------|
-| `openspec/schemas/.../evals/<stage>_eval.yaml` | `/eval-loop` sync |
-| `openspec/schemas/.../evals/code-generation_eval.yaml` | `/eval-loop` code-gen eval authoring |
+| `harness-evals/evals/<stage>_eval.yaml` | `/eval-loop` sync |
+| `harness-evals/evals/code-generation_eval.yaml` | `/eval-loop` code-gen eval authoring |
 
 ---
 

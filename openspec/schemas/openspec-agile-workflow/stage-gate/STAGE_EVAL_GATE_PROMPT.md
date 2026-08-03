@@ -21,7 +21,7 @@ Next `/opsx-continue` unlocks the following artifact only after user approved th
 | Purpose | Path |
 |---------|------|
 | **Generate artifact** | `templates/` (via `openspec instructions --json`) |
-| **Score artifact** | `evals/<stage>_eval.yaml` |
+| **Score artifact** | `harness-evals/evals/<stage>_eval.yaml` |
 | **Assertion schema** | `eval-generation/eval-generation-workflow/stages/<stage>-eval-spec.yaml` |
 | **Do NOT edit** | `schemas/.../templates/`, `eval-generation/output-refined-templates/` |
 
@@ -41,9 +41,15 @@ Load mapping from `artifact-eval-map.yaml`:
 
 | `gate` | Action |
 |--------|--------|
-| `stage_evals` | Load `stage_eval_file`, score every case in `evals:` list |
+| `stage_evals` | Load `stage_eval_file` from `harness-evals/evals/`, score every case in `evals:` list |
 | `rubric_only` | Score `validation.json` against `schemas/.../validation.md` rubric (no YAML cases) |
 | `skip` | Skip eval scoring; proceed to user approval after generation |
+
+**If `harness-evals/evals/<stage>_eval.yaml` does not exist** (gate is `stage_evals`):
+Skip eval scoring and proceed directly to user approval after artifact generation.
+Log: "Stage eval file `harness-evals/evals/<stage>_eval.yaml` not found — skipping eval scoring."
+
+If the file exists but `evals:` list is empty: skip eval scoring and proceed to user approval.
 
 ### Scoring each case (`stage_evals`)
 
@@ -72,7 +78,7 @@ openspec/changes/<change-name>/eval-results/<artifact-id>.yaml
 artifact_id: plan
 artifact_path: openspec/changes/my-feature/plan.md
 stage: plan
-stage_eval_file: evals/plan_eval.yaml
+stage_eval_file: harness-evals/evals/plan_eval.yaml
 scored_at: <ISO8601>
 overall_score: 72
 overall_pass: false

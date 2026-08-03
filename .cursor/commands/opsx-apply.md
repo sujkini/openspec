@@ -244,7 +244,7 @@ Set state: `EVAL_GATE`. Write state.yaml.
 Read and follow **`{schema_root}/stage-gate/CODE_GENERATION_EVAL_PROMPT.md`** Steps 1–7 exactly.
 This is the single source of truth for per-task code eval scoring, verification, test execution,
 refinement, and result recording. Key paths used by the prompt:
-- Eval cases: `{schema_root}/evals/code-generation_eval.yaml` (filter by oape_command)
+- Eval cases: `harness-evals/evals/code-generation_eval.yaml`
 - Eval results output: `openspec/changes/<name>/eval-results/code-generation-<task-id>.yaml`
 - Task report template: `{schema_root}/templates/implementation-task-report-template.md`
 - Max refinement passes: 2

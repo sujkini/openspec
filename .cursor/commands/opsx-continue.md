@@ -15,7 +15,7 @@ Continue working on a change by creating the **next** artifact, then **eval → 
 |------|-----------|--------------|
 | Schema root | `openspec/schemas/openspec-agile-workflow/` |
 | Stage gate | `{schema_root}/stage-gate/` | same |
-| Stage evals | `{schema_root}/evals/<stage>_eval.yaml` | same |
+| Stage evals | `harness-evals/evals/<stage>_eval.yaml` | operator-owned |
 | Templates | `{schema_root}/templates/` | same |
 
 ## Steps
@@ -127,7 +127,7 @@ Continue working on a change by creating the **next** artifact, then **eval → 
    generation, and user approval. Read `config.yaml → flags.auto_approve`; if `true`,
    STAGE_EVAL_GATE_PROMPT Step 5 auto-approves (no user prompt). Key paths used by the prompt:
    - Artifact-to-eval mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
-   - Stage eval cases: `{schema_root}/evals/<stage>_eval.yaml`
+   - Stage eval cases: `harness-evals/evals/<stage>_eval.yaml`
    - Eval results output: `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
    - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
@@ -180,13 +180,20 @@ and prompts the user to provide it (via `/opsx-constitute` or manually).
 
 ## Eval gate by artifact
 
-| Artifact | Stage eval file (under `{schema_root}/`) |
+| Artifact | Stage eval file |
 |----------|------------------------------------------|
 | validation | Rubric in `templates/validation-template.md` only |
 | specs | Skip (no stage eval) |
-| repo-assessment | `evals/repo-assessment_eval.yaml` |
-| plan | `evals/plan_eval.yaml` |
-| tasks | `evals/tasks_eval.yaml` |
+| repo-assessment | `harness-evals/evals/repo-assessment_eval.yaml` |
+| plan | `harness-evals/evals/plan_eval.yaml` |
+| tasks | `harness-evals/evals/tasks_eval.yaml` |
+
+**If `harness-evals/evals/` does not exist or the required `<stage>_eval.yaml` is missing:**
+Skip eval scoring and proceed directly to user approval after artifact generation.
+Log: "Stage eval file `harness-evals/evals/<stage>_eval.yaml` not found — skipping eval scoring."
+
+If the file exists but `evals:` list is empty: skip eval scoring (proceed to user approval
+after generation) — same as `skip` gate behavior.
 
 
 ## Auto-approve loop

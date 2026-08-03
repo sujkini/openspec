@@ -20,7 +20,7 @@ One command. One feature bundle. When done, update `eval-generation/input/featur
    b. Apply patchable gaps                        → patch eval-generation/output-refined-templates/ in place
    c. Merge eval cases per stage                  → eval-generation/output-evals/<stage>/<stage>_eval.yaml
    d. Create code-generation evals                → eval-generation/output-evals/code-generation/code-generation_eval.yaml
-   e. Sync flat stage evals                       → openspec/schemas/openspec-agile-workflow/evals/<stage>_eval.yaml
+   e. Sync flat stage evals                       → harness-evals/evals/<stage>_eval.yaml
    f. Update round state
 5. Increment round                                → eval-generation-workflow/round-state.yaml
 ```
@@ -70,7 +70,7 @@ One YAML per stage — all cases in `evals:` list:
 | implementation | `eval-generation/output-evals/implementation/implementation_eval.yaml` |
 | code-generation | `eval-generation/output-evals/code-generation/code-generation_eval.yaml` |
 
-Also sync each merged file to **`openspec/schemas/openspec-agile-workflow/evals/<stage>_eval.yaml`** for forward `/opsx-continue`.
+Also sync each merged file to **`harness-evals/evals/<stage>_eval.yaml`** for forward `/opsx-continue`.
 
 Do **not** write scattered `eval-r001-*.yaml` per-case files.
 
@@ -92,7 +92,7 @@ Epic Bug Analysis on round 2+ must cross-check bugs against prior evals in `outp
 | `eval-generation/eval-generation-workflow/template-gaps/<template>-gaps.md` | Gap report per template |
 | `eval-generation/eval-generation-workflow/template-gaps/agents-gaps.md` | Gap report for agents.md |
 | `eval-generation/output-evals/<stage>/<stage>_eval.yaml` | Consolidated eval cases per stage |
-| `openspec/schemas/openspec-agile-workflow/evals/<stage>_eval.yaml` | Forward workflow stage evals (synced) |
+| `harness-evals/evals/<stage>_eval.yaml` | Forward workflow stage evals (synced) |
 | `eval-generation/output-refined-templates/` | Refined templates for user to review and apply |
 | `eval-generation/eval-generation-workflow/rounds/round-N/` | Round snapshot |
 | `eval-generation/eval-generation-workflow/round-state.yaml` | Incremented round |
