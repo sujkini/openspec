@@ -83,7 +83,7 @@ Edit `eval-generation/input/feature-bundle.yaml` with data from **one completed 
 ### 4. Apply refinements (manual)
 
 After reviewing `output-refined-templates/`, apply desired changes back to:
-- `openspec/inputs/agents.md`
+- `agents.md` (operator repo root)
 - `openspec/schemas/openspec-agile-workflow/templates/`
 
 ### 5. Repeat
@@ -126,7 +126,7 @@ After `/eval-loop`, the forward workflow (`/opsx-continue` and `/opsx-apply`) re
 
 ## Rules
 
-- Do NOT modify `openspec/schemas/.../templates/` or `openspec/inputs/agents.md` during eval — use `eval-generation/output-refined-templates/`
+- Do NOT modify `openspec/schemas/.../templates/` or `agents.md` (repo root) during eval — use `eval-generation/output-refined-templates/`
 - Gap reports go to `eval-generation-workflow/template-gaps/` — one file per template + agents.md
 - `output-refined-templates/` is both working copy and output — no separate publish step
 - Write all eval cases into ONE `<stage>_eval.yaml` per stage — no scattered per-case files

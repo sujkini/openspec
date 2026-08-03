@@ -37,13 +37,13 @@ Continue working on a change by creating the **next** artifact, then **eval → 
    - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
 
 4b. **Constitution check before planning** (ONLY when next ready artifact is `plan`):
-    - Read `openspec/inputs/constitution.md`.
+    - Read `harness-evals/constitution.md`.
     - If the file does NOT exist or is EMPTY:
       STOP and output:
       **"constitution.md is required before planning but was not found (or is empty) at
-      `openspec/inputs/constitution.md`. Please provide it using one of these options:
-      1. Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo
-      2. Place your constitution.md manually in `openspec/inputs/constitution.md`
+      `harness-evals/constitution.md`. Please provide it using one of these options:
+      1. Run `/opsx-constitute` to generate it from harness-docs
+      2. Place your constitution.md manually in `harness-evals/constitution.md`
       Then re-run `/opsx-continue`."**
       Do NOT proceed. Do NOT auto-generate from a template.
     - If the file exists and has content: proceed to step 5.
@@ -175,7 +175,7 @@ Continue working on a change by creating the **next** artifact, then **eval → 
 validation.json → specs.md → repo-assessment.md → [constitution.md check] → plan.md → tasks.md → …
 
 **Note:** constitution.md is NOT a generated artifact. It is checked as a prerequisite before
-plan.md. If `openspec/inputs/constitution.md` does not exist or is empty, the workflow stops
+plan.md. If `harness-evals/constitution.md` does not exist or is empty, the workflow stops
 and prompts the user to provide it (via `/opsx-constitute` or manually).
 
 ## Eval gate by artifact

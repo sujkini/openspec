@@ -277,8 +277,8 @@ current_task_result:
 ##### 4a. Read context files
 
 Read the following for architecture patterns, guardrails, and task-specific guidance:
-- agents.md — architecture patterns, test exemplars, coding conventions
-- constitution.md — guardrails and verification requirements
+- agents.md (repo root) — architecture patterns, test exemplars, coding conventions
+- constitution.md (harness-evals/constitution.md) — guardrails and verification requirements
 - specs.md — requirements traced by this task
 - plan.md — phase goals and verification hooks
 - repo-assessment.md — target files, reusable assets

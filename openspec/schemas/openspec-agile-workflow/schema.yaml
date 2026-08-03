@@ -65,17 +65,14 @@ agents_md:
   not_used_in_stages:
     - spec-understanding
   lookup_order:
-    - "{target_repo}/AGENTS.md"
-    - "{target_repo}/agents.md"
-    - "openspec/inputs/agents.md"
-    - "{schema_root}/agents.md"
+    - "agents.md"
+    - "AGENTS.md"
   when_missing: >-
-    Before starting repo-assessment, plan, or tasks — resolve agents.md using
-    lookup_order. Check the target repo first, then openspec/inputs/ folder, then
-    schema root. Persist a copy to openspec/changes/<change>/inputs/AGENTS.md when
-    first resolved so downstream artifacts reference a stable path. If still absent,
-    ask the user once to provide AGENTS.md. Do not invent agent IDs. If the user
-    declines, proceed with AgentRoutingMode PROVISIONAL and document in plan.md and tasks.md.
+    Before starting repo-assessment, plan, or tasks — resolve agents.md from the
+    operator repo root (working directory). Look for agents.md or AGENTS.md at
+    the project root. If not found, ask the user once to provide agents.md at
+    the repo root. Do not invent agent IDs. If the user declines, proceed with
+    AgentRoutingMode PROVISIONAL and document in plan.md and tasks.md.
 
 # ---------------------------------------------------------------------------
 # constitution_md — pre-approved constitution provided as input
@@ -88,13 +85,13 @@ constitution_md:
     Implementation stages. NOT generated as an artifact — must be provided by the
     operator team or bootstrapped via /opsx-constitute.
   lookup_order:
-    - "openspec/inputs/constitution.md"
+    - "harness-evals/constitution.md"
   when_missing: >-
-    Before starting planning (plan.md), check openspec/inputs/constitution.md.
+    Before starting planning (plan.md), check harness-evals/constitution.md.
     If the file does not exist or is empty, STOP and prompt the user:
-    "constitution.md is required but not found (or empty) at openspec/inputs/constitution.md.
-    Run `/opsx-constitute <repo-url>` to bootstrap it from the target repo, or
-    provide constitution.md manually in openspec/inputs/constitution.md."
+    "constitution.md is required but not found (or empty) at harness-evals/constitution.md.
+    Run `/opsx-constitute` to generate it from harness-docs, or
+    place constitution.md manually in harness-evals/constitution.md."
     Do NOT auto-generate from a template. Do NOT proceed to planning without it.
   used_in_stages:
     - id: planning
@@ -115,9 +112,8 @@ constitution_md:
     - spec-understanding
   note: >-
     constitution.md is strictly an INPUT — never auto-generated. Use /opsx-constitute
-    to bootstrap it from the target repo's agentic documents (AGENTS.md, CLAUDE.md,
-    .cursor/rules, CONTRIBUTING.md). If the operator team has a pre-existing
-    constitution.md, place it directly in openspec/inputs/.
+    to generate it from harness-evals/harness-docs/. If the operator team has a pre-existing
+    constitution.md, place it directly in harness-evals/.
 
 # ---------------------------------------------------------------------------
 # jira_metadata — enriched Jira fields fetched at /opsx-new via Jira MCP
@@ -1095,12 +1091,12 @@ workflow:
     description: >-
       Technical planning using approved repo assessment, constitution (input), and specs.
       Planning approach is evaluated by the user before plan.md is finalized.
-      Constitution.md must exist in openspec/inputs/constitution.md before this stage.
+      Constitution.md must exist in harness-evals/constitution.md before this stage.
     inputs:
       - specs.md
       - repo-assessment.md
-      - constitution.md (input — read from openspec/inputs/constitution.md; see schema constitution_md)
-      - AGENTS.md (optional — ask user if missing; see agents_md.when_missing)
+      - constitution.md (input — read from harness-evals/constitution.md; see schema constitution_md)
+      - agents.md (read from repo root; see agents_md.when_missing)
       - validation.json
     outputs:
       - plan.md
@@ -1118,10 +1114,10 @@ workflow:
       phase. tasks.md grows incrementally; completed phase tasks stay marked [x].
     inputs:
       - specs.md
-      - constitution.md (input — resolved via constitution_md.lookup_order)
+      - constitution.md (input — read from harness-evals/constitution.md)
       - repo-assessment.md
       - plan.md
-      - AGENTS.md (optional — ask user if missing; see agents_md.when_missing)
+      - agents.md (read from repo root; see agents_md.when_missing)
     outputs:
       - tasks.md
     gate: user_approval
@@ -1146,10 +1142,11 @@ workflow:
       implementation-report.md and optional deviation-observed.md.
     inputs:
       - tasks.md (required — Task Creation complete)
-      - constitution.md (required)
+      - constitution.md (required — read from harness-evals/constitution.md)
       - specs.md (required)
       - plan.md (required)
       - repo-assessment.md (optional — improves target-file accuracy)
+      - agents.md (read from repo root)
       - target repository (upstream reference — inputs/jira.yaml target_repo)
       - forked repository URL (inputs/jira.yaml fork_repo_url — required in default
         mode; skip when use_working_folder_as_repo is true)

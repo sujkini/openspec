@@ -5,9 +5,11 @@ category: Workflow
 description: Generate constitution.md from harness-docs (with optional repo structure evidence)
 ---
 
-Generate `openspec/inputs/constitution.md` and `openspec/inputs/agents.md` from local
-operator harness documentation (`harness-evals/harness-docs/`). Optionally fetches a target
-GitHub repository for supplementary repo structure evidence (directory layout, build targets).
+Generate `harness-evals/constitution.md` from local operator harness documentation
+(`harness-evals/harness-docs/`). Optionally fetches a target GitHub repository for
+supplementary repo structure evidence (directory layout, build targets).
+
+`agents.md` is expected at the operator repo root — this command does NOT generate it.
 
 This command is **independent of any change** — it runs before `/opsx-new`. It does NOT
 require specs.md, repo-assessment.md, or any other workflow artifact.
@@ -80,8 +82,8 @@ If a repo URL was provided, check if the repo already ships a constitution:
 
 If found:
   ASK: **"This repo already contains constitution.md. Use the existing one
-  (copy to openspec/inputs/) or generate a fresh one from harness-docs?"**
-  - **Use existing** → copy directly to `openspec/inputs/constitution.md`, skip to Step 5
+  (copy to harness-evals/) or generate a fresh one from harness-docs?"**
+  - **Use existing** → copy directly to `harness-evals/constitution.md`, skip to Step 5
   - **Generate fresh** → proceed to Step 3
 
 ### 3. Generate constitution (from harness-docs ONLY)
@@ -281,16 +283,11 @@ The generated constitution MUST follow this exact structure:
 
 ### 6. Write outputs
 
-1. **Check for existing files** before writing:
-   - If `openspec/inputs/constitution.md` already exists:
-     ASK: **"constitution.md already exists in openspec/inputs/. Overwrite? (Yes / No)"**
-   - If `openspec/inputs/agents.md` already exists:
-     ASK: **"agents.md already exists in openspec/inputs/. Overwrite? (Yes / No)"**
+1. **Check for existing file** before writing:
+   - If `harness-evals/constitution.md` already exists:
+     ASK: **"constitution.md already exists in harness-evals/. Overwrite? (Yes / No)"**
 
-2. **Write constitution**: Save the generated constitution to `openspec/inputs/constitution.md`
-
-3. **Copy agents.md**: If AGENTS.md / agents.md was found in the repo, copy it to
-   `openspec/inputs/agents.md`
+2. **Write constitution**: Save the generated constitution to `harness-evals/constitution.md`
 
 ### 7. Cleanup
 
@@ -314,10 +311,9 @@ Present:
 **Additional constraints:** [count]
 
 **Files written:**
-- openspec/inputs/constitution.md ✓
-- openspec/inputs/agents.md ✓ (or "not found in repo")
+- harness-evals/constitution.md ✓
 
-**Next:** Run `/opsx-new <JIRA-KEY> {REPO_URL}` to start a change.
+**Next:** Ensure `agents.md` exists at your operator repo root, then run `/opsx-new <JIRA-KEY>` to start a change.
 ```
 
 ## Guardrails

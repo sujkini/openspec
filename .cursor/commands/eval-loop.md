@@ -52,7 +52,7 @@ Fill `eval-generation/input/feature-bundle.yaml` with data from **one completed 
 
 | Read / write | Path |
 |--------------|------|
-| **Sources (read-only)** | `openspec/schemas/openspec-agile-workflow/templates/`, `openspec/inputs/agents.md` |
+| **Sources (read-only)** | `openspec/schemas/openspec-agile-workflow/templates/`, `agents.md` (repo root) |
 | **Working copy + output** | `eval-generation/output-refined-templates/` |
 | **Gap reports** | `eval-generation/eval-generation-workflow/template-gaps/` (one file per template + agents) |
 
@@ -111,7 +111,7 @@ Tell the user:
 ## Guardrails
 
 - Do not use `/opsx-*` commands in this pipeline
-- Do not modify `openspec/schemas/.../templates/` or `openspec/inputs/agents.md` — only `output-refined-templates/`
+- Do not modify `openspec/schemas/.../templates/` or `agents.md` (repo root) — only `output-refined-templates/`
 - Write all eval cases into `<stage>_eval.yaml` — not per-case files
 - Do not delete prior eval cases without explicit user approval
 - Process bugs one at a time during Epic Bug Analysis

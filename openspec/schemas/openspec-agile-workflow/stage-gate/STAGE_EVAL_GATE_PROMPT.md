@@ -219,15 +219,11 @@ Do **not** create the next artifact in the same invocation.
 
 ## Constitution as input (not generated)
 
-Constitution.md is **not** a generated artifact — it is resolved as an input before planning.
-See schema `constitution_md.lookup_order`:
-1. `{target_repo}/constitution.md`
-2. `{target_repo}/CONSTITUTION.md`
-3. `openspec/changes/<change>/inputs/constitution.md`
-4. `openspec/inputs/constitution.md`
+Constitution.md is **not** a generated artifact — it is a pre-workflow input.
+Read from: `harness-evals/constitution.md`
 
-If not found, the agent generates one using `templates/constitution-template.md` as a one-time step
-(not a recurring artifact stage) and saves it to `openspec/changes/<change>/inputs/constitution.md`.
+If not found or empty, the workflow stops before planning and prompts the user to run
+`/opsx-constitute` or place constitution.md manually in `harness-evals/constitution.md`.
 
 ## Guardrails
 
