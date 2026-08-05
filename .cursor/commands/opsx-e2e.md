@@ -13,6 +13,27 @@ full pipeline: pre-analysis → test plan → consolidation → code generation 
 
 **Input**: Optional change name + phase number or PR URL. If omitted, infer from context.
 
+## Telemetry
+
+This command emits QE telemetry events throughout execution. Events are written to:
+```
+openspec/changes/<name>/telemetry/e2e-events.jsonl
+```
+
+At completion, a `qe-metrics.json` report is generated with 7 key metrics:
+- AC → scenario coverage %
+- Automation coverage %
+- E2E first-pass pass rate
+- Flake rate
+- Bugs found / verified
+- Triage accuracy %
+- QE tokens / $ / wall time
+
+Use the same token estimation approach as the development workflow (`openspec/telemetry/tokens.py`).
+
+**Telemetry module:** `openspec/telemetry/qe_events.py` (event emission),
+`openspec/telemetry/qe_metrics.py` (report generation)
+
 ## Schema package
 
 | Role | Path |
@@ -41,6 +62,8 @@ Determine the target PR for E2E generation:
 - If user provides `--pr <URL>`, use that directly (skips change lookup)
 
 If no PR URL found → STOP: "No PR found. Run `/opsx-apply` first to raise a PR."
+
+**Telemetry:** Emit `e2e_run_start` event with `pr_url`, `phase`, and `mode`.
 
 ### 2. Verify CI status
 
@@ -84,6 +107,10 @@ Read and follow **`{schema_root}/e2e-workflow/pre-analysis-gate.md`** in full.
 - On reject → re-run with feedback
 - On approve → proceed to Stage 2
 
+**Telemetry:** Emit `e2e_stage_start` (stage=1, stage_name="pre_analysis") before processing.
+On approval, emit `e2e_stage_end` with `tokens_in` (PR diff + qe-behaviour.md token count),
+`tokens_out` (e2e-analysis.md token count), `duration_s`, and `refinement_rounds` (0 if approved first time).
+
 ### 5. Stage 2 — Test Plan Generation
 
 Read and follow **`{schema_root}/e2e-workflow/test-plan-generation.md`** in full.
@@ -106,6 +133,10 @@ Read and follow **`{schema_root}/e2e-workflow/test-plan-generation.md`** in full
 - On reject → revise with feedback
 - On approve → proceed to Stage 3
 
+**Telemetry:** Emit `e2e_stage_start` (stage=2, stage_name="test_plan") before processing.
+On approval, emit `e2e_stage_end` with `tokens_in` (e2e-analysis.md + PR diff token count),
+`tokens_out` (test-plan.md token count), `duration_s`, and `refinement_rounds`.
+
 ### 6. Stage 3 — Consolidation (Config-Driven)
 
 Apply Section 12 of `test-plan-generation.md` (Revised Plan Consolidation).
@@ -127,6 +158,10 @@ Apply Section 12 of `test-plan-generation.md` (Revised Plan Consolidation).
 - On reject → adjust consolidation
 - On approve → proceed to Stage 4
 
+**Telemetry:** Emit `e2e_stage_start` (stage=3, stage_name="consolidation") before processing.
+On approval, emit `e2e_stage_end` with `tokens_in` (test-plan.md token count),
+`tokens_out` (revised-test-plan.md token count), `duration_s`, and `refinement_rounds`.
+
 ### 7. Stage 4 — Code Generation
 
 Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
@@ -146,6 +181,10 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 - STOP and wait for user approval
 - On reject → revise code
 - On approve → proceed to Stage 5
+
+**Telemetry:** Emit `e2e_stage_start` (stage=4, stage_name="code_generation") before processing.
+On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo patterns token count),
+`tokens_out` (sum of all generated *_test.go file token counts), `duration_s`, and `refinement_rounds`.
 
 ### 8. Stage 5 — Push and Execute
 
@@ -169,6 +208,23 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 
 3. Write E2E summary to `openspec/changes/<name>/e2e/e2e-summary.md`
 
+**Telemetry (Stage 5):**
+- Emit `e2e_stage_start` (stage=5, stage_name="execution") before push.
+- After test execution (local or CI), emit `e2e_execution` event with:
+  - `attempt` (1 for first run, 2+ for retries)
+  - `tests_run`, `tests_passed`, `tests_failed`
+  - `exit_code` (0 = all pass)
+  - `file_hash` (SHA-256 of generated test files — for flake detection)
+  - `source` ("local" or "ci")
+- For each distinct test failure, emit `e2e_bug_found` with `test_name` and `failure_message`.
+- If user re-runs after fixing code and a previously-failing test passes, emit `e2e_bug_verified`.
+- If triage RCA was provided, ASK user: "Was the root cause analysis correct? (y/n)" per bug.
+  Emit `e2e_triage` with `user_confirmed: true/false`. Skip if user declines.
+- Emit `e2e_stage_end` with `tokens_in`, `tokens_out`, `duration_s`.
+- Emit `e2e_run_end` with status.
+- **Generate QE metrics report:** Run `python -m openspec.telemetry.qe_metrics --change <name>`
+  to produce `openspec/changes/<name>/telemetry/qe-metrics.json`.
+
 ### 9. Final Summary
 
 ```
@@ -184,11 +240,23 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 | Test plan | test-plan.md | openspec/changes/<name>/e2e/ |
 | Revised plan | revised-test-plan.md | openspec/changes/<name>/e2e/ |
 | Generated code | <file>_test.go | openspec/changes/<name>/e2e/generated/ |
+| QE Metrics | qe-metrics.json | openspec/changes/<name>/telemetry/ |
 
 ### Test Results
 | Journey | Status |
 |---------|--------|
 | Journey 1: ... | PASS/FAIL/NOT RUN |
+
+### QE Metrics Summary
+| Metric | Value |
+|--------|-------|
+| AC → Scenario Coverage | X% (N/M criteria covered) |
+| Automation Coverage | X% (N automated, M manual) |
+| First-Pass Pass Rate | X% (N/M passed first run) |
+| Flake Rate | X% (N flaky retries) |
+| Bugs Found / Verified | N found, M verified |
+| Triage Accuracy | X% (or N/A) |
+| QE Cost | $X.XX (N tokens, Xs wall time) |
 
 ### Next Steps
 - Review test code in the PR
