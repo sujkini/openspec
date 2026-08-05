@@ -463,10 +463,32 @@ task_sizing:
     min: integer
     max: integer
     consolidation_threshold: integer
+  defaults:
+    min: 2
+    max: 3
+    consolidation_threshold: 2
+  small_change_override:
+    description: >-
+      When repo-assessment indicates the change is small, enforce tighter
+      constraints automatically. This prevents over-engineering trivial changes
+      with excessive tasks and phases.
+    triggers_when:
+      - "repo-assessment.md lists ≤5 target files"
+      - "change is scoped to a single package or controller"
+      - "no new CRDs or APIs are introduced"
+      - "change type is bug_fix, config, or minor refactor"
+    enforces:
+      max_phases: 1
+      task_range: "1-3"
+      consolidation_threshold: 1
+    note: >-
+      The planning agent applies the proportionality guardrail in plan-template.md
+      §5 to limit phases. The task generation template then respects the 2-3
+      default range. Combined, small changes produce 1 phase with 1-3 tasks.
   enforcement:
     - >-
       Generation templates read task_sizing from user message metadata.
-      If absent, no consolidation is applied (normal flow).
+      If absent, use defaults (min: 2, max: 3).
     - >-
       After skeleton generation, if §3 row count > max, apply
       consolidation rules and regenerate skeleton (internal — no user prompt).

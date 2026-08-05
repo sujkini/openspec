@@ -172,7 +172,9 @@ decomposition), then apply these consolidation rules to the result.
    - Represents ≥30 minutes of focused engineering effort
    If <2 criteria met → merge into nearest qualifying same-agent/phase task.
 
-**When task_sizing metadata is absent:** skip consolidation, decompose normally.
+**When task_sizing metadata is absent:** use schema defaults (min: 2, max: 3,
+consolidation_threshold: 2) and apply consolidation rules. Never generate more than
+3 tasks per phase without explicit user override.
 
 ## Mermaid constraints
 - Keep diagrams readable (< ~40 nodes); if larger, summarize phase-level DAG plus a second

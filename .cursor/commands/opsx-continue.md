@@ -85,7 +85,7 @@ Continue working on a change by creating the **next** artifact, then **eval → 
           ```
           Phase {N} of plan.md: {phase_goal}.
           How many tasks for this phase?
-          Enter a range: min max (e.g. "3 8")
+          Enter a range: min max (e.g. "2 3")
           Press Enter to use defaults ({default_min}–{default_max}).
           ```
 
@@ -95,11 +95,11 @@ Continue working on a change by creating the **next** artifact, then **eval → 
           ```
           plan.md has {N} implementation phases.
           How many total tasks should this change produce?
-          Enter a range: min max (e.g. "6 12")
+          Enter a range: min max (e.g. "2 5")
           Press Enter to use defaults ({default_min}–{default_max}).
           ```
 
-    - Parse response. Empty → defaults from config.
+    - Parse response. Empty → defaults from config (min: 2, max: 3).
     - Inject into generation context as metadata field:
       `task_sizing: { min: X, max: Y, consolidation_threshold: Z }`
     - If `prompt_user` is false: inject defaults silently (no prompt).

@@ -182,6 +182,15 @@ assignee names, ticket IDs, or "do X in PR" task lists. Typical ordering for ope
 RBAC/webhook wiring → unit/integration tests → packaging/bundle + docs.
 For other project types, derive phase ordering from repo_assessment.md and AGENTS.md.
 
+**Proportionality guardrail (MANDATORY):** After reviewing repo_assessment.md, assess change scope:
+- If the change touches ≤5 target files AND is scoped to a single package/controller AND does NOT
+  introduce new CRDs or APIs → use **1 phase only**. Do not split into multiple phases unless
+  there is a genuine compile-time or runtime dependency that prevents parallel implementation.
+- If the change is a bug fix, config change, or minor refactor with a single logical step →
+  **1 phase** is mandatory. Multiple phases for trivial changes wastes developer time.
+- Only create 2+ phases when there is a clear dependency chain (e.g., CRD must exist before
+  controller can reference it, or codegen must run before downstream code compiles).
+
 **E2e exclusion:** Do NOT create standalone e2e-only phases. E2e/cluster verification belongs
 in §6 Verification matrix only — it is out of OAPE scope. Unit and integration test
 co-generation stays inside implementation phases/tasks.
