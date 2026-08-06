@@ -151,6 +151,7 @@ For each filtered case in `evals:`:
 | `must_not_violate_non_goals` | Non-goals from task/spec not violated |
 | `must_execute_verification` | Verification commands from step 2 all passed (exit code 0) |
 | `must_co_generate_tests` | All Tier 1 tasks (controller, API with webhooks/validation, manual Go with logic) produced `_test.go` files following the exemplar pattern defined in `agents.md` |
+| `must_colocate_component_code` | All functions for one component (controller, webhook, API type group) are in a single file — no unnecessary splits (e.g. separate reconcile/status/finalizer files for the same controller) |
 
 **`must_pass_make_targets` is now enforced by real execution.** The agent MUST have
 actually run the listed make target in step 2 and it MUST have returned exit code 0.

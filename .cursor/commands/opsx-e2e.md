@@ -173,7 +173,8 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 **Process:**
 1. ASK: "Which journeys to generate code for? (all / specific numbers / none)"
 2. Detect test framework from target repo (`ginkgo`, `testing`, `testify`)
-3. Generate test file(s) following repo patterns
+3. Generate ONE test file per component/CR kind — all journeys for the same component go in a single
+   `<component>_e2e_test.go`. Create a separate file only for a genuinely different component.
 4. Write generated code to `openspec/changes/<name>/e2e/generated/`
 
 **Approval gate:**

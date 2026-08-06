@@ -292,6 +292,8 @@ Apply code changes in the working copy following:
 - constitution.md guardrails
 - Task payload instructions (objective, target files, implementation notes)
 - Acceptance criteria from the task
+- File colocation: keep all functions for one component in a single file (do not split
+  reconcile/status/finalizer across files for the same controller); match the repo's existing layout
 
 ##### 4c. Co-generate unit tests (mandatory for Tier 1 tasks)
 

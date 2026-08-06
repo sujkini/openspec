@@ -95,6 +95,11 @@ This section is **skipped entirely** when `codegen_mode = direct`.
     STOP and report a blocker in `DEVIATIONS` rather than falling back to full-file rewrite.
 11. **Go package integrity:** For every modified `.go` file, ensure exactly one `package`
     clause remains before presenting for approval.
+12. **File colocation:** All functions for one component belong in one file. Do NOT split
+    reconcile/status/finalizer into separate files for the same controller, or validation/defaulting
+    into separate files for the same webhook. CREATE a new file only when the component is
+    genuinely different (different controller, different CR kind) or the repo already uses
+    a multi-file layout for that component.
 
 ## Required response format
 
