@@ -1,0 +1,100 @@
+# implementation/state.yaml — Orchestrator state file
+# /opsx-apply MUST read this file FIRST on every invocation.
+# /opsx-apply MUST write this file after every state transition.
+# DO NOT manually edit unless recovering from a broken state.
+
+machine:
+  # ai-helpers mode states: IDLE | EXECUTING_TASK | RUNNING_TESTS | EVAL_GATE | AWAITING_APPROVAL | COMPLETE
+  # direct mode states:     IDLE | EXECUTING_TASK | RUNNING_TESTS | AWAITING_APPROVAL | COMPLETE
+  state: IDLE
+  current_task_id: null
+  current_task_index: 0
+  total_tasks: 0
+  last_transition: null  # ISO8601 timestamp
+
+# --- Solve-Pipeline KPI eval gate state (independent of codegen_mode; see
+#     schema solve_pipeline_kpi_eval_gate). Scored ONCE PER PHASE, never per
+#     task. All fields below are null/empty when flags.solve_pipeline_kpi_eval
+#     is false. ---
+
+# Captured once, on the first task of the Implementation Stage. Baseline for
+# the stage-wide coverage figure in the final code-gen-implement-report.md.
+stage_start_sha: null
+
+# Per-phase SHA bookkeeping. Keyed by phase number (as a string). start_sha is
+# captured once, at the first task of that phase. end_sha is recorded once the
+# phase's KPI gate has actually run (live trigger or backfill).
+phase_shas: {}
+# Example:
+#   "1": {start_sha: "abc1234", end_sha: "def5678"}
+#   "2": {start_sha: "def5678", end_sha: null}   # phase started, gate not run yet
+
+# List of phase numbers (integers) for which the Solve-Pipeline KPI gate has
+# actually run and written eval-results/solve-kpi-phase-<N>.yaml. THIS IS THE
+# SOURCE OF TRUTH the mandatory backfill check (run at the start of every
+# /opsx-apply invocation) compares against tasks.md's fully-completed phases
+# to detect — and immediately repair — any phase whose gate was skipped in a
+# prior session. Never advance current_plan_phase past a phase, and never set
+# state COMPLETE, while a fully-completed phase is missing from this list.
+solve_kpi_gate_completed_phases: []
+# Example: [1, 2, 3]
+
+# Completed tasks — lightweight; details in task-reports/<task-id>.md.
+# verify_status / test_status MUST be preserved here (not just left in
+# current_task_result, which is cleared on advance) — the per-phase
+# Solve-Pipeline KPI gate aggregates make_verify_passes / make_test_passes
+# across every task in a phase by reading these fields from completed[].
+completed: []
+# Example (ai-helpers mode):
+#   - task_id: T1_1
+#     oape_command: api-generate
+#     test_result: PASS
+#     verify_status: passed   # passed | failed | skipped
+#     test_status: passed     # passed | failed | skipped
+#     eval_score: 100
+# Example (direct mode):
+#   - task_id: T1_1
+#     test_result: PASS
+#     verify_status: passed
+#     test_status: passed
+
+# Current task result — written during execution, cleared on advance
+current_task_result: null
+# When populated (during AWAITING_APPROVAL):
+#
+# --- ai-helpers mode fields ---
+#   task_id: T3_1
+#   oape_command: api-implement
+#   files_changed: [pkg/controller/foo/controller.go]
+#   verification_pass: true
+#   build_status: passed
+#   test_command: "go test ./pkg/controller/foo/... -v -count=1"
+#   test_result: PASS
+#   test_status: passed                # carried into completed[] on approve
+#   verify_status: passed              # carried into completed[] on approve
+#   test_output_summary: "ok  github.com/org/repo/pkg/controller/foo 0.022s"
+#   eval_score: 95
+#   eval_cases_pass: 2
+#   eval_cases_total: 2
+#   refinement_rounds: 1
+#
+# --- direct mode fields ---
+#   task_id: T3_1
+#   files_changed: [pkg/controller/foo/controller.go]
+#   verification_pass: true
+#   build_status: passed
+#   test_command: "go test ./pkg/controller/foo/... -v -count=1"
+#   test_result: PASS
+#   test_status: passed                # carried into completed[] on approve
+#   verify_status: passed              # carried into completed[] on approve
+#   test_output_summary: "ok  github.com/org/repo/pkg/controller/foo 0.022s"
+#
+# NOTE: there is no per-task solve_kpi_gate block here — the Solve-Pipeline
+# KPI gate is scored once per phase (see phase_shas / solve_kpi_gate_completed_phases
+# above and eval-results/solve-kpi-phase-<N>.yaml), not per task.
+
+# Rejection history for current task (cleared on advance)
+rejections: []
+# Example:
+#   - round: 1
+#     feedback: "Missing error handling for nil pointer"
