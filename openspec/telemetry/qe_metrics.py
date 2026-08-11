@@ -356,6 +356,44 @@ def compute_cost_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Time saved (user-reported)
+# ---------------------------------------------------------------------------
+
+def _extract_time_saved(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract user-reported time saved from e2e_time_saved event."""
+    time_event = next(
+        (ev for ev in reversed(events) if ev.get("type") == "e2e_time_saved"),
+        None,
+    )
+    if not time_event:
+        return {
+            "development_pct": None,
+            "e2e_pct": None,
+        }
+    return {
+        "development_pct": time_event.get("development_pct"),
+        "e2e_pct": time_event.get("e2e_pct"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Jira metadata
+# ---------------------------------------------------------------------------
+
+def _read_jira_metadata(change_dir: Path) -> dict[str, Any]:
+    """Read Jira metadata from the change's inputs/jira.yaml."""
+    jira_path = change_dir / "inputs" / "jira.yaml"
+    if not jira_path.exists():
+        return {}
+    try:
+        import yaml
+        data = yaml.safe_load(jira_path.read_text()) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Report generation
 # ---------------------------------------------------------------------------
 
@@ -372,6 +410,8 @@ def generate_qe_report(change: str) -> Path:
         {},
     )
 
+    jira_data = _read_jira_metadata(change_dir)
+
     ac_coverage = compute_ac_coverage(change_dir)
     automation = compute_automation_coverage(change_dir)
     first_pass = compute_first_pass_rate(events)
@@ -379,10 +419,13 @@ def generate_qe_report(change: str) -> Path:
     bugs = compute_bugs(events)
     triage = compute_triage_accuracy(events)
     cost = compute_cost_metrics(events)
+    time_saved = _extract_time_saved(events)
 
     report: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "change_name": change,
+        "jira_task_link": jira_data.get("jira_url", ""),
+        "jira_task_name": jira_data.get("jira_summary", jira_data.get("jira_key", "")),
         "pr_url": run_event.get("pr_url", ""),
         "phase": run_event.get("phase"),
         "mode": run_event.get("mode", "phase-iterative"),
@@ -393,6 +436,7 @@ def generate_qe_report(change: str) -> Path:
         "bugs": bugs,
         "triage_accuracy": triage,
         "cost": cost,
+        "time_saved": time_saved,
     }
 
     report_path = change_dir / "telemetry" / "qe-metrics.json"

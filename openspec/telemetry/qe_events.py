@@ -181,6 +181,22 @@ class QETelemetryClient:
             "user_confirmed": user_confirmed,
         })
 
+    def record_time_saved(
+        self,
+        run_id: str,
+        development_pct: int | None = None,
+        e2e_pct: int | None = None,
+    ) -> None:
+        """Record user-reported time saved percentages."""
+        self._write_event({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "type": "e2e_time_saved",
+            "change": self._change,
+            "run_id": run_id,
+            "development_pct": development_pct,
+            "e2e_pct": e2e_pct,
+        })
+
 
 def compute_file_hash(directory: Path) -> str:
     """Compute a stable hash of all *_test.go files in a directory."""

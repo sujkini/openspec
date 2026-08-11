@@ -14,7 +14,7 @@ context: |
   fork_repo_url in inputs/jira.yaml.
   Approve each artifact before proceeding to the next stage. Implementation uses
   task-by-task execution with per-task user approval (/opsx-apply), then pushes a
-  draft PR to the user's fork.
+  draft PR from the user's fork to the upstream repo.
 
 flags:
   # codegen_mode controls the implementation phase strategy:
@@ -38,6 +38,19 @@ flags:
     default_min: 2
     default_max: 3
     consolidation_threshold: 2
+
+# User credentials (fill before /opsx-apply or /opsx-e2e)
+credentials:
+  jira:
+    base_url: ""          # e.g. https://issues.redhat.com
+    username: ""
+    api_token: ""         # Jira PAT or API token
+  github:
+    fork_repo_url: ""     # e.g. https://github.com/sujkini/zero-trust-workload-identity-manager
+    upstream_repo_url: "" # e.g. https://github.com/openshift/zero-trust-workload-identity-manager
+    token: ""             # GitHub PAT (for cross-repo PR creation)
+  cluster:
+    kubeconfig_path: ""   # absolute path to kubeconfig for E2E execution
 
 rules:
   validation:
@@ -68,5 +81,5 @@ rules:
     - "Clone fork, create feature branch, apply FILE OPERATIONS to fork working copy (not upstream)"
     - "Task-by-task execution with per-task user approval gate (codegen_mode selects OAPE commands or direct agent implementation)"
     - "Every Tier 1 implementation task must co-generate _test.go files and run go test; follow agents.md test exemplar; separate tasks only for e2e tests"
-    - "After all phases: commit, push feature branch, open draft PR on fork (head = feature branch, base = master/main)"
+    - "After all phases: commit, push feature branch to fork, open draft PR on upstream (head = fork_owner:branch, base = main)"
     - "Close with implementation-report.md, optional deviation-observed.md"

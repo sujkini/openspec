@@ -452,9 +452,22 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```
 2. Write `implementation-report.md` aggregating all `task-reports/*.md`
 3. Write `deviation-observed.md` if any deviations logged
-4. **Default mode:** Commit, push feature branch, open draft PR.
+4. **Default mode:** Commit, push feature branch, open draft PR targeting the **upstream** repo:
+   ```bash
+   # Read upstream_repo_url from config.yaml → credentials.github.upstream_repo_url
+   # Read fork_repo_url from config.yaml → credentials.github.fork_repo_url
+   # If either is empty, ASK the user and persist to inputs/jira.yaml
+   # Determine fork_owner from fork URL (e.g. "sujkini" from github.com/sujkini/repo)
+   gh pr create \
+     --repo <upstream_org/repo> \
+     --head <fork_owner>:<branch> \
+     --base main \
+     --title "<JIRA-KEY>: <change summary>" \
+     --body "Implementation by OpenSpec /opsx-apply" \
+     --draft
+   ```
    **Working-folder mode:** skip push/PR; record local changes in implementation-report.md.
-5. Present final summary: tasks, files, tests, deviations; draft PR URL when applicable.
+5. Present final summary: tasks, files, tests, deviations; upstream draft PR URL when applicable.
 6. Set state: `COMPLETE`. Write state.yaml.
 
 #### IF task_execution_mode = "phase-iterative"
@@ -471,8 +484,21 @@ When all **current phase** tasks are marked complete:
    ASK: **"All Phase {N} tasks complete. Would you like to raise a draft PR to `main` for Phase {N}? This will trigger CI jobs on the PR. (Yes / No, continue to Phase {N+1})"**
    **If `auto_approve` is `true`:**
    Skip prompt. Auto-commit and push a draft PR for this phase (default mode). Skip push/PR in working-folder mode.
-5. If yes (or auto-approved): commit, push, open draft PR to `main` scoped to this phase. Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
-   Output: **"Draft PR raised: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
+5. If yes (or auto-approved): commit, push feature branch, open draft PR targeting the **upstream** repo scoped to this phase:
+   ```bash
+   # Read upstream_repo_url from config.yaml → credentials.github.upstream_repo_url
+   # Read fork_repo_url from config.yaml → credentials.github.fork_repo_url
+   # If either is empty, ASK the user and persist to inputs/jira.yaml
+   gh pr create \
+     --repo <upstream_org/repo> \
+     --head <fork_owner>:<branch> \
+     --base main \
+     --title "<JIRA-KEY>: Phase <N> — <phase summary>" \
+     --body "Phase <N> implementation by OpenSpec /opsx-apply" \
+     --draft
+   ```
+   Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+   Output: **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
 6. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
@@ -481,8 +507,8 @@ When all **current phase** tasks are marked complete:
        ```
      - Write `implementation-report.md` aggregating all `task-reports/*.md`
      - Write `deviation-observed.md` if any deviations logged
-     - Present final summary with all phase PR URLs
-     - Output: **"All implementation complete. Draft PR(s) raised — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
+     - Present final summary with all phase PR URLs (upstream)
+     - Output: **"All implementation complete. Draft PR(s) raised on upstream — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
