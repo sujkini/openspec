@@ -193,9 +193,9 @@ On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo 
 
 #### Step 5.1 — Local execution prompt
 
-ASK: **"Run E2E tests locally before pushing? (Yes / No)"**
+ASK: **"Run E2E tests locally on your cluster? (Yes / No)"**
 
-- **No** → skip to Step 5.5 (approval gate before push).
+- **No** → skip to Step 5.5 (final decision: push / feedback / stop).
 - **Yes** → proceed to Step 5.2.
 
 #### Step 5.2 — Cluster readiness gate
@@ -332,28 +332,40 @@ ASK: **"E2E evaluation report generated. {N} tests failed ({M code bugs, K test 
 
 **If user selects "Approve and proceed":** proceed to Step 5.5.
 
-#### Step 5.5 — Approval gate before push
+#### Step 5.5 — Final decision: Push / Feedback / Stop
 
-After E2E code is generated and tests are executed (or execution was skipped), present the
-overall E2E outcome for user approval before pushing to the PR branch.
+After E2E code is generated and tests are executed (or local execution was skipped), present
+the overall E2E outcome and ask the user for their decision.
 
 - **If all tests passed (or execution skipped):**
-  ASK: **"E2E workflow complete. Generated {N} test files covering {M} journeys. Approve to push E2E code to the PR branch? (Approve / Reject with feedback)"**
+  ASK: **"E2E workflow complete. Generated {N} test files covering {M} journeys. What would you like to do?"**
+  - **Push to PR** — push E2E code to the existing PR branch (triggers CI)
+  - **Reject with feedback** — provide feedback to revise the generated code
+  - **Stop** — end the E2E workflow without pushing (can resume later with `/opsx-e2e`)
 
 - **If tests had failures but user selected "Approve and proceed" in Step 5.4:**
-  ASK: **"E2E complete with {N} accepted failures. Approve to push E2E code to the PR branch? (Approve / Reject with feedback)"**
+  ASK: **"E2E complete with {N} accepted failures. What would you like to do?"**
+  - **Push to PR** — push E2E code to the existing PR branch despite failures
+  - **Reject with feedback** — provide feedback to revise the generated code
+  - **Stop** — end the E2E workflow without pushing
 
-**On reject:**
+**On "Reject with feedback":**
 1. User provides feedback (e.g. "test X needs to cover edge case Y", "cleanup is missing for CR Z").
 2. Analyze the feedback: identify which test files/journeys need changes.
 3. Apply the changes to the generated test code in `openspec/changes/<name>/e2e/generated/`.
 4. If local execution was done, re-run affected tests to verify fixes.
-5. Present updated summary and prompt again:
-   **"Feedback addressed (round {N}/3): <brief summary of changes>. Approve now? (Approve / Reject with feedback)"**
-6. Repeat until approved or max 3 rounds. On 3rd rejection, force-proceed with warning:
-   "Max feedback rounds reached. Proceeding to push."
+5. Present updated summary and prompt again with the same three options:
+   **"Feedback addressed (round {N}/3): <brief summary of changes>. What would you like to do? (Push to PR / Reject with feedback / Stop)"**
+6. Repeat until user selects Push or Stop, or max 3 feedback rounds. On 3rd rejection, force-stop with warning:
+   "Max feedback rounds reached. Stopping. Re-run `/opsx-e2e` to resume."
 
-**On approve:** proceed to Step 5.6.
+**On "Stop":**
+- Write E2E summary to `openspec/changes/<name>/e2e/e2e-summary.md` with status `stopped`.
+- Emit telemetry: `e2e_run_end` with status `stopped_by_user`.
+- Output: **"E2E workflow stopped. Generated code is saved in `openspec/changes/<name>/e2e/generated/`. Re-run `/opsx-e2e` to resume and push."**
+- STOP. Do not proceed to Step 5.6.
+
+**On "Push to PR":** proceed to Step 5.6.
 
 #### Step 5.6 — Push E2E code to same PR branch
 
