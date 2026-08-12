@@ -161,12 +161,12 @@ def compute_first_pass_rate(events: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     if not first_attempts:
         return {
-            "tests_executed": 0,
-            "tests_passed_first_run": 0,
-            "tests_failed_first_run": 0,
+            "tests_executed": None,
+            "tests_passed_first_run": None,
+            "tests_failed_first_run": None,
             "pass_rate_pct": None,
             "execution_source": None,
-            "reason": "execution_skipped",
+            "reason": "no_local_execution",
         }
 
     ev = first_attempts[-1]
@@ -191,6 +191,13 @@ def compute_first_pass_rate(events: list[dict[str, Any]]) -> dict[str, Any]:
 def compute_flake_rate(events: list[dict[str, Any]]) -> dict[str, Any]:
     """Retries that pass without code change (same file_hash)."""
     executions = [ev for ev in events if ev.get("type") == "e2e_execution"]
+    if not executions:
+        return {
+            "total_retries": None,
+            "retries_passed_no_code_change": None,
+            "flake_rate_pct": None,
+            "reason": "no_local_execution",
+        }
     if len(executions) < 2:
         return {
             "total_retries": 0,
@@ -227,6 +234,15 @@ def compute_flake_rate(events: list[dict[str, Any]]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def compute_bugs(events: list[dict[str, Any]]) -> dict[str, Any]:
+    executions = [ev for ev in events if ev.get("type") == "e2e_execution"]
+    if not executions:
+        return {
+            "found": None,
+            "verified": None,
+            "details": [],
+            "reason": "no_local_execution",
+        }
+
     bugs_found: dict[str, dict[str, Any]] = {}
     bugs_verified: set[str] = set()
 
