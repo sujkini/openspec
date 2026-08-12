@@ -144,27 +144,71 @@ Continue working on a change by creating the **next** artifact, then **eval → 
     Use `--status failed` if the user rejects the artifact.
     Add `--phase <N>` only for phase-iterative mode tasks artifact.
 
-12. **Post-approve: create Jira Phase ticket** (ONLY when artifact is `tasks` AND `task_execution_mode = phase-iterative` AND `--status passed`):
+11b. **Post-approve: create Jira Sub-task for change** (ONLY when artifact is `plan` AND `task_execution_mode = one-shot` AND `--status passed`):
+    - This creates a single Jira sub-task representing the entire implementation work for one-shot mode.
+    - ASK:
+      > "Plan approved. Create a Jira sub-task for this change under {jira_key} (the input ticket)? (Yes / No)"
+    - **Note:** This prompt is NEVER auto-approved. `auto_approve` does not apply to ticket creation.
+    - **No** → write `plan_phases[]` entry with a single item `jira_key: SKIPPED`. Proceed.
+    - **Yes** →
+      - Read `inputs/jira.yaml` for `jira_key` (the input ticket provided at `/opsx-new`).
+      - Read `config.yaml → credentials.jira` for `base_url`, `username`, `api_token`.
+      - Call Jira MCP `create_ticket`:
+        - `project`: prefix of parent key (e.g. `CM` from `CM-800`)
+        - `issuetype`: `Sub-task`
+        - `parent`: `jira_key` (the input ticket — always the parent)
+        - `summary`: `<change-name>: <plan title / high-level goal from plan.md §1>`
+        - `description`: developer-style ticket assembled from:
+          - plan.md §1 (Objective), §5 phases summary (all phases, goals, target files)
+          - specs.md user stories (US-xx / FR-xx references)
+          - OpenSpec change path reference
+          - Parent ticket reference: `Parent: {jira_key}`
+      - Persist to `inputs/jira.yaml` → `plan_phases[]`:
+        ```yaml
+        plan_phases:
+          - phase: all
+            jira_key: <created-key>
+            jira_url: <browse-url>
+            summary: "<change-name>: <goal>"
+            issuetype: Sub-task
+            parent: <jira_key>
+        ```
+      - If Jira MCP is unavailable, set `jira_key: PENDING`; surface the error but
+        do NOT block the workflow. PENDING entries are retried once at /opsx-apply start.
+    - Report created / PENDING / SKIPPED key in the approval summary.
+    - Skip this step entirely for phase-iterative mode and non-`plan` artifacts.
+
+12. **Post-approve: create Jira Sub-task for Phase** (ONLY when artifact is `tasks` AND `task_execution_mode = phase-iterative` AND `--status passed`):
     - Read `current_plan_phase` from `implementation/state.yaml` (or `phase_scope` from context).
     - Phase N should already be non-e2e (e2e phases are skipped in step 5b).
     - Parse `plan.md` Phase N section (Goal, Dependencies, Target files, Required capabilities, Verification hooks).
     - Parse `tasks.md` §3/§4 for Phase N task IDs and covered user stories.
-    - Read `config.yaml → flags.auto_approve`. If `true`, treat as "Yes" (skip prompt).
-      Otherwise ask:
-      > "Phase {N} tasks approved. Create Jira Story ticket for Phase {N} under [epic_key/jira_key]? (Yes / No)"
+    - ASK (ALWAYS — `auto_approve` does NOT apply to ticket creation):
+      > "Phase {N} tasks approved. Create a Jira sub-task for Phase {N} under {jira_key} (the input ticket)? (Yes / No)"
     - **No** → write `plan_phases[]` entry with `jira_key: SKIPPED`. Proceed.
     - **Yes** →
-      - Read `inputs/jira.yaml` for `epic_key` / `jira_key`.
+      - Read `inputs/jira.yaml` for `jira_key` (the input ticket provided at `/opsx-new`).
+      - Read `config.yaml → credentials.jira` for `base_url`, `username`, `api_token`.
       - Call Jira MCP `create_ticket`:
         - `project`: prefix of parent key (e.g. `CM` from `CM-800`)
-        - `issuetype`: `Story`
-        - `parent`: `epic_key` if present, else `jira_key`
-        - `summary`: `[Phase N] <phase title from plan.md>`
-        - `description`: developer-style phase ticket assembled from plan.md Phase N
-          (Goal, Dependencies, Target files, Verification hooks) plus tasks.md §3/§4
-          for Phase N (task list, acceptance criteria, covered US-xx / FR-xx, OpenSpec
-          change path, parent epic reference).
-      - Persist to `inputs/jira.yaml` → `plan_phases[]` (see schema `phases_jira_sync`).
+        - `issuetype`: `Sub-task`
+        - `parent`: `jira_key` (the input ticket — always the parent)
+        - `summary`: `[Phase {N}] <phase title from plan.md>`
+        - `description`: developer-style phase ticket assembled from:
+          - plan.md Phase N (Goal, Dependencies, Target files, Verification hooks)
+          - tasks.md §3/§4 for Phase N (task list, acceptance criteria, covered US-xx / FR-xx)
+          - OpenSpec change path reference
+          - Parent ticket reference: `Parent: {jira_key}`
+      - Persist to `inputs/jira.yaml` → `plan_phases[]`:
+        ```yaml
+        plan_phases:
+          - phase: N
+            jira_key: <created-key>
+            jira_url: <browse-url>
+            summary: "[Phase N] <title>"
+            issuetype: Sub-task
+            parent: <jira_key>
+        ```
       - If Jira MCP is unavailable, set `jira_key: PENDING`; surface the error but
         do NOT block the workflow. PENDING entries are retried once at /opsx-apply start.
     - Report created / PENDING / SKIPPED key in the approval summary.

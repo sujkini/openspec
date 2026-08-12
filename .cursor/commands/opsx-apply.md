@@ -121,7 +121,8 @@ Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default
 |-------|--------|
 | `IDLE` | Pick next pending task → go to step 3 |
 | `AWAITING_APPROVAL` | Read user response (approve/reject) → handle |
-| `PHASE_COMPLETE` | (phase-iterative only) Offer optional PR → advance to next phase or COMPLETE |
+| `PHASE_COMPLETE` | (phase-iterative only) Phase-level approval gate → PR prompt → advance to next phase or COMPLETE |
+| `PHASE_FEEDBACK` | (phase-iterative/one-shot) Resuming from crash during feedback loop — read `phase_feedback_rounds` and re-prompt |
 | `COMPLETE` | Announce done, suggest `/opsx-archive` → STOP |
 | `EXECUTING_TASK` | Resume from crash — re-run current task |
 
@@ -452,23 +453,65 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```
 2. Write `implementation-report.md` aggregating all `task-reports/*.md`
 3. Write `deviation-observed.md` if any deviations logged
-4. **Default mode:** Commit, push feature branch, open draft PR targeting the **upstream** repo:
+
+4. **Implementation approval gate (approve / reject with feedback):**
+   - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).
+   - ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
+     - **On approve:** proceed to step 5 (PR prompt).
+     - **On reject:** user provides feedback. Increment `implementation_feedback_rounds` in
+       `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
+       the fixes, re-run verification. Then prompt again:
+       **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
+       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
+       with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
+   - **Note:** This gate is NEVER auto-approved. `auto_approve` does not apply here.
+
+5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
+   ASK: **"Implementation approved. Would you like to raise a draft PR to the upstream repo? (Yes / No)"**
+   - **Working-folder mode:** skip push/PR; record local changes in implementation-report.md.
+6. If yes:
    ```bash
    # Read upstream_repo_url from config.yaml → credentials.github.upstream_repo_url
    # Read fork_repo_url from config.yaml → credentials.github.fork_repo_url
    # If either is empty, ASK the user and persist to inputs/jira.yaml
+   # Read jira_key from inputs/jira.yaml
    # Determine fork_owner from fork URL (e.g. "sujkini" from github.com/sujkini/repo)
    gh pr create \
      --repo <upstream_org/repo> \
      --head <fork_owner>:<branch> \
      --base main \
-     --title "<JIRA-KEY>: <change summary>" \
-     --body "Implementation by OpenSpec /opsx-apply" \
+     --title "<jira_key>: <change summary from specs.md>" \
+     --body "$(cat <<'EOF'
+   ## <jira_key>: <change summary>
+
+   **Jira:** <jira_base_url>/browse/<jira_key>
+   **Change:** <change-name>
+
+   ### Description
+   <high-level summary from specs.md user stories>
+
+   ### Tasks Completed
+   - <task_id>: <task_title> ✓
+   - ...
+
+   ### Files Changed
+   - <file_path> — <brief description>
+   - ...
+
+   ### Verification
+   - Build: PASS
+   - Tests: PASS (N/N)
+   - Make verify: PASS
+
+   ---
+   *Implementation by OpenSpec `/opsx-apply`*
+   EOF
+   )" \
      --draft
    ```
-   **Working-folder mode:** skip push/PR; record local changes in implementation-report.md.
-5. Present final summary: tasks, files, tests, deviations; upstream draft PR URL when applicable.
-6. Set state: `COMPLETE`. Write state.yaml.
+   **PR title format:** `<jira_key>: <change summary>` (e.g. `CM-900: Add certificate renewal validation`)
+7. Present final summary: tasks, files, tests, deviations; upstream draft PR URL when applicable.
+8. Set state: `COMPLETE`. Write state.yaml.
 
 #### IF task_execution_mode = "phase-iterative"
 
@@ -480,26 +523,68 @@ When all **current phase** tasks are marked complete:
    ```bash
    python -m openspec.telemetry.auto on-phase-complete --change "<name>" --phase <N> --pr-raised <true|false>
    ```
-4. **If `auto_approve` is `false`:**
-   ASK: **"All Phase {N} tasks complete. Would you like to raise a draft PR to `main` for Phase {N}? This will trigger CI jobs on the PR. (Yes / No, continue to Phase {N+1})"**
-   **If `auto_approve` is `true`:**
-   Skip prompt. Auto-commit and push a draft PR for this phase (default mode). Skip push/PR in working-folder mode.
-5. If yes (or auto-approved): commit, push feature branch, open draft PR targeting the **upstream** repo scoped to this phase:
+
+4. **Phase-level approval gate (approve / reject with feedback):**
+   - Persist `phase_feedback_rounds: 0` to `state.yaml` (initialize if not present for this phase).
+   - ASK: **"Phase {N} development complete. All tasks pass verification. Approve the phase implementation? (Approve / Reject with feedback)"**
+     - **On approve:** proceed to step 5 (PR prompt).
+     - **On reject:** user provides feedback. Increment `phase_feedback_rounds` in
+       `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
+       the fixes in the working copy, re-run verification (`go build`, `go test`,
+       `make verify` as applicable). Then prompt again:
+       **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
+       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
+       with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
+   - **Note:** This gate is NEVER auto-approved. `auto_approve` does not apply here.
+
+5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
+   ASK: **"Phase {N} approved. Would you like to raise a draft PR to the upstream repo? This will trigger CI jobs. (Yes / No, continue to Phase {N+1})"**
+6. If yes: commit, push feature branch, open draft PR targeting the **upstream** repo scoped to this phase:
    ```bash
    # Read upstream_repo_url from config.yaml → credentials.github.upstream_repo_url
    # Read fork_repo_url from config.yaml → credentials.github.fork_repo_url
    # If either is empty, ASK the user and persist to inputs/jira.yaml
+   # Read phase Jira ticket from inputs/jira.yaml → plan_phases[N].jira_key and plan_phases[N].summary
    gh pr create \
      --repo <upstream_org/repo> \
      --head <fork_owner>:<branch> \
      --base main \
-     --title "<JIRA-KEY>: Phase <N> — <phase summary>" \
-     --body "Phase <N> implementation by OpenSpec /opsx-apply" \
+     --title "<phase_jira_key>: <phase_summary_from_plan_phases>" \
+     --body "$(cat <<'EOF'
+   ## <phase_jira_key>: <phase_summary>
+
+   **Jira:** <jira_base_url>/browse/<phase_jira_key>
+   **Parent:** <jira_base_url>/browse/<parent_jira_key>
+   **Phase:** <N> of <total_plan_phases>
+   **Change:** <change-name>
+
+   ### Description
+   <phase goal from plan.md>
+
+   ### Tasks Completed
+   - <task_id>: <task_title> ✓
+   - ...
+
+   ### Files Changed
+   - <file_path> — <brief description>
+   - ...
+
+   ### Verification
+   - Build: PASS
+   - Tests: PASS (N/N)
+   - Make verify: PASS
+
+   ---
+   *Implementation by OpenSpec `/opsx-apply`*
+   EOF
+   )" \
      --draft
    ```
+   **PR title format:** `<phase_jira_key>: <phase_summary>` (e.g. `CM-901: Phase 1 — Add CRD validation webhooks`)
+   - If `plan_phases[N].jira_key` is `SKIPPED` or `PENDING`, fall back to: `<parent_jira_key>: Phase <N> — <phase_goal>`
    Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
    Output: **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
-6. Check if `current_plan_phase >= total_plan_phases`:
+7. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
        ```bash
@@ -511,7 +596,7 @@ When all **current phase** tasks are marked complete:
      - Output: **"All implementation complete. Draft PR(s) raised on upstream — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
-     - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`
+     - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`, reset `phase_feedback_rounds: 0`
      - Skip discarded e2e phase numbers: if `N+1` is in `discarded_e2e_phases`,
        advance `current_plan_phase` until a non-e2e phase is reached (or all done).
      - **If `auto_approve` is `false`:**
@@ -521,9 +606,11 @@ When all **current phase** tasks are marked complete:
        Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."
        Automatically invoke `/opsx-continue <change-name>` to generate next-phase tasks.
        Since `auto_approve` is `true`, `/opsx-continue` will auto-loop through artifact
-       approval and return with `tasks.md` approved.
+       approval and return with `tasks.md` approved (but Jira sub-task prompt still fires).
        Then loop back to **Step 4** to execute the new phase's tasks.
-7. YIELD (only when `auto_approve` is `false`; when `true`, the loop continues)
+       **Note:** When the auto_approve task loop completes the next phase, execution will
+       STOP at step 4 (phase-level approval gate) since that gate always prompts the user.
+8. YIELD (only when `auto_approve` is `false`; when `true`, the loop continues until hitting the phase-level gate)
 
 ## Guardrails
 
