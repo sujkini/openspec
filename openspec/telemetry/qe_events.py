@@ -186,8 +186,9 @@ class QETelemetryClient:
         run_id: str,
         development_pct: int | None = None,
         e2e_pct: int | None = None,
+        user_feedback: str | None = None,
     ) -> None:
-        """Record user-reported time saved percentages."""
+        """Record user-reported time saved percentages and feedback."""
         self._write_event({
             "ts": datetime.now(timezone.utc).isoformat(),
             "type": "e2e_time_saved",
@@ -195,6 +196,7 @@ class QETelemetryClient:
             "run_id": run_id,
             "development_pct": development_pct,
             "e2e_pct": e2e_pct,
+            "user_feedback": user_feedback,
         })
 
 

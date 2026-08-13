@@ -468,7 +468,6 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
 
 5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
    ASK: **"Implementation approved. Would you like to raise a draft PR to the upstream repo? (Yes / No)"**
-   - **Working-folder mode:** skip push/PR; record local changes in implementation-report.md.
 6. If yes:
    ```bash
    # Read upstream_repo_url from config.yaml → credentials.github.upstream_repo_url
@@ -582,7 +581,7 @@ When all **current phase** tasks are marked complete:
    ```
    **PR title format:** `<phase_jira_key>: <phase_summary>` (e.g. `CM-901: Phase 1 — Add CRD validation webhooks`)
    - If `plan_phases[N].jira_key` is `SKIPPED` or `PENDING`, fall back to: `<parent_jira_key>: Phase <N> — <phase_goal>`
-   Record URL in `state.yaml` → `phase_pr_urls`. **Working-folder mode:** skip push/PR.
+   Record URL in `state.yaml` → `phase_pr_urls`.
    Output: **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
 7. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
@@ -624,7 +623,7 @@ When all **current phase** tasks are marked complete:
 - **Write state on every transition** — crash recovery
 - **Mandatory test execution** — never skip verification or tests
 - On reject (only possible when `auto_approve` is `false`): re-run current task only (full loop)
-- **ai-helpers mode**: One OAPE command per task; OAPE in fork/working-folder cwd only
+- **ai-helpers mode**: One OAPE command per task; OAPE in fork cwd only
 - **Never append source files** — prohibit `>>` / `tee -a` and similar append semantics for code edits
 - **Duplicate package recovery** — if `go build`/`go test` shows duplicate `package` blocks, reset affected file(s) from git `HEAD` before reapplying task edits
 

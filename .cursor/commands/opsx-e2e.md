@@ -360,8 +360,10 @@ the overall E2E outcome and ask the user for their decision.
    "Max feedback rounds reached. Stopping. Re-run `/opsx-e2e` to resume."
 
 **On "Stop":**
+- **Fire time-saved prompt BEFORE stopping** (see Step 9b below).
 - Write E2E summary to `openspec/changes/<name>/e2e/e2e-summary.md` with status `stopped`.
 - Emit telemetry: `e2e_run_end` with status `stopped_by_user`.
+- Regenerate `qe-metrics.json`: `python -m openspec.telemetry.qe_metrics --change <name>`
 - Output: **"E2E workflow stopped. Generated code is saved in `openspec/changes/<name>/e2e/generated/`. Re-run `/opsx-e2e` to resume and push."**
 - STOP. Do not proceed to Step 5.6.
 
@@ -439,21 +441,39 @@ No separate PR is created — the existing development PR receives the E2E commi
 - Re-run with `/opsx-e2e --phase N` after fixes if tests failed
 ```
 
-### 10. Time Saved Prompt
+### 10. Time Saved & Feedback Prompt (fires in ALL exit paths)
 
-After presenting the final summary, ASK the user:
+This step fires **regardless of whether the user chose Push, Stop, or the workflow completed normally**.
+It is referenced as "Step 9b" in the Stop handler (Step 5.5) — execute it there before stopping.
+After the Push path (Step 5.6 → 5.7 → Final Summary), execute it after presenting the summary.
+
+ASK the user:
 
 ```
 How much time (%) did OpenSpec save you compared to doing this manually?
   - Development workflow (specs → plan → tasks → code): ___%
   - E2E workflow (test plan → code gen → execution): ___%
   Enter two numbers (e.g. '40 60') or press Enter to skip.
+
+Any feedback on the E2E workflow? (free text, or press Enter to skip)
 ```
 
-- Parse response: two integers (development_pct, e2e_pct).
+- Parse time response: two integers (development_pct, e2e_pct).
 - If user presses Enter or says "skip" → record `null` for both.
-- Emit `e2e_time_saved` telemetry event with `development_pct` and `e2e_pct`.
-- Include in the final `qe-metrics.json` under `"time_saved"`.
+- Parse feedback: free text string, or `null` if skipped.
+- Emit `e2e_time_saved` telemetry event with `development_pct`, `e2e_pct`, and `user_feedback`.
+- Regenerate `qe-metrics.json` so it includes `time_saved` and `user_feedback`:
+  ```bash
+  python -m openspec.telemetry.qe_metrics --change <name>
+  ```
+- The final `qe-metrics.json` will contain:
+  ```json
+  "time_saved": {
+    "development_pct": 40,
+    "e2e_pct": 60
+  },
+  "user_feedback": "Test patterns were good but missed edge case X"
+  ```
 
 ## Guardrails
 

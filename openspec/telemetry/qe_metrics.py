@@ -392,6 +392,17 @@ def _extract_time_saved(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _extract_user_feedback(events: list[dict[str, Any]]) -> str | None:
+    """Extract user feedback text from e2e_time_saved event."""
+    time_event = next(
+        (ev for ev in reversed(events) if ev.get("type") == "e2e_time_saved"),
+        None,
+    )
+    if not time_event:
+        return None
+    return time_event.get("user_feedback")
+
+
 # ---------------------------------------------------------------------------
 # Jira metadata
 # ---------------------------------------------------------------------------
@@ -436,6 +447,7 @@ def generate_qe_report(change: str) -> Path:
     triage = compute_triage_accuracy(events)
     cost = compute_cost_metrics(events)
     time_saved = _extract_time_saved(events)
+    user_feedback = _extract_user_feedback(events)
 
     report: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -453,6 +465,7 @@ def generate_qe_report(change: str) -> Path:
         "triage_accuracy": triage,
         "cost": cost,
         "time_saved": time_saved,
+        "user_feedback": user_feedback,
     }
 
     report_path = change_dir / "telemetry" / "qe-metrics.json"
