@@ -67,6 +67,8 @@ rules:
     - "If not found or empty, stop and prompt user to run /opsx-constitute or place it manually"
   plan:
     - "All sections §0–§8; each phase uses Goal, Dependencies, Target files, Verification hooks"
+    - "1:1 user story to phase mapping; number of phases equals number of user stories in specs.md"
+    - "Jira sub-task creation only when input ticket is an Epic (jira_issuetype == Epic)"
   tasks:
     - "Use §0–§5 structure; prefer multipass (skeleton → payloads → orchestration) for large backlogs"
     - "Task IDs: T<n>_<m>; unit tests are co-generated per task (not separate tasks); phase-scoped when task_execution_mode = phase-iterative"

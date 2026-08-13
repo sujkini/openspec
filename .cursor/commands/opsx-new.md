@@ -47,6 +47,7 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
      `fields: "summary,status,issuetype,parent,customfield_10014"`.
    - From the response, extract and persist to `inputs/jira.yaml`:
      - `jira_summary`: issue summary field
+     - `jira_issuetype`: from `fields.issuetype.name` (e.g. "Epic", "Story", "Bug", "Task")
      - `jira_url`: `https://issues.redhat.com/browse/<JIRA-KEY>`
      - `epic_key`: from `parent.key` or `customfield_10014` (epic link) when present
      - `epic_name`: from `parent.fields.summary` or a follow-up `jira_get_issue` on the epic key

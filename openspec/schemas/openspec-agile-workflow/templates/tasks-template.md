@@ -106,6 +106,7 @@ One bullet per FR-xx / SC-xx / AC-xx with covering Task IDs.
 
 ### User Stories → Task Coverage
 One bullet per US-00x with covering Task IDs.
+Each US maps to exactly one phase's tasks (1:1 user story to phase mapping).
 Derive by unioning each story's FR task coverage from Story → FR Traceability in specs.md,
 or assign directly. Every US-00x from specs.md must appear with ≥1 Task ID.
 Note any e2e coverage as "e2e — out of OAPE scope" (do not assign Task IDs for e2e).
@@ -121,13 +122,13 @@ A markdown table with EXACT columns:
 | Task ID | Task Title | Assigned Agent | Phase | Depends On | Parallel OK | Complexity | Risk | User Story |
 
 Complexity: use Fibonacci-ish integers 1,2,3,5,8 (1=trivial, 2=small, 3=medium, 5=large, 8=extra-large).
-User Story: comma-separated US-00x IDs this task covers (e.g. "US-001, US-002").
+User Story: exactly ONE US-xx ID inherited from the parent phase (all tasks in a phase share the same US; 1:1 mapping).
 
 ## 4. Task Specifications (Payloads)
 For EACH Task ID, emit a subsection:
 
 ### Task <ID>: <Title>
-- **Covers:** US-001 — user story IDs this task covers
+- **User Story:** US-XX — <inherited from parent phase; 1:1 mapping>
 - **Objective:** ...
 - **Target file(s):** ... (from repo_assessment/plan only)
 - **Non-goals / forbidden edits:** ... (pull from constitution + plan guardrails)

@@ -80,8 +80,9 @@ Output EXACTLY ONE markdown document using these headings and order:
 
 ### Phase template (repeat for every phase)
 Each phase MUST include these bullets:
+- **User Story:** US-XX — <user story title from specs.md> (exactly ONE; 1:1 mapping enforced)
 - **Goal:**
-- **Dependencies:** (must wait for …)
+- **Dependencies:** (must wait for … — reference earlier phase/US-XX if applicable)
 - **Target files:** (only from repo_assessment.md or marked UNVERIFIED + discovery step)
 - **Required capabilities:** (from agents.md OR provisional taxonomy; mark provisional if needed)
 - **Verification hooks:** (unit/integration/e2e/manual; name suites/areas if known from inputs)
@@ -106,7 +107,7 @@ in addition to the generic guidance in this template.
 Before finalizing, verify:
 - [ ] §0 inputs table complete; AgentRoutingMode matches constitution.md
 - [ ] §1 includes **Repo-grounded reality check** (greenfield / delta / mix) citing repo_assessment
-- [ ] Every spec FR and P1 user story (US-00x) maps to ≥1 phase and ≥1 verification matrix row
+- [ ] Every P1 user story (US-00x) maps to exactly 1 phase (1:1); phase count == user story count
 - [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities, Verification hooks)
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
 - [ ] §5 contains NO standalone e2e-only phases (e2e belongs in §6 only)
@@ -181,6 +182,17 @@ assignee names, ticket IDs, or "do X in PR" task lists. Typical ordering for ope
 (adapt as needed): API/CRD → codegen/deepcopy → controller/operand logic → manifest refresh →
 RBAC/webhook wiring → unit/integration tests → packaging/bundle + docs.
 For other project types, derive phase ordering from repo_assessment.md and AGENTS.md.
+
+**1:1 User Story mapping (MANDATORY):**
+- Each phase maps to exactly ONE user story from specs.md.
+- Number of phases MUST equal number of user stories in specs.md.
+- If a user story requires multiple compile-time-dependent steps, those steps become
+  tasks within the phase — NOT separate phases.
+- If a user story is genuinely too large for a single phase, STOP and output:
+  "US-XX is too complex for a single phase. Revise specs.md to split it before
+  planning can proceed." Do NOT silently create multi-phase mappings.
+- Shared FRs: implement in the earliest phase that needs them; later phases reference
+  as a dependency.
 
 **Proportionality guardrail (MANDATORY):** After reviewing repo_assessment.md, assess change scope:
 - If the change touches ≤5 target files AND is scoped to a single package/controller AND does NOT

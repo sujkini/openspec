@@ -479,9 +479,9 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
      --repo <upstream_org/repo> \
      --head <fork_owner>:<branch> \
      --base main \
-     --title "<jira_key>: <change summary from specs.md>" \
+     --title "<jira_key>: <change summary from specs.md> (US-01, US-02, ...)" \
      --body "$(cat <<'EOF'
-   ## <jira_key>: <change summary>
+   ## <jira_key>: <change summary> (US-01, US-02, ...)
 
    **Jira:** <jira_base_url>/browse/<jira_key>
    **Change:** <change-name>
@@ -548,9 +548,9 @@ When all **current phase** tasks are marked complete:
      --repo <upstream_org/repo> \
      --head <fork_owner>:<branch> \
      --base main \
-     --title "<phase_jira_key>: <phase_summary_from_plan_phases>" \
+     --title "<phase_jira_key>: [US-XX] <user story title>" \
      --body "$(cat <<'EOF'
-   ## <phase_jira_key>: <phase_summary>
+   ## <phase_jira_key>: [US-XX] <user story title>
 
    **Jira:** <jira_base_url>/browse/<phase_jira_key>
    **Parent:** <jira_base_url>/browse/<parent_jira_key>
@@ -579,8 +579,9 @@ When all **current phase** tasks are marked complete:
    )" \
      --draft
    ```
-   **PR title format:** `<phase_jira_key>: <phase_summary>` (e.g. `CM-901: Phase 1 — Add CRD validation webhooks`)
-   - If `plan_phases[N].jira_key` is `SKIPPED` or `PENDING`, fall back to: `<parent_jira_key>: Phase <N> — <phase_goal>`
+   **PR title format:** `<phase_jira_key>: [US-XX] <user story title>` (e.g. `CM-901: [US-01] Add CRD validation webhooks`)
+   - If `plan_phases[N].jira_key` is `SKIPPED` or `PENDING`, fall back to: `<jira_key>: [US-XX] <user story title>`
+   - Extract `US-XX` and `<user story title>` from plan.md Phase N → `User Story` field.
    Record URL in `state.yaml` → `phase_pr_urls`.
    Output: **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
 7. Check if `current_plan_phase >= total_plan_phases`:
