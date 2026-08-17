@@ -546,3 +546,26 @@ openspec schema validate openspec-agile-workflow
 ## License
 
 MIT (schema and templates). OpenSpec CLI is separate — see [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec).
+
+---
+
+## AI Agent User Guide & Compliance
+
+This section outlines the operational boundaries, limitations, and safety mechanisms for the OpenSpec AI Agent, in accordance with Red Hat AI compliance policies.
+
+### Limitations
+- **Hallucinations:** The agent may occasionally hallucinate complex Kubernetes API versions or internal Red Hat specific libraries. Always verify generated code against official documentation.
+- **Scope:** The agent is restricted to the local working directory and cannot access external Red Hat networks beyond authorized APIs (GitHub, Jira).
+
+### Emergency Stop (Kill Switch)
+If the agent exhibits unexpected behavior, infinite loops, or attempts unauthorized actions, you can immediately terminate the session using the built-in Kill Switches. The method depends on how you are executing the agent:
+
+- **When using the Cursor IDE (Chat/Composer):** Click the **Stop/Cancel button (⏹️)** in the AI panel, or use the keyboard shortcut `Ctrl+Backspace` (Windows/Linux) or `Cmd+Backspace` (Mac). This immediately halts the LLM stream and terminates any active tool executions.
+- **When using the headless Cursor CLI (Terminal):** Press `Ctrl+C` in the terminal where the agent is running. This sends a `SIGINT` signal, immediately halting all agent processes and API calls at the operating system level.
+
+### Feedback Mechanism
+We actively monitor the performance and helpfulness of the OpenSpec agent. If you encounter poor quality output, hallucinations, or unexpected behavior, please report it using our feedback form:
+- **[Submit Agent Feedback Here](<INSERT_GOOGLE_FORM_LINK_HERE>)**
+
+### Point of Contact
+For questions, access requests, or to report security concerns, please contact the OpenSpec maintainers at: `<INSERT_TEAM_ALIAS_HERE>@redhat.com`

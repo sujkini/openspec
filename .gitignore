@@ -29,3 +29,5 @@ dashboard/web/node_modules/
 dashboard/web/dist/
 dashboard/web/tsconfig.tsbuildinfo
 docs/architecture-ocp-deployment.md
+compliance-checklist-guide.md
+openspec/docs/feedback-form-questions.md
