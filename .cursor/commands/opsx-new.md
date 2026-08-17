@@ -34,9 +34,14 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
 
 ## Steps
 
-1. Parse Jira key or URL (required), optional change name, optional repo URL.
+1. **AI Disclosure Notice**:
+   Output EXACTLY this text to the user before proceeding:
+   > "======================================================================"
+   > "**You are about to interact with a Red Hat AI agent. This agent uses AI technology to assist you by responding to queries, generating content, or performing tasks. By proceeding, you acknowledge that all AI agent outputs are intended for internal use only and must be reviewed prior to use.**"
+   > "======================================================================"
+2. Parse Jira key or URL (required), optional change name, optional repo URL.
    - If a Jira URL is provided (e.g. `https://issues.redhat.com/browse/CM-830`), extract the key from the path.
-2. **Ask for target repo URL** (if not provided inline):
+3. **Ask for target repo URL** (if not provided inline):
    ASK: **"What is the target GitHub repository URL? (e.g. https://github.com/org/repo)"**
    - Store in `inputs/jira.yaml` → `target_repo`
    - This is needed for repo-assessment and implementation stages

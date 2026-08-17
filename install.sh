@@ -160,6 +160,14 @@ if [ "$INSTALL_DASHBOARD" = true ]; then
 fi
 
 echo ""
+echo "======================================================================"
+echo "You are about to interact with a Red Hat AI agent. This agent uses AI "
+echo "technology to assist you by responding to queries, generating content,"
+echo "or performing tasks. By proceeding, you acknowledge that all AI agent "
+echo "outputs are intended for internal use only and must be reviewed prior "
+echo "to use."
+echo "======================================================================"
+echo ""
 echo "=== Installation complete ==="
 echo ""
 echo "Next steps:"
