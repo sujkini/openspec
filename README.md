@@ -14,7 +14,7 @@ git clone -b v2-restructured https://github.com/sujkini/openspec.git /tmp/opensp
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
-This copies `openspec/`, `.cursor/`, `eval-generation/`, `harness-evals/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
+This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
 ### 2. Configure execution mode (`openspec/config.yaml`)
 
