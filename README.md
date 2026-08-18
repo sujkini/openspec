@@ -551,21 +551,195 @@ MIT (schema and templates). OpenSpec CLI is separate — see [Fission-AI/OpenSpe
 
 ## AI Agent User Guide & Compliance
 
-This section outlines the operational boundaries, limitations, and safety mechanisms for the OpenSpec AI Agent, in accordance with Red Hat AI compliance policies.
+This section outlines the operational boundaries, limitations, safety mechanisms, and compliance information for the OpenSpec AI Agent, in accordance with Red Hat AI compliance policies.
+
+### Agent's Persona and Purpose
+
+The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kubernetes/OpenShift operator repositories. It operates within the Cursor IDE or Cursor CLI on the developer's local workstation.
+
+- **Role:** AI-assisted software engineer that plans, implements, and tests operator code changes under strict human oversight.
+- **Goals:** Validate Jira specifications, generate phased implementation plans, produce and verify code task-by-task, raise draft PRs, and create Jira traceability tickets.
+- **Operational context:** Runs locally in the developer's terminal or IDE session. Never deployed as a hosted service. All actions are scoped to the local workspace, the user's GitHub fork, and authorized Jira/GitHub APIs.
 
 ### Limitations
-- **Hallucinations:** The agent may occasionally hallucinate complex Kubernetes API versions or internal Red Hat specific libraries. Always verify generated code against official documentation.
+
+- **Hallucinations:** The agent may occasionally hallucinate complex Kubernetes API versions, CRD field names, or internal Red Hat-specific libraries. Always verify generated code against official documentation.
 - **Scope:** The agent is restricted to the local working directory and cannot access external Red Hat networks beyond authorized APIs (GitHub, Jira).
+- **Go-operator focus:** The agent is designed for Go-based Kubernetes operator repositories. It is not suitable for non-Go projects, frontend applications, or non-operator workloads.
+- **OpenShift API drift:** The agent may generate incorrect API group/version strings for OpenShift-specific resources (e.g. `security.openshift.io/v1` vs `v1beta1`). Always verify against the target cluster version.
+- **File splitting:** The agent may over-split code across multiple files for a single controller. This is mitigated by the file colocation guardrail but should be reviewed.
+- **Large changes:** Changes spanning 10+ files may exceed the LLM context window, leading to incomplete implementations or missed dependencies across packages.
 
-### Emergency Stop (Kill Switch)
-If the agent exhibits unexpected behavior, infinite loops, or attempts unauthorized actions, you can immediately terminate the session using the built-in Kill Switches. The method depends on how you are executing the agent:
+### Capabilities and Inventory: Tools
 
-- **When using the Cursor IDE (Chat/Composer):** Click the **Stop/Cancel button (⏹️)** in the AI panel, or use the keyboard shortcut `Ctrl+Backspace` (Windows/Linux) or `Cmd+Backspace` (Mac). This immediately halts the LLM stream and terminates any active tool executions.
-- **When using the headless Cursor CLI (Terminal):** Press `Ctrl+C` in the terminal where the agent is running. This sends a `SIGINT` signal, immediately halting all agent processes and API calls at the operating system level.
+**Cursor Commands (workflow):**
+
+| Command | Type | Description |
+|---------|------|-------------|
+| `/opsx-new` | Write | Start a new change from a Jira ticket key |
+| `/opsx-continue` | Write | Generate next artifact, run eval gate, approve |
+| `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
+| `/opsx-e2e` | Write | Generate E2E tests after CI passes |
+| `/opsx-archive` | Write | Archive a completed change |
+| `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
+| `/opsx-explore` | Read | Explore ideas without creating artifacts |
+
+**OAPE Commands (ai-helpers mode only, during `/opsx-apply`):**
+
+| Command | Type | Description |
+|---------|------|-------------|
+| `/oape:api-generate` | Write | Generate API types for API_Agent tasks |
+| `/oape:api-generate-tests` | Write | Generate tests for API_Agent verification tasks |
+| `/oape:api-implement` | Write | Implement controller logic for OperatorController_Agent tasks |
+| `/oape:e2e-generate` | Write | Generate E2E test code |
+
+**Retrospective:**
+
+| Command | Type | Description |
+|---------|------|-------------|
+| `/eval-loop` | Write | Improve evals from a completed feature bundle |
+
+**MCP Integrations:**
+
+| Integration | Operations | Credentials |
+|-------------|------------|-------------|
+| Jira MCP | Read tickets, create sub-tasks | `config.yaml → credentials.jira` (user's PAT) |
+| GitHub MCP | Read repos, create draft PRs | `config.yaml → credentials.github` (user's PAT) |
+
+**Data Sources:**
+
+| Source | Access | Description |
+|--------|--------|-------------|
+| `inputs/jira.yaml` | Read/Write | Jira ticket metadata, fork URL, target repo |
+| `agents.md` | Read | Agent routing, architecture patterns, test exemplar |
+| `harness-evals/constitution.md` | Read | Coding guardrails and governance rules |
+| `harness-evals/evals/*.yaml` | Read | Stage eval cases for quality gates |
+| `specs.md`, `plan.md`, `tasks.md` | Read/Write | Workflow artifacts (immutable once approved) |
+| `implementation/state.yaml` | Read/Write | State machine for crash recovery |
+| Fork working copy | Read/Write | Source code in the user's fork |
+
+### Authorized and Prohibited Actions
+
+**Autonomous actions (with `auto_approve: true`):**
+- Generate and refine artifacts (validation.json, specs.md, repo-assessment.md, plan.md, tasks.md)
+- Generate and refine code per task after eval/verification passes
+- Run `go build`, `go vet`, `go test`, `make verify` in fork working directory
+- Write telemetry data to `openspec/changes/`
+- Mark tasks complete and advance to the next task
+
+**Actions requiring human approval (never auto-approved):**
+- Phase implementation approval — always prompted after all phase tasks complete
+- PR creation to upstream repository — always prompted; user can decline
+- Jira sub-task creation — always prompted; only offered when input ticket is an Epic with configured credentials
+- Specs rejection — always requires explicit user action
+
+**Prohibited actions:**
+- Push to protected branches or merge to main/master
+- Access files outside the working directory or fork checkout
+- Execute arbitrary network requests beyond GitHub and Jira APIs
+- Modify previously approved artifacts (specs, plan, repo-assessment are immutable once approved)
+- Append to source files using `>>` or `tee -a` (in-place edits only)
+- Launch background sub-agents during `/opsx-apply` or `/opsx-continue`
+- Auto-approve phase gates, PR creation, or Jira ticket creation regardless of configuration
+
+### Best Practices
+
+- **First run:** Set `auto_approve: false` in `config.yaml` to review each artifact and task individually. Switch to `true` once comfortable with the workflow.
+- **Working-folder mode:** When your Cursor workspace IS the operator repo, tell the agent "use this as the working directory" when prompted for target repo. This avoids fork overhead and is faster for iteration.
+- **Fork mode:** Use when you want the agent to raise a draft PR to the upstream repository. Provide fork URL before `/opsx-apply`.
+- **Code generation mode:** Start with `codegen_mode: direct` for simple or few-file changes. Use `ai-helpers` for complex multi-package work that benefits from design bundles and code eval scoring.
+- **agents.md quality matters:** The agent relies heavily on `agents.md` for code patterns, test exemplars, and package routing. Invest time in making it detailed and accurate.
+- **Run `/eval-loop` after features:** After completing a feature, feed its history into `/eval-loop` to generate eval cases that improve quality for future runs.
+- **Edge cases:** The agent may struggle with cross-CRD dependencies, non-standard project layouts, repositories without `make` targets, or monorepo structures with multiple operators.
+
+### Human-in-the-Loop (HITL) and Accountability Workflow
+
+> **Always review AI-generated output or actions prior to use.** Standard code review and compliance processes still apply to all AI-generated code.
+
+The OpenSpec workflow enforces multi-layered human oversight:
+
+1. **Artifact approval:** Each artifact (validation, specs, plan, tasks) is evaluated against stage evals, refined if needed, and presented for explicit user approval before the next stage begins.
+2. **Task approval:** Each code task is verified (build, test, eval gate) and presented for approval. When `auto_approve` is `false`, the agent yields after every task. When `true`, tasks auto-approve after passing verification but phase/PR/Jira gates still require human input.
+3. **Phase approval:** After all tasks in a phase complete, the agent always prompts: "Phase {N} development complete. Approve the phase implementation?" This gate is never auto-approved.
+4. **PR creation:** The agent always asks: "Would you like to raise a draft PR to the upstream repo?" The user can decline. All PRs are created as drafts requiring normal upstream review and merge.
+5. **Jira sub-task creation:** The agent always asks before creating Jira tickets. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
+6. **Override recording:** If a user approves a task despite failing eval cases, the decision and eval results are recorded in `implementation/task-reports/<task-id>.md` for audit purposes.
+7. **Rejection handling:** When a user rejects with feedback, the agent re-runs only the current task/artifact. Up to 3 rejection rounds are allowed before the workflow halts.
+
+### Rollback and Emergency Stop (Kill Switch)
+
+**Emergency Stop:**
+
+If the agent exhibits unexpected behavior, infinite loops, or attempts unauthorized actions, immediately terminate the session:
+
+- **Cursor IDE (Chat/Composer):** Click the **Stop/Cancel button** in the AI panel, or use `Ctrl+Backspace` (Windows/Linux) / `Cmd+Backspace` (Mac). This halts the LLM stream and terminates active tool executions.
+- **Cursor CLI (Terminal):** Press `Ctrl+C`. This sends a `SIGINT` signal, immediately halting all agent processes at the operating system level.
+
+Both mechanisms function independently of the agent's logic and cannot be bypassed by the AI model.
+
+**Rollback procedures:**
+
+| Scenario | Command |
+|----------|---------|
+| Undo a task's code changes | `git checkout -- <files>` in the fork working copy |
+| Undo the last commit | `git reset HEAD~1` in the fork |
+| Undo an entire phase | `git reset --hard <commit-before-phase>` in the fork |
+| Remove all generated artifacts for a change | Delete `openspec/changes/<name>/` directory |
+| Close a draft PR | `gh pr close <URL>` or close via GitHub UI |
+| Delete the fork feature branch | `git push origin --delete <branch>` |
+
+The agent never merges to protected branches. All PRs are created as drafts and require human merge through the normal upstream review process.
+
+### Data Handling
+
+> **Do not add unapproved personal information or customer data to any agent input or configuration file.**
+
+The agent processes the following data types:
+- Jira ticket keys, summaries, and acceptance criteria
+- GitHub repository URLs and source code
+- Operator documentation from `agents.md` and `harness-evals/harness-docs/`
+
+The agent does **not** process:
+- Personally identifiable information (PII)
+- Customer data or customer environment details
+- Production cluster credentials or secrets
+
+All data remains local to the developer's workstation and the authorized GitHub/Jira APIs. Credentials in `config.yaml` (PATs, API tokens) are the user's own personal tokens and must not be committed to version control. The `config.yaml` file should be added to `.gitignore` or have credentials managed via environment variables.
+
+### RBAC Enforcement
+
+The agent operates under the executing developer's identity and inherits their exact permissions:
+
+- **Git operations:** Uses the developer's local SSH keys or configured Git credentials
+- **GitHub API:** Uses the personal access token from `config.yaml → credentials.github.token`
+- **Jira API:** Uses the personal API token from `config.yaml → credentials.jira.api_token`
+
+The agent cannot access any repository, Jira project, or API the user is not already authorized to access. No service accounts are used. All operations run under the developer's identity with their existing RBAC permissions.
+
+**To verify your access levels:**
+- GitHub: check token scopes at https://github.com/settings/tokens
+- Jira: verify your PAT permissions in your Jira profile settings
+- Git: confirm SSH key access with `ssh -T git@github.com`
+
+### Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| "constitution.md required" | Missing `harness-evals/constitution.md` | Run `/opsx-constitute` or place the file manually |
+| "target_repo not set" | Missing repo URL before repo-assessment | Provide the URL when prompted; it persists to `inputs/jira.yaml` |
+| "fork_repo_url not set" | Missing fork URL before `/opsx-apply` | Provide fork URL, or say "use this as the working directory" |
+| Jira sub-task creation skipped | Input ticket is not an Epic, or Jira credentials empty | Fill `credentials.jira` in `config.yaml` and use an Epic ticket |
+| Eval scoring skipped | No eval file at `harness-evals/evals/<stage>_eval.yaml` | Add evals via `/eval-loop` or place YAML files manually |
+| Agent stuck or in infinite loop | LLM context issue or tool execution hang | Press `Ctrl+C` (CLI) or Stop button (IDE), then re-run the command |
+| Duplicate `package` errors in Go build | Agent appended to a source file instead of editing | Reset file with `git checkout -- <file>`, then re-run `/opsx-apply` |
+| State recovery after crash | `state.yaml` persists the last transition | Re-run `/opsx-apply` — it reads `state.yaml` and resumes from last state |
+| Preflight log not printed | Agent skipped mandatory config read | Re-run the command; if repeated, check that `openspec/config.yaml` exists |
 
 ### Feedback Mechanism
+
 We actively monitor the performance and helpfulness of the OpenSpec agent. If you encounter poor quality output, hallucinations, or unexpected behavior, please report it using our feedback form:
-- **[Submit Agent Feedback Here](<INSERT_GOOGLE_FORM_LINK_HERE>)**
+- **[Submit Agent Feedback Here](https://docs.google.com/document/d/19vAlSNyY-HyG3WrjnpwNs7r1RaDvZGkw7YRZx-WK4sM/edit?usp=sharing)**
 
 ### Point of Contact
+
 For questions, access requests, or to report security concerns, please contact the OpenSpec maintainers at: `<INSERT_TEAM_ALIAS_HERE>@redhat.com`
