@@ -67,7 +67,6 @@ One YAML per stage — all cases in `evals:` list:
 | repo-assessment | `eval-generation/output-evals/repo-assessment/repo-assessment_eval.yaml` |
 | plan | `eval-generation/output-evals/plan/plan_eval.yaml` |
 | tasks | `eval-generation/output-evals/tasks/tasks_eval.yaml` |
-| implementation | `eval-generation/output-evals/implementation/implementation_eval.yaml` |
 | code-generation | `eval-generation/output-evals/code-generation/code-generation_eval.yaml` |
 
 Also sync each merged file to **`harness-evals/evals/<stage>_eval.yaml`** for forward `/opsx-continue`.

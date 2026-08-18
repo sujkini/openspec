@@ -101,13 +101,11 @@ phases:
           - eval-generation/output-evals/constitution/constitution_eval.yaml
           - eval-generation/output-evals/plan/plan_eval.yaml
           - eval-generation/output-evals/tasks/tasks_eval.yaml
-          - eval-generation/output-evals/implementation/implementation_eval.yaml
           - eval-generation/output-evals/code-generation/code-generation_eval.yaml
           - openspec/schemas/openspec-agile-workflow/evals/repo-assessment_eval.yaml
           - openspec/schemas/openspec-agile-workflow/evals/constitution_eval.yaml
           - openspec/schemas/openspec-agile-workflow/evals/plan_eval.yaml
           - openspec/schemas/openspec-agile-workflow/evals/tasks_eval.yaml
-          - openspec/schemas/openspec-agile-workflow/evals/implementation_eval.yaml
           - openspec/schemas/openspec-agile-workflow/evals/code-generation_eval.yaml
       - id: create-code-generation-evals
         rule: >-
@@ -131,7 +129,6 @@ eval_stages:
   - constitution
   - plan
   - tasks
-  - implementation
   - code-generation
 
 stage_eval_files:
