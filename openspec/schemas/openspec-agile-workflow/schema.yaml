@@ -419,7 +419,6 @@ stage_eval_gate:
     repo-assessment: evals/repo-assessment_eval.yaml
     plan: evals/plan_eval.yaml
     tasks: evals/tasks_eval.yaml
-    implementation: evals/implementation_eval.yaml
   eval_specs_dir: eval-generation/eval-generation-workflow/stages
   system_prompt: stage-gate/STAGE_EVAL_GATE_PROMPT.md
   artifact_map: stage-gate/artifact-eval-map.yaml

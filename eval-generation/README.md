@@ -21,7 +21,6 @@ eval-generation/
 │   ├── constitution/                   # constitution_eval.yaml
 │   ├── plan/                           # plan_eval.yaml
 │   ├── tasks/                          # tasks_eval.yaml
-│   ├── implementation/                 # implementation_eval.yaml
 │   └── code-generation/                # code-generation_eval.yaml
 ├── output-refined-templates/           # Working copy + output (seeded round 1, patched in place)
 │   └── tasks-modes/                    # Task mode templates

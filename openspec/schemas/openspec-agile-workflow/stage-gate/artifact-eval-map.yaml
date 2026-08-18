@@ -53,13 +53,6 @@ artifacts:
     eval_spec: eval-generation/eval-generation-workflow/stages/tasks-eval-spec.yaml
     gate: stage_evals
 
-  implementation:
-    stage: implementation
-    stage_eval_file: harness-evals/evals/implementation_eval.yaml
-    eval_spec: eval-generation/eval-generation-workflow/stages/implementation-eval-spec.yaml
-    gate: stage_evals
-    note: Score implementation task reports during code-generation eval gate
-
   implementation-report:
     gate: skip
 

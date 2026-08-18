@@ -54,9 +54,6 @@ task_creation:
     file: tasks-modes/payload_revision-template.md
 
 implementation:
-  - id: implementation
-    artifact: code + task reports
-    eval_stage: implementation
   - id: implementation-report
     file: implementation-report-template.md
   - id: adrs
