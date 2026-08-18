@@ -75,6 +75,24 @@ Initialize from template on first invocation if missing.
 11. **Edit safety for existing source files** — never append to source files using `>>` / `tee -a`; use in-place edits only.
 12. **No unsafe fallback rewrites** — if an existing file edit cannot be applied cleanly, STOP and request user guidance rather than appending/replacing with full-file dumps.
 
+## PREFLIGHT LOG — MANDATORY
+
+After reading state.yaml and config.yaml, print this block before any task execution:
+
+```
+Preflight:
+  auto_approve: {true|false}
+  codegen_mode: {ai-helpers|direct}
+  task_execution_mode: {phase-iterative|one-shot}
+  current_state: {state from state.yaml}
+  current_task: {task_id or none}
+  jira_issuetype: {Epic|Story|...}
+  jira_creds_configured: {true|false}
+  mode: {auto-loop all tasks | one task per invocation}
+```
+
+If preflight is not printed, the run is non-compliant.
+
 ## YIELD BOUNDARY — CRITICAL (only when `auto_approve` is `false`)
 
 When `auto_approve` is `false` and you reach the approval question, you have TWO possible next actions:

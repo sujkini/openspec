@@ -505,11 +505,13 @@ task_sizing:
 # ---------------------------------------------------------------------------
 # task_execution_mode — one-shot vs phase-iterative task generation/implementation
 # ---------------------------------------------------------------------------
-# auto_approve — skip ALL user approval prompts across the entire workflow
+# auto_approve — skip artifact and per-task approval prompts (phase/PR/Jira gates are NEVER auto-approved)
 # ---------------------------------------------------------------------------
 auto_approve:
   description: >-
-    When true, all user approval gates are auto-approved without prompting.
+    When true, artifact approval and per-task code approval are auto-approved
+    without prompting. Phase implementation approval, PR creation, and Jira
+    sub-task creation are NEVER auto-approved regardless of this flag.
     Applies to:
       - /opsx-continue: artifact approval (specs, repo-assessment,
         plan, tasks). The agent loops through all ready artifacts automatically
@@ -517,7 +519,6 @@ auto_approve:
       - /opsx-apply: per-task code approval during implementation. The agent
         auto-approves each task after eval/verification and immediately proceeds
         to the next task. At phase boundary, auto-triggers /opsx-continue.
-      - Jira Phase creation prompt after tasks approval (phase-iterative).
     Evals still run and artifacts/code are still refined — only the user prompt
     is skipped. auto_approve only auto-approves, never auto-rejects.
     Exception: specs rejection (exit_on_reject) still requires explicit user action.
@@ -526,9 +527,11 @@ auto_approve:
   affects:
     - user_approval_feedback_gate.approval_prompt (artifact-level in /opsx-continue)
     - code_generation_eval_gate.task_approval_prompt (task-level in /opsx-apply)
-    - phases_jira_sync Jira Phase creation prompt
-    - phase boundary PR prompt in /opsx-apply
-    - user_approval_feedback_gate.exit_on_reject.specs (NOT affected — rejection is always explicit)
+  never_auto_approved:
+    - phases_jira_sync Jira Phase creation prompt (always prompted)
+    - phase boundary PR prompt in /opsx-apply (always prompted)
+    - implementation approval gate in /opsx-apply (always prompted)
+    - user_approval_feedback_gate.exit_on_reject.specs (rejection is always explicit)
 
 # ---------------------------------------------------------------------------
 task_execution_mode:

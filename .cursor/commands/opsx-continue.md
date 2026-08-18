@@ -23,6 +23,21 @@ Continue working on a change by creating the **next** artifact, then **eval → 
 1. Select change (`openspec list --json` if name not given).
 2. `openspec status --change "<name>" --json`
 3. Read `openspec/changes/<name>/inputs/jira.yaml` (required).
+
+**PREFLIGHT LOG** (mandatory — print before artifact generation):
+
+```
+Preflight:
+  auto_approve: {true|false}
+  next_artifact: {artifact-id}
+  task_execution_mode: {phase-iterative|one-shot}
+  jira_issuetype: {value from jira.yaml}
+  jira_creds_configured: {true|false}
+  mode: {auto-loop all artifacts | one artifact per invocation}
+```
+
+If preflight is not printed, the run is non-compliant.
+
 4. **Resolve repo target before repo-assessment**:
    - If the next ready artifact is `repo-assessment` and
      `target_repo` is absent or empty in `jira.yaml`:
@@ -146,7 +161,11 @@ Continue working on a change by creating the **next** artifact, then **eval → 
     - **IF `jira_issuetype` != "Epic":**
       Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira sub-task creation skipped."
       Skip sub-task creation entirely. Proceed to next artifact.
-    - **IF `jira_issuetype` == "Epic":** proceed with sub-task creation below.
+    - **IF `jira_issuetype` == "Epic":** proceed with credential check below.
+    - Read `config.yaml → credentials.jira` for `base_url` and `api_token`.
+    - **IF `base_url` is empty OR `api_token` is empty:**
+      Output: "Jira credentials not configured in config.yaml. Jira sub-task creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
+      Write `plan_phases[]` entry with a single item `jira_key: SKIPPED (no credentials)`. Proceed to next artifact.
     - This creates a single Jira sub-task representing the entire implementation work for one-shot mode.
     - ASK:
       > "Plan approved. Create a Jira sub-task for this change under {jira_key}? (Yes / No)"
@@ -187,7 +206,11 @@ Continue working on a change by creating the **next** artifact, then **eval → 
     - **IF `jira_issuetype` != "Epic":**
       Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira sub-task creation skipped."
       Skip sub-task creation entirely. Proceed to next step.
-    - **IF `jira_issuetype` == "Epic":** proceed with sub-task creation below.
+    - **IF `jira_issuetype` == "Epic":** proceed with credential check below.
+    - Read `config.yaml → credentials.jira` for `base_url` and `api_token`.
+    - **IF `base_url` is empty OR `api_token` is empty:**
+      Output: "Jira credentials not configured in config.yaml. Jira sub-task creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
+      Write `plan_phases[]` entry with `jira_key: SKIPPED (no credentials)`. Proceed to next step.
     - Read `current_plan_phase` from `implementation/state.yaml` (or `phase_scope` from context).
     - Phase N should already be non-e2e (e2e phases are skipped in step 5b).
     - Parse `plan.md` Phase N section — extract the `User Story: US-XX — <title>` field.
