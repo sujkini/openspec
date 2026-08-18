@@ -153,7 +153,7 @@ Ask (skip if `auto_approve: true`):
 > Approve this artifact and proceed to the next stage?  
 > **(Approve / Reject with feedback)**
 
-- **Approve** (or auto-approved) → mark artifact done; lock as immutable; STOP
+- **Approve** (or auto-approved) → mark artifact done; lock as immutable. If `auto_approve` is `false`: STOP. If `auto_approve` is `true`: return to `/opsx-continue` auto-approve loop.
 - **Reject with feedback** → return to **Step 1** with new feedback (increment round)
 
 ---

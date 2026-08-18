@@ -23,14 +23,14 @@ This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into y
 flags:
   codegen_mode: ai-helpers        # or: direct
   task_execution_mode: phase-iterative  # or: one-shot
-  auto_approve: false             # true for fully autonomous runs
+  auto_approve: true              # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
 ```
 
 | Flag | Options | Purpose |
 |------|---------|---------|
 | `codegen_mode` | `ai-helpers` / `direct` | Code generation strategy |
 | `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
-| `auto_approve` | `true` / `false` | Skip manual approval gates |
+| `auto_approve` | `true` / `false` | Auto-approve artifacts and per-task code approval. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
 
 ### 3. Add operator documentation
 
@@ -321,7 +321,7 @@ Key flags you can tune:
 flags:
   codegen_mode: ai-helpers              # "ai-helpers" or "direct"
   task_execution_mode: phase-iterative  # "phase-iterative" or "one-shot"
-  auto_approve: false                   # true for autonomous execution
+  auto_approve: true                    # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
   max_feedback_rounds: 3
   exit_on_all_tasks_complete: true
 ```
@@ -330,7 +330,7 @@ flags:
 |------|---------|--------------|
 | `codegen_mode` | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
 | `task_execution_mode` | `phase-iterative` | `phase-iterative`: one phase at a time with per-phase PRs and Jira tickets. `one-shot`: all tasks in one run, single PR |
-| `auto_approve` | `false` | When `true`, skip manual approval gates — tasks auto-approve after verification |
+| `auto_approve` | `true` | Auto-approve artifacts (`/opsx-continue`) and per-task code approval (`/opsx-apply`). Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
 | `max_feedback_rounds` | `3` | Max rejection + refinement loops per artifact before halting |
 | `exit_on_all_tasks_complete` | `true` | Auto-exit implementation when all tasks marked `[x]` |
 

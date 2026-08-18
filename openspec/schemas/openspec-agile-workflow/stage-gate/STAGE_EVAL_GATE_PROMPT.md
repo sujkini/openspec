@@ -212,10 +212,8 @@ Present to user:
 > Approve this artifact and proceed to the next stage?  
 > **(Approve / Reject with feedback)**
 
-- **Approve** → mark artifact done per schema gate; STOP (one artifact per `/opsx-continue`)
+- **Approve** → mark artifact done per schema gate. If `auto_approve` is `false`: STOP (one artifact per invocation). If `auto_approve` is `true`: return to `/opsx-continue` auto-approve loop (process next ready artifact).
 - **Reject with feedback** → run **user approval feedback gate** (schema `user_approval_feedback_gate`, read `stage-gate/USER_FEEDBACK_PROMPT.md`): load prior artifacts + current template, update template if feedback requires it, regenerate **current artifact only**, write round summary to `feedback_stage_artifacts/`, re-run eval gate if applicable, regenerate evaluation report, re-present this step; loop until approve; do not modify previously approved artifacts
-
-Do **not** create the next artifact in the same invocation.
 
 ## Constitution as input (not generated)
 
