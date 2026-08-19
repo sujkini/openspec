@@ -61,7 +61,45 @@ Archive a completed change in the experimental workflow.
 
    If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
 
-5. **Perform the archive**
+5. **User feedback and time savings — MANDATORY (NON-SKIPPABLE)**
+
+   **HARD GUARDRAIL: You MUST complete this step before archiving. Do NOT skip, defer, or proceed to step 6 without collecting ALL THREE responses and writing `user-feedback.md`. If the user says "skip" or "just archive", respond: "Feedback collection is mandatory for compliance (MON-01). It takes 30 seconds. Please answer the three questions to proceed."**
+
+   Present the following three questions to the user. Use the **AskQuestion tool** with all three questions in a single prompt:
+
+   **Question 1:** "How long would this change have taken without the agent? (estimated manual hours)"
+   - Options: "< 2 hours", "2–4 hours", "4–8 hours (1 day)", "8–16 hours (2 days)", "16–40 hours (1 week)", "> 40 hours (1+ weeks)"
+
+   **Question 2:** "How satisfied are you with this run? (1 = poor, 5 = excellent)"
+   - Options: "1 — Poor (major issues, significant rework)", "2 — Below average (multiple corrections needed)", "3 — Average (some corrections, acceptable output)", "4 — Good (minor corrections only)", "5 — Excellent (minimal or no corrections)"
+
+   **Question 3:** "Any comments on this run? (optional — leave blank if none)"
+   - Free text (the user can select "Other" and type a response, or select "No comments")
+   - Options: "No comments"
+
+   After collecting responses, write `openspec/changes/<name>/user-feedback.md`:
+
+   ```markdown
+   # User Feedback — <change-name>
+
+   **Date:** YYYY-MM-DD
+   **Change:** <change-name>
+   **Jira:** <jira_key from inputs/jira.yaml, if available>
+
+   ## Time Savings
+   - **Estimated manual effort:** <user's answer to Q1>
+   - **Agent-assisted wall time:** <total elapsed from telemetry if available, otherwise "not recorded">
+
+   ## Satisfaction
+   - **Rating:** <user's answer to Q2>
+
+   ## Comments
+   <user's answer to Q3, or "None">
+   ```
+
+   This file will be archived with the change directory in step 6.
+
+6. **Perform the archive**
 
    Create the archive directory if it doesn't exist:
    ```bash
@@ -78,7 +116,7 @@ Archive a completed change in the experimental workflow.
    mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
    ```
 
-6. **Display summary**
+7. **Display summary**
 
    Show archive completion summary including:
    - Change name
@@ -96,6 +134,7 @@ Archive a completed change in the experimental workflow.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
+**Feedback:** ✓ Captured (user-feedback.md)
 
 All artifacts complete. All tasks complete.
 ```
@@ -109,6 +148,7 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** No delta specs
+**Feedback:** ✓ Captured (user-feedback.md)
 
 All artifacts complete. All tasks complete.
 ```
@@ -122,6 +162,7 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
+**Feedback:** ✓ Captured (user-feedback.md)
 
 **Warnings:**
 - Archived with 2 incomplete artifacts
@@ -155,3 +196,4 @@ Target archive directory already exists.
 - Show clear summary of what happened
 - If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
+- **MANDATORY: Step 5 (user feedback) MUST be completed before step 6 (archive). Do NOT skip feedback collection. Do NOT archive without writing `user-feedback.md`. If the user attempts to skip, explain that feedback is required for compliance (MON-01) and re-prompt.**
