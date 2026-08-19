@@ -2,6 +2,8 @@
 
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two execution strategies (**phase-iterative** and **one-shot**), two code-generation modes (**ai-helpers** and **direct**), per-phase Jira traceability, and a post-CI E2E test generation pipeline.
 
+> **After completing a change, run `/opsx-archive` to capture your feedback and time savings.** This is mandatory for compliance and helps us measure the value of AI-assisted development.
+
 ---
 
 ## Quick Start
@@ -72,6 +74,16 @@ Restart Cursor so slash commands load from `.cursor/commands/`.
 ```
 /opsx-new PROJ-123
 ```
+
+### 7. Archive and capture feedback
+
+After implementation is complete and your PR is raised, run:
+
+```
+/opsx-archive
+```
+
+This archives the change and **collects mandatory feedback**: estimated manual hours (time saved) and a satisfaction rating. Responses are saved to `user-feedback.md` inside the archived change directory. This data is used for continuous monitoring and performance review (MON-01 compliance).
 
 ---
 
