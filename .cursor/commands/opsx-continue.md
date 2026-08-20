@@ -283,21 +283,28 @@ Read `config.yaml → flags.auto_approve` at the start of execution.
 
 After step 11 completes with `--status passed`, **do NOT stop**. Instead:
 
-1. Re-run `openspec status --change "<name>" --json` to refresh artifact statuses.
-2. If another artifact has `status: "ready"`, loop back to **step 5** and process it.
+1. **Execute step 11b** if its conditions apply (artifact is `plan` AND `task_execution_mode = one-shot`).
+2. **Execute step 12** if its conditions apply (artifact is `tasks` AND `task_execution_mode = phase-iterative`).
+   **Steps 11b and 12 are NEVER auto-approved** — the Jira sub-task prompt always fires regardless of `auto_approve`. Do NOT skip these steps.
+3. Re-run `openspec status --change "<name>" --json` to refresh artifact statuses.
+4. If another artifact has `status: "ready"`, loop back to **step 5** and process it.
    Use `--batch` flags on all telemetry hooks (see "Batch / Continue-All Telemetry" below).
-3. Continue looping until **no more artifacts** have `status: "ready"` (all approved or
+5. Continue looping until **no more artifacts** have `status: "ready"` (all approved or
    the final artifact `tasks.md` is approved).
-4. When the loop ends, print a summary of all artifacts processed and their eval scores.
+6. When the loop ends, print a summary of all artifacts processed and their eval scores.
+
+**CRITICAL: The per-artifact loop is: step 5 → 6 → 7 → 8 → 9 → 10 → 11 → 11b → 12 → loop back.
+Steps 11b and 12 MUST execute (when conditions match) before looping. Skipping them is a bug.**
 
 This means a single `/opsx-continue` invocation with `auto_approve: true` will process
 **all** remaining artifacts (validation → specs → repo-assessment → plan → tasks)
-in sequence, stopping only after the last one is approved.
+in sequence, stopping only after the last one is approved. Jira sub-task prompts
+fire at plan approval (one-shot) or tasks approval (phase-iterative) regardless of auto_approve.
 
 **When `auto_approve` is `false`:**
 
-Process ONE artifact per invocation (original behavior). Stop after user approval/rejection
-of the current artifact.
+Process ONE artifact per invocation (includes eval + refine + approval + steps 11b/12 if applicable).
+Stop after user approval/rejection of the current artifact and completion of any post-approval steps.
 
 ## Guardrails
 

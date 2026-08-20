@@ -185,9 +185,19 @@ On first run (no state.yaml):
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
 7. Initialize `state.yaml` with state: IDLE
-8. **Retry PENDING phase Jira ticket** (phase-iterative only):
+8. **Recover or retry phase Jira ticket** (phase-iterative only):
    - Read `inputs/jira.yaml` → `plan_phases[]` for current phase.
-   - If entry exists with `jira_key: PENDING`: retry `create_ticket` once using
+   - **IF `plan_phases[]` does not exist or has no entry for the current phase:**
+     The Jira sub-task prompt (step 12 of `/opsx-continue`) was likely skipped.
+     Read `inputs/jira.yaml` → `jira_issuetype`. If it is `"Epic"` AND Jira credentials
+     are configured (`config.yaml → credentials.jira.base_url` and `api_token` are non-empty):
+     - Parse `plan.md` Phase N section — extract `User Story: US-XX — <title>`.
+     - ASK: **"Phase {N} Jira sub-task was not created during /opsx-continue. Create Jira sub-task [US-XX] <user story title> under {jira_key} now? (Yes / No)"**
+     - On **Yes**: create the sub-task following schema `phases_jira_sync.create_ticket_spec`.
+       Persist to `inputs/jira.yaml` → `plan_phases[]`. On MCP failure, set `jira_key: PENDING`.
+     - On **No**: write `plan_phases[]` entry with `jira_key: SKIPPED`. Proceed.
+     If `jira_issuetype` is not `"Epic"` or credentials are empty, skip silently (same as `/opsx-continue` step 12 behavior).
+   - **IF entry exists with `jira_key: PENDING`:** retry `create_ticket` once using
      schema `phases_jira_sync.create_ticket_spec`. Update `jira_key` / `jira_url`
      on success; leave PENDING on failure (do not block implementation).
 9. **Telemetry — signal apply start / phase 5** (silent, non-blocking):
