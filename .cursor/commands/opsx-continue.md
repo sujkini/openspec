@@ -156,19 +156,19 @@ If preflight is not printed, the run is non-compliant.
     Use `--status failed` if the user rejects the artifact.
     Add `--phase <N>` only for phase-iterative mode tasks artifact.
 
-11b. **Post-approve: create Jira Sub-task for change** (ONLY when artifact is `plan` AND `task_execution_mode = one-shot` AND `--status passed`):
+11b. **Post-approve: create Jira Story for change** (ONLY when artifact is `plan` AND `task_execution_mode = one-shot` AND `--status passed`):
     - Read `inputs/jira.yaml` → `jira_issuetype`.
     - **IF `jira_issuetype` != "Epic":**
-      Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira sub-task creation skipped."
-      Skip sub-task creation entirely. Proceed to next artifact.
+      Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira Story creation skipped."
+      Skip Story creation entirely. Proceed to next artifact.
     - **IF `jira_issuetype` == "Epic":** proceed with credential check below.
     - Read `config.yaml → credentials.jira` for `base_url` and `api_token`.
     - **IF `base_url` is empty OR `api_token` is empty:**
-      Output: "Jira credentials not configured in config.yaml. Jira sub-task creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
+      Output: "Jira credentials not configured in config.yaml. Jira Story creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
       Write `plan_phases[]` entry with a single item `jira_key: SKIPPED (no credentials)`. Proceed to next artifact.
-    - This creates a single Jira sub-task representing the entire implementation work for one-shot mode.
+    - This creates a single Jira Story representing the entire implementation work for one-shot mode.
     - ASK:
-      > "Plan approved. Create a Jira sub-task for this change under {jira_key}? (Yes / No)"
+      > "Plan approved. Create a Jira Story for this change under {jira_key}? (Yes / No)"
     - **Note:** This prompt is NEVER auto-approved. `auto_approve` does not apply to ticket creation.
     - **No** → write `plan_phases[]` entry with a single item `jira_key: SKIPPED`. Proceed.
     - **Yes** →
@@ -177,7 +177,7 @@ If preflight is not printed, the run is non-compliant.
       - Read `plan.md` §5 to get the user stories mapped to phases (for one-shot, list all US-xx).
       - Call Jira MCP `create_ticket`:
         - `project`: prefix of parent key (e.g. `CM` from `CM-800`)
-        - `issuetype`: `Sub-task`
+        - `issuetype`: `Story`
         - `parent`: `jira_key` (the Epic — always the parent)
         - `summary`: `<change-name>: <plan title / high-level goal from plan.md §1> (US-01, US-02, ...)`
         - `description`: developer-style ticket assembled from:
@@ -193,7 +193,7 @@ If preflight is not printed, the run is non-compliant.
             jira_key: <created-key>
             jira_url: <browse-url>
             summary: "<change-name>: <goal>"
-            issuetype: Sub-task
+            issuetype: Story
             parent: <jira_key>
         ```
       - If Jira MCP is unavailable, set `jira_key: PENDING`; surface the error but
@@ -201,29 +201,29 @@ If preflight is not printed, the run is non-compliant.
     - Report created / PENDING / SKIPPED key in the approval summary.
     - Skip this step entirely for phase-iterative mode and non-`plan` artifacts.
 
-12. **Post-approve: create Jira Sub-task for Phase** (ONLY when artifact is `tasks` AND `task_execution_mode = phase-iterative` AND `--status passed`):
+12. **Post-approve: create Jira Story for Phase** (ONLY when artifact is `tasks` AND `task_execution_mode = phase-iterative` AND `--status passed`):
     - Read `inputs/jira.yaml` → `jira_issuetype`.
     - **IF `jira_issuetype` != "Epic":**
-      Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira sub-task creation skipped."
-      Skip sub-task creation entirely. Proceed to next step.
+      Output: "Input ticket is a {jira_issuetype}, not an Epic. Jira Story creation skipped."
+      Skip Story creation entirely. Proceed to next step.
     - **IF `jira_issuetype` == "Epic":** proceed with credential check below.
     - Read `config.yaml → credentials.jira` for `base_url` and `api_token`.
     - **IF `base_url` is empty OR `api_token` is empty:**
-      Output: "Jira credentials not configured in config.yaml. Jira sub-task creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
+      Output: "Jira credentials not configured in config.yaml. Jira Story creation skipped. Fill credentials.jira.base_url and credentials.jira.api_token to enable."
       Write `plan_phases[]` entry with `jira_key: SKIPPED (no credentials)`. Proceed to next step.
     - Read `current_plan_phase` from `implementation/state.yaml` (or `phase_scope` from context).
     - Phase N should already be non-e2e (e2e phases are skipped in step 5b).
     - Parse `plan.md` Phase N section — extract the `User Story: US-XX — <title>` field.
     - Parse `tasks.md` §3/§4 for Phase N task IDs and covered user stories.
     - ASK (ALWAYS — `auto_approve` does NOT apply to ticket creation):
-      > "Phase {N} tasks approved. Create Jira sub-task [US-XX] <user story title> under {jira_key}? (Yes / No)"
+      > "Phase {N} tasks approved. Create Jira Story [US-XX] <user story title> under {jira_key}? (Yes / No)"
     - **No** → write `plan_phases[]` entry with `jira_key: SKIPPED`. Proceed.
     - **Yes** →
       - Read `inputs/jira.yaml` for `jira_key` (the input Epic provided at `/opsx-new`).
       - Read `config.yaml → credentials.jira` for `base_url`, `username`, `api_token`.
       - Call Jira MCP `create_ticket`:
         - `project`: prefix of parent key (e.g. `CM` from `CM-800`)
-        - `issuetype`: `Sub-task`
+        - `issuetype`: `Story`
         - `parent`: `jira_key` (the Epic — always the parent)
         - `summary`: `[US-XX] <user story title>`
         - `description`: developer-style phase ticket assembled from:
@@ -241,7 +241,7 @@ If preflight is not printed, the run is non-compliant.
             jira_url: <browse-url>
             summary: "[US-XX] <user story title>"
             user_story: US-XX
-            issuetype: Sub-task
+            issuetype: Story
             parent: <jira_key>
         ```
       - If Jira MCP is unavailable, set `jira_key: PENDING`; surface the error but
@@ -285,7 +285,7 @@ After step 11 completes with `--status passed`, **do NOT stop**. Instead:
 
 1. **Execute step 11b** if its conditions apply (artifact is `plan` AND `task_execution_mode = one-shot`).
 2. **Execute step 12** if its conditions apply (artifact is `tasks` AND `task_execution_mode = phase-iterative`).
-   **Steps 11b and 12 are NEVER auto-approved** — the Jira sub-task prompt always fires regardless of `auto_approve`. Do NOT skip these steps.
+   **Steps 11b and 12 are NEVER auto-approved** — the Jira Story prompt always fires regardless of `auto_approve`. Do NOT skip these steps.
 3. Re-run `openspec status --change "<name>" --json` to refresh artifact statuses.
 4. If another artifact has `status: "ready"`, loop back to **step 5** and process it.
    Use `--batch` flags on all telemetry hooks (see "Batch / Continue-All Telemetry" below).
@@ -298,7 +298,7 @@ Steps 11b and 12 MUST execute (when conditions match) before looping. Skipping t
 
 This means a single `/opsx-continue` invocation with `auto_approve: true` will process
 **all** remaining artifacts (validation → specs → repo-assessment → plan → tasks)
-in sequence, stopping only after the last one is approved. Jira sub-task prompts
+in sequence, stopping only after the last one is approved. Jira Story prompts
 fire at plan approval (one-shot) or tasks approval (phase-iterative) regardless of auto_approve.
 
 **When `auto_approve` is `false`:**

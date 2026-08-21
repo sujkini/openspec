@@ -615,7 +615,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 
 | Integration | Operations | Credentials |
 |-------------|------------|-------------|
-| Jira MCP | Read tickets, create sub-tasks | `config.yaml → credentials.jira` (user's PAT) |
+| Jira MCP | Read tickets, create Stories under Epic | `config.yaml → credentials.jira` (user's PAT) |
 | GitHub MCP | Read repos, create draft PRs | `config.yaml → credentials.github` (user's PAT) |
 
 **Data Sources:**
@@ -642,7 +642,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 **Actions requiring human approval (never auto-approved):**
 - Phase implementation approval — always prompted after all phase tasks complete
 - PR creation to upstream repository — always prompted; user can decline
-- Jira sub-task creation — always prompted; only offered when input ticket is an Epic with configured credentials
+- Jira Story creation — always prompted; only offered when input ticket is an Epic with configured credentials
 - Specs rejection — always requires explicit user action
 
 **Prohibited actions:**
@@ -674,7 +674,7 @@ The OpenSpec workflow enforces multi-layered human oversight:
 2. **Task approval:** Each code task is verified (build, test, eval gate) and presented for approval. When `auto_approve` is `false`, the agent yields after every task. When `true`, tasks auto-approve after passing verification but phase/PR/Jira gates still require human input.
 3. **Phase approval:** After all tasks in a phase complete, the agent always prompts: "Phase {N} development complete. Approve the phase implementation?" This gate is never auto-approved.
 4. **PR creation:** The agent always asks: "Would you like to raise a draft PR to the upstream repo?" The user can decline. All PRs are created as drafts requiring normal upstream review and merge.
-5. **Jira sub-task creation:** The agent always asks before creating Jira tickets. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
+5. **Jira Story creation:** The agent always asks before creating Jira Stories. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
 6. **Override recording:** If a user approves a task despite failing eval cases, the decision and eval results are recorded in `implementation/task-reports/<task-id>.md` for audit purposes.
 7. **Rejection handling:** When a user rejects with feedback, the agent re-runs only the current task/artifact. Up to 3 rejection rounds are allowed before the workflow halts.
 
@@ -740,7 +740,7 @@ The agent cannot access any repository, Jira project, or API the user is not alr
 | "constitution.md required" | Missing `harness-evals/constitution.md` | Run `/opsx-constitute` or place the file manually |
 | "target_repo not set" | Missing repo URL before repo-assessment | Provide the URL when prompted; it persists to `inputs/jira.yaml` |
 | "fork_repo_url not set" | Missing fork URL before `/opsx-apply` | Provide fork URL, or say "use this as the working directory" |
-| Jira sub-task creation skipped | Input ticket is not an Epic, or Jira credentials empty | Fill `credentials.jira` in `config.yaml` and use an Epic ticket |
+| Jira Story creation skipped | Input ticket is not an Epic, or Jira credentials empty | Fill `credentials.jira` in `config.yaml` and use an Epic ticket |
 | Eval scoring skipped | No eval file at `harness-evals/evals/<stage>_eval.yaml` | Add evals via `/eval-loop` or place YAML files manually |
 | Agent stuck or in infinite loop | LLM context issue or tool execution hang | Press `Ctrl+C` (CLI) or Stop button (IDE), then re-run the command |
 | Duplicate `package` errors in Go build | Agent appended to a source file instead of editing | Reset file with `git checkout -- <file>`, then re-run `/opsx-apply` |

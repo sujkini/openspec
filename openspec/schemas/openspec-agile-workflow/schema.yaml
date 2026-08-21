@@ -511,7 +511,7 @@ auto_approve:
   description: >-
     When true, artifact approval and per-task code approval are auto-approved
     without prompting. Phase implementation approval, PR creation, and Jira
-    sub-task creation are NEVER auto-approved regardless of this flag.
+    Jira Story creation are NEVER auto-approved regardless of this flag.
     Applies to:
       - /opsx-continue: artifact approval (specs, repo-assessment,
         plan, tasks). The agent loops through all ready artifacts automatically

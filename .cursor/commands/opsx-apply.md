@@ -188,12 +188,12 @@ On first run (no state.yaml):
 8. **Recover or retry phase Jira ticket** (phase-iterative only):
    - Read `inputs/jira.yaml` → `plan_phases[]` for current phase.
    - **IF `plan_phases[]` does not exist or has no entry for the current phase:**
-     The Jira sub-task prompt (step 12 of `/opsx-continue`) was likely skipped.
+     The Jira Story prompt (step 12 of `/opsx-continue`) was likely skipped.
      Read `inputs/jira.yaml` → `jira_issuetype`. If it is `"Epic"` AND Jira credentials
      are configured (`config.yaml → credentials.jira.base_url` and `api_token` are non-empty):
      - Parse `plan.md` Phase N section — extract `User Story: US-XX — <title>`.
-     - ASK: **"Phase {N} Jira sub-task was not created during /opsx-continue. Create Jira sub-task [US-XX] <user story title> under {jira_key} now? (Yes / No)"**
-     - On **Yes**: create the sub-task following schema `phases_jira_sync.create_ticket_spec`.
+     - ASK: **"Phase {N} Jira Story was not created during /opsx-continue. Create Jira Story [US-XX] <user story title> under {jira_key} now? (Yes / No)"**
+     - On **Yes**: create the Story following schema `phases_jira_sync.create_ticket_spec`.
        Persist to `inputs/jira.yaml` → `plan_phases[]`. On MCP failure, set `jira_key: PENDING`.
      - On **No**: write `plan_phases[]` entry with `jira_key: SKIPPED`. Proceed.
      If `jira_issuetype` is not `"Epic"` or credentials are empty, skip silently (same as `/opsx-continue` step 12 behavior).
@@ -634,7 +634,7 @@ When all **current phase** tasks are marked complete:
        Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."
        Automatically invoke `/opsx-continue <change-name>` to generate next-phase tasks.
        Since `auto_approve` is `true`, `/opsx-continue` will auto-loop through artifact
-       approval and return with `tasks.md` approved (but Jira sub-task prompt still fires).
+       approval and return with `tasks.md` approved (but Jira Story prompt still fires).
        Then loop back to **Step 4** to execute the new phase's tasks.
        **Note:** When the auto_approve task loop completes the next phase, execution will
        STOP at step 4 (phase-level approval gate) since that gate always prompts the user.
