@@ -2,16 +2,25 @@
 name: /opsx-e2e
 id: opsx-e2e
 category: QE
-description: Generate and run E2E tests for a phase/final PR after CI passes
-argument-hint: "[change-name] [--phase N | --pr <URL>]"
+description: Generate E2E test plans and code from ADR, EP, PR, or any combination
+argument-hint: "[change-name] [--pr <URL>] [--adr <path-or-URL>] [--ep <path-or-URL>]"
 ---
 
-Generate E2E test plans and executable test code for a PR raised by `/opsx-apply`. Runs the
-full pipeline: pre-analysis → test plan → consolidation → code generation → execute.
+Generate E2E test plans and executable test code. Supports **three input modes** — the
+pipeline depth adapts based on what is provided:
 
-**Trigger:** After phase PR (phase-iterative) or final PR (one-shot) is raised and CI passes.
+| Input | Mode | Pipeline |
+|-------|------|----------|
+| **PR only** | PR Mode | Full: pre-analysis → plan → consolidation → codegen → execute → push |
+| **ADR or EP only** | Design Mode | Plan-only: pre-analysis → plan → consolidation → codegen → STOP |
+| **ADR/EP + PR** | Combined Mode | Full pipeline with enriched design context |
+| **Change name** (from `/opsx-apply`) | Change Mode | Resolves PR from `state.yaml`, then runs Full |
 
-**Input**: Optional change name + phase number or PR URL. If omitted, infer from context.
+**Design Mode** (ADR/EP without PR) generates the test plan and code but does NOT attempt
+execution or push — there is no branch to push to. The developer reviews the plan and code,
+then runs `/opsx-e2e --pr <URL>` later when a PR exists to execute and push.
+
+**Input**: At least one of: change name, `--pr <URL>`, `--adr <path-or-URL>`, `--ep <path-or-URL>`.
 
 ## Telemetry
 
@@ -45,27 +54,134 @@ Use the same token estimation approach as the development workflow (`openspec/te
 
 ## Steps
 
-### 1. Resolve PR URL
+### 0. HARD GUARDRAIL — Operator context check (MANDATORY, NON-SKIPPABLE)
 
-Determine the target PR for E2E generation:
+**Before ANY other step, you MUST read and verify these operator context files exist.
+Do NOT proceed past this step without them.**
 
-**Phase-iterative mode:**
-- Read `openspec/changes/<name>/implementation/state.yaml`
-- Get PR URL from `phase_pr_urls[N]` (where N = specified phase or latest completed phase)
-- If no `--phase` specified, use the most recently completed phase
+#### 0a. Check `agents.md`
 
-**One-shot mode:**
-- Read `openspec/changes/<name>/implementation/implementation-report.md`
-- Extract PR URL from the Draft Pull Request section
+Look for `agents.md` (or `AGENTS.md`) at the **operator repo root** (the `target_repo`
+from `inputs/jira.yaml`, or the repo inferred from the PR URL).
 
-**Direct PR:**
-- If user provides `--pr <URL>`, use that directly (skips change lookup)
+- **If found:** Read it in full. This is the primary agentic context for the operator.
+  It defines agent routing, controller patterns, test conventions, and coding rules.
+  All downstream stages MUST respect these conventions.
+- **If NOT found:**
+  STOP and output:
+  **"BLOCKED: `agents.md` not found at the operator repo root. This file defines
+  the operator's agentic conventions (controller patterns, test style, coding rules)
+  and is required for accurate E2E generation.**
+  **Action: Create `agents.md` at your operator repo root, or run `/opsx-constitute`
+  to bootstrap operator context. Then re-run `/opsx-e2e`."**
+  Do NOT proceed.
 
-If no PR URL found → STOP: "No PR found. Run `/opsx-apply` first to raise a PR."
+#### 0b. Check `harness-evals/` documentation
 
-**Telemetry:** Emit `e2e_run_start` event with `pr_url`, `phase`, and `mode`.
+Check for the `harness-evals/` directory in the openspec workspace:
 
-### 2. Verify CI status
+1. **`harness-evals/constitution.md`** — the operator's constitution (governance guardrails)
+2. **`harness-evals/harness-docs/`** — operator documentation (architecture guides, conventions)
+3. **`harness-evals/evals/`** — stage eval YAML files (if present, used for eval-aware test gen)
+
+- **If `harness-evals/constitution.md` exists:** Read it. This provides non-negotiable
+  guardrails for the operator. Pass these constraints to all downstream stages.
+- **If `harness-evals/constitution.md` does NOT exist:**
+  STOP and output:
+  **"BLOCKED: `harness-evals/constitution.md` not found. The constitution defines
+  non-negotiable operator guardrails (coding conventions, test patterns, architecture rules)
+  that E2E generation must respect.**
+  **Action: Run `/opsx-constitute` to generate constitution.md from your harness-docs,
+  then re-run `/opsx-e2e`."**
+  Do NOT proceed.
+- **If `harness-evals/harness-docs/` exists:** Read all `.md` files. These provide
+  operator-specific context (architecture, testing patterns, deployment constraints).
+- **If `harness-evals/harness-docs/` does NOT exist or is empty:**
+  WARN: **"No harness documentation found in `harness-evals/harness-docs/`.
+  E2E generation will proceed with agents.md and constitution.md only.
+  For richer context, add operator docs to `harness-evals/harness-docs/`."**
+  Proceed (this is a warning, not a blocker).
+- **If `harness-evals/evals/` exists:** Note available stage evals. These may inform
+  which patterns the eval-loop has identified as important for this operator.
+
+#### 0c. Preflight output
+
+After reading all context files, output a preflight summary:
+
+```
+======================================================================
+/opsx-e2e — Operator Context Preflight
+======================================================================
+agents.md:              ✓ Found (<path>)
+constitution.md:        ✓ Found (harness-evals/constitution.md)
+harness-docs/:          ✓ Found (N files) | ⚠ Not found (warning only)
+harness-evals/evals/:   ✓ Found (N stage evals) | — Not found (optional)
+qe-behaviour.md:        ✓ Found | — Not found (optional)
+======================================================================
+```
+
+Proceed to Step 1 only after this preflight passes (agents.md + constitution.md both found).
+
+### 1. Resolve inputs and determine mode
+
+Parse the user's arguments to determine which input mode applies:
+
+| Argument | What it provides |
+|----------|-----------------|
+| `<change-name>` | Resolves PR from `state.yaml` (Change Mode) |
+| `--pr <URL>` | Direct PR URL |
+| `--adr <path-or-URL>` | ADR document (local path, GitHub URL, or Google Docs URL) |
+| `--ep <path-or-URL>` | Enhancement Proposal (same input formats as ADR) |
+| `--phase N` | Phase number (for phase-iterative changes) |
+
+#### Mode resolution
+
+Apply in this order:
+
+1. **If `--pr` is provided or a PR is resolved from change name:**
+   - If `--adr` or `--ep` also provided → **Combined Mode** (full pipeline, design-enriched)
+   - If neither ADR nor EP → **PR Mode** (full pipeline, infer from diff)
+
+2. **If `--adr` or `--ep` is provided but NO PR:**
+   → **Design Mode** (plan-only pipeline — stops after code generation, no execute/push)
+
+3. **If only a change name and no PR can be resolved:**
+   - Check `state.yaml` for `phase_pr_urls` or implementation-report for PR URL
+   - If found → treat as PR Mode (or Combined if ADR/EP also given)
+   - If not found → ASK: **"No PR found for this change. Provide an ADR, EP, or PR URL
+     to proceed, or run `/opsx-apply` first to raise a PR."**
+
+4. **If nothing provided:**
+   → STOP: **"At least one input required: `--pr <URL>`, `--adr <path>`, `--ep <path>`,
+   or a change name with an existing PR. See `/opsx-e2e --help`."**
+
+#### Fetching inputs
+
+**PR (when available):**
+```bash
+gh pr view <PR-NUMBER> --repo <org/repo> --json title,body,state,labels,files
+gh pr diff <PR-NUMBER> --repo <org/repo>
+gh api repos/<org>/<repo>/pulls/<PR-NUMBER>/comments
+gh api repos/<org>/<repo>/pulls/<PR-NUMBER>/reviews
+```
+
+**ADR / EP:**
+- Accept Google Docs URL, GitHub file URL, local file path, or pasted markdown
+- If fetch fails → ASK the user to paste the content
+- ADR and EP are treated identically for scoping purposes; the label is for traceability
+
+**Target repo:**
+- From `inputs/jira.yaml → target_repo` (if change exists)
+- From PR URL (extract `org/repo`)
+- From ADR/EP content (if it references a repo)
+- If none resolved → ASK: **"What is the target GitHub repository URL?"**
+
+**Telemetry:** Emit `e2e_run_start` event with `pr_url` (or null), `adr_provided`, `ep_provided`,
+`mode` (pr/design/combined), and `phase`.
+
+### 2. Verify CI status (PR Mode and Combined Mode ONLY)
+
+**Skip this step entirely in Design Mode** (no PR exists).
 
 ```bash
 gh pr checks <PR-NUMBER> --repo <org/repo>
@@ -82,24 +198,46 @@ Create E2E artifacts directory:
 openspec/changes/<name>/e2e/
 ```
 
+If no change name exists (Design Mode without prior `/opsx-new`):
+- Derive a name from the ADR/EP title (kebab-case)
+- Create `openspec/changes/<name>/e2e/` for artifacts
+
 All E2E artifacts are written here: `e2e-analysis.md`, `test-plan.md`, `revised-test-plan.md`, generated code.
 
 ### 4. Stage 1 — Pre-Analysis
 
 Read and follow **`{schema_root}/e2e-workflow/pre-analysis-gate.md`** in full.
 
-**Inputs:**
-- PR URL (from step 1)
-- `{schema_root}/e2e-workflow/qe-behaviour.md` (if present — project-specific QE context)
-- Target repo (from `inputs/jira.yaml → target_repo`)
+The pre-analysis template already supports ADR Mode, PR Mode, and ADR+PR Mode.
+Pass the correct inputs based on the resolved mode:
+
+**PR Mode inputs:**
+- PR URL, diff, review comments
+- `{schema_root}/e2e-workflow/qe-behaviour.md` (if present)
+- Target repo (from step 1)
+- `agents.md` content (from step 0a)
+- `harness-evals/constitution.md` content (from step 0b)
+
+**Design Mode inputs (ADR/EP only):**
+- ADR or EP document content
+- `{schema_root}/e2e-workflow/qe-behaviour.md` (if present)
+- Target repo (from step 1)
+- `agents.md` content (from step 0a)
+- `harness-evals/constitution.md` content (from step 0b)
+
+**Combined Mode inputs:**
+- All PR Mode inputs PLUS ADR/EP document content
 
 **Process:**
-1. Fetch PR metadata and diff via `gh`
-2. Fetch review comments (`gh api repos/.../pulls/NNN/comments` + `/reviews`)
+1. In PR Mode / Combined: fetch PR metadata, diff, and review comments via `gh`
+2. In Design Mode: read ADR/EP document; use it as the primary scoping source
 3. Classify change type
 4. Perform impact analysis, coverage assessment, blast radius, regression risk
-5. Produce proposed test cases (priority-ordered, 15–20 range)
-6. Write `openspec/changes/<name>/e2e/e2e-analysis.md`
+5. Cross-check proposed tests against `agents.md` conventions and `constitution.md` guardrails
+6. If `harness-evals/evals/` stage evals exist: review them for patterns the eval-loop has
+   flagged — ensure proposed E2E tests cover those patterns where relevant
+7. Produce proposed test cases (priority-ordered, 15–20 range)
+8. Write `openspec/changes/<name>/e2e/e2e-analysis.md`
 
 **Approval gate:**
 - Present the analysis to the user
@@ -108,8 +246,9 @@ Read and follow **`{schema_root}/e2e-workflow/pre-analysis-gate.md`** in full.
 - On approve → proceed to Stage 2
 
 **Telemetry:** Emit `e2e_stage_start` (stage=1, stage_name="pre_analysis") before processing.
-On approval, emit `e2e_stage_end` with `tokens_in` (PR diff + qe-behaviour.md token count),
-`tokens_out` (e2e-analysis.md token count), `duration_s`, and `refinement_rounds` (0 if approved first time).
+On approval, emit `e2e_stage_end` with `tokens_in` (PR diff / ADR content + qe-behaviour.md
++ agents.md + constitution.md token count), `tokens_out` (e2e-analysis.md token count),
+`duration_s`, and `refinement_rounds` (0 if approved first time).
 
 ### 5. Stage 2 — Test Plan Generation
 
@@ -188,6 +327,31 @@ On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo 
 `tokens_out` (sum of all generated *_test.go file token counts), `duration_s`, and `refinement_rounds`.
 
 ### 8. Stage 5 — Execute, Evaluate, and Push
+
+**Design Mode gate:** If running in **Design Mode** (ADR/EP only, no PR), skip Stage 5
+entirely. Instead, output:
+
+```
+======================================================================
+Design Mode — E2E Pipeline Complete (Plan Only)
+======================================================================
+Mode:           Design (ADR/EP only — no PR)
+Input:          <ADR/EP title or path>
+Artifacts:      e2e-analysis.md, test-plan.md, revised-test-plan.md, generated code
+Location:       openspec/changes/<name>/e2e/
+
+No PR exists — execution and push are skipped.
+
+Next steps:
+  1. Review the generated test plan and code
+  2. When a PR is raised, re-run: /opsx-e2e --pr <URL>
+     (the existing plan and code will be reused if still valid)
+======================================================================
+```
+
+Then proceed directly to Step 9 (Final Summary) and Step 10 (Time Saved & Feedback).
+
+**PR Mode / Combined Mode:** Continue with Stage 5 below.
 
 **Telemetry:** Emit `e2e_stage_start` (stage=5, stage_name="execution") before execution.
 
@@ -405,9 +569,20 @@ No separate PR is created — the existing development PR receives the E2E commi
 ```
 ## E2E Generation Complete: <change-name>
 
-**PR (fork):** <PR URL>
-**PR (upstream):** <upstream PR URL or "not raised">
-**Phase:** <N> (or "final")
+**Mode:** <PR Mode | Design Mode | Combined Mode>
+**Input:** <PR URL | ADR/EP path | both>
+**PR (fork):** <PR URL or "N/A — Design Mode">
+**PR (upstream):** <upstream PR URL or "not raised" or "N/A">
+**Phase:** <N> (or "final" or "N/A")
+
+### Operator Context Used
+| Source | Status |
+|--------|--------|
+| agents.md | ✓ Read (<path>) |
+| constitution.md | ✓ Read (harness-evals/constitution.md) |
+| harness-docs/ | ✓ N files | ⚠ Not found |
+| harness-evals/evals/ | ✓ N stage evals | — Not found |
+| qe-behaviour.md | ✓ Read | — Not found |
 
 ### Artifacts Generated
 | Stage | Artifact | Path |
@@ -416,10 +591,10 @@ No separate PR is created — the existing development PR receives the E2E commi
 | Test plan | test-plan.md | openspec/changes/<name>/e2e/ |
 | Revised plan | revised-test-plan.md | openspec/changes/<name>/e2e/ |
 | Generated code | <file>_test.go | openspec/changes/<name>/e2e/generated/ |
-| Evaluation report | e2e-evaluation-report.md | openspec/changes/<name>/e2e/ |
+| Evaluation report | e2e-evaluation-report.md | openspec/changes/<name>/e2e/ (PR/Combined only) |
 | QE Metrics | qe-metrics.json | openspec/changes/<name>/telemetry/ |
 
-### Test Results
+### Test Results (PR Mode / Combined Mode only)
 | Journey | Status |
 |---------|--------|
 | Journey 1: ... | PASS/FAIL/NOT RUN |
@@ -429,16 +604,22 @@ No separate PR is created — the existing development PR receives the E2E commi
 |--------|-------|
 | AC → Scenario Coverage | X% (N/M criteria covered) |
 | Automation Coverage | X% (N automated, M manual) |
-| First-Pass Pass Rate | X% (N/M passed first run) |
-| Flake Rate | X% (N flaky retries) |
-| Bugs Found / Verified | N found, M verified |
+| First-Pass Pass Rate | X% (N/M passed first run) | N/A (Design Mode) |
+| Flake Rate | X% (N flaky retries) | N/A (Design Mode) |
+| Bugs Found / Verified | N found, M verified | N/A (Design Mode) |
 | Triage Accuracy | X% (or N/A) |
 | QE Cost | $X.XX (N tokens, Xs wall time) |
 
-### Next Steps
+### Next Steps (mode-dependent)
+**PR / Combined Mode:**
 - Review test code in the PR
 - If upstream PR raised: monitor CI on the upstream PR
 - Re-run with `/opsx-e2e --phase N` after fixes if tests failed
+
+**Design Mode:**
+- Review generated test plan and code in openspec/changes/<name>/e2e/
+- When a PR is raised: `/opsx-e2e --pr <URL>` to execute and push
+- The existing plan will be reused if still valid for the PR scope
 ```
 
 ### 10. Time Saved & Feedback Prompt (fires in ALL exit paths)
@@ -477,12 +658,25 @@ Any feedback on the E2E workflow? (free text, or press Enter to skip)
 
 ## Guardrails
 
+- **HARD GUARDRAIL — `agents.md` required:** Do NOT proceed past Step 0 without reading
+  `agents.md` from the operator repo root. This file defines controller patterns, test
+  conventions, and coding rules. STOP if missing.
+- **HARD GUARDRAIL — `harness-evals/constitution.md` required:** Do NOT proceed past Step 0
+  without reading `constitution.md`. This defines non-negotiable operator guardrails. STOP
+  if missing.
+- **HARD GUARDRAIL — Harness context feeds all stages:** The content from `agents.md`,
+  `constitution.md`, and `harness-docs/` MUST be passed as context to pre-analysis, test
+  plan generation, and code generation stages. Do not generate tests that violate the
+  conventions defined in these files.
 - **User approval gate after every stage** — do not advance until approved
-- **CI must be green** before running — do not generate E2E for failing PRs
+- **CI must be green** before running in PR/Combined mode — do not generate E2E for failing PRs
+- **Design Mode stops after code generation** — do not attempt execute or push without a PR
 - Never skip the pre-analysis gate — it prevents wasted effort
 - Respect pre-analysis exclusions in all downstream stages
-- Match target repo test style exactly (framework, helpers, constants)
+- Match target repo test style exactly (framework, helpers, constants) — as defined in `agents.md`
 - No hardcoded durations — use repo constants
 - No inline K8s resource specs — use repo builders/helpers
 - DeferCleanup for every created resource
 - Generated code must compile — verify before presenting
+- If `harness-evals/evals/` stage evals exist, cross-reference them during pre-analysis to
+  ensure E2E tests cover patterns the eval-loop has identified as important
