@@ -50,7 +50,9 @@ Use the same token estimation approach as the development workflow (`openspec/te
 | E2E workflow templates | `{schema_root}/e2e-workflow/` |
 | Pre-analysis gate | `{schema_root}/e2e-workflow/pre-analysis-gate.md` |
 | Test plan generation | `{schema_root}/e2e-workflow/test-plan-generation.md` |
-| QE behaviour (project input) | `{schema_root}/e2e-workflow/qe-behaviour.md` |
+| QE behaviour (generic rules) | `{schema_root}/e2e-workflow/qe-behaviour.md` (Sections 1-5: universal QE rules) |
+| QE behaviour (operator-specific) | `<operator-repo>/qe-e2e/qe-behaviour.md` (Sections 3a/3b: deployment + quality gates) |
+| Test helpers (operator-specific) | `<operator-repo>/qe-e2e/helpers.md` (optional: helper function signatures) |
 
 ## Steps
 
@@ -104,7 +106,29 @@ Check for the `harness-evals/` directory in the openspec workspace:
 - **If `harness-evals/evals/` exists:** Note available stage evals. These may inform
   which patterns the eval-loop has identified as important for this operator.
 
-#### 0c. Preflight output
+#### 0c. Check operator `qe-e2e/` directory
+
+Look for `qe-e2e/` at the **operator repo root** (same location as `agents.md`):
+
+1. **`qe-e2e/qe-behaviour.md`** — operator-specific deployment context (Section 3a) and quality
+   gates (Section 3b). This is the operator team's filled-in version of the generic template
+   from `{schema_root}/e2e-workflow/qe-behaviour.md`.
+   - **If found:** Read it. This provides the operator's deployment model, namespace, CR kinds,
+     quality gates, and domain-specific observables. Pass to Stage 1 (pre-analysis) as operator
+     context — it will be embedded into `e2e-analysis.md` for downstream stages.
+   - **If NOT found:** WARN (not a blocker). Derive deployment context from `agents.md` and
+     quality gates from `constitution.md`. Output:
+     **"⚠ `qe-e2e/qe-behaviour.md` not found. Deriving operator context from agents.md.
+     For richer E2E context, create `qe-e2e/qe-behaviour.md` using the template in
+     `{schema_root}/e2e-workflow/qe-behaviour.md` Section 3a/3b."**
+
+2. **`qe-e2e/helpers.md`** (optional) — operator-specific test helper function signatures for
+   code generation (e.g., `NewTestPod(...)`, `SetupTestEnvironment(...)`).
+   - **If found:** Read it. Pass to Stage 4 (code generation) for helper discovery.
+   - **If NOT found:** Not a problem. Stage 4 will discover helpers from `test/e2e/utils/` in
+     the target repo and from `agents.md`.
+
+#### 0d. Preflight output
 
 After reading all context files, output a preflight summary:
 
@@ -112,11 +136,12 @@ After reading all context files, output a preflight summary:
 ======================================================================
 /opsx-e2e — Operator Context Preflight
 ======================================================================
-agents.md:              ✓ Found (<path>)
-constitution.md:        ✓ Found (harness-evals/constitution.md)
-harness-docs/:          ✓ Found (N files) | ⚠ Not found (warning only)
-harness-evals/evals/:   ✓ Found (N stage evals) | — Not found (optional)
-qe-behaviour.md:        ✓ Found | — Not found (optional)
+agents.md:                  ✓ Found (<path>)
+constitution.md:            ✓ Found (harness-evals/constitution.md)
+harness-docs/:              ✓ Found (N files) | ⚠ Not found (warning only)
+harness-evals/evals/:       ✓ Found (N stage evals) | — Not found (optional)
+qe-e2e/qe-behaviour.md:    ✓ Found (<path>) | ⚠ Not found (deriving from agents.md)
+qe-e2e/helpers.md:          ✓ Found (<path>) | — Not found (will discover from repo)
 ======================================================================
 ```
 
@@ -211,21 +236,26 @@ Read and follow **`{schema_root}/e2e-workflow/pre-analysis-gate.md`** in full.
 The pre-analysis template already supports ADR Mode, PR Mode, and ADR+PR Mode.
 Pass the correct inputs based on the resolved mode:
 
-**PR Mode inputs:**
+**Stage 1 is the HEAVY READ stage.** All operator context is consumed here and distilled
+into `e2e-analysis.md` with an embedded Operator Context section. Downstream stages read
+only `e2e-analysis.md` — they do NOT re-read the raw operator files.
+
+**All mode inputs (common):**
+- `agents.md` content (full — from step 0a)
+- `harness-evals/constitution.md` content (full — from step 0b)
+- `{schema_root}/e2e-workflow/qe-behaviour.md` Sections 1-5 (generic QE rules)
+- `qe-e2e/qe-behaviour.md` Sections 3a/3b (operator-specific deployment + quality gates — from step 0c, if present)
+- `harness-docs/*.md` (from step 0b, if present)
+- `harness-evals/evals/` (from step 0b, if present — for eval-aware pattern coverage)
+- Target repo (from step 1)
+
+**PR Mode additional inputs:**
 - PR URL, diff, review comments
-- `{schema_root}/e2e-workflow/qe-behaviour.md` (if present)
-- Target repo (from step 1)
-- `agents.md` content (from step 0a)
-- `harness-evals/constitution.md` content (from step 0b)
 
-**Design Mode inputs (ADR/EP only):**
+**Design Mode additional inputs (ADR/EP only):**
 - ADR or EP document content
-- `{schema_root}/e2e-workflow/qe-behaviour.md` (if present)
-- Target repo (from step 1)
-- `agents.md` content (from step 0a)
-- `harness-evals/constitution.md` content (from step 0b)
 
-**Combined Mode inputs:**
+**Combined Mode:**
 - All PR Mode inputs PLUS ADR/EP document content
 
 **Process:**
@@ -236,8 +266,11 @@ Pass the correct inputs based on the resolved mode:
 5. Cross-check proposed tests against `agents.md` conventions and `constitution.md` guardrails
 6. If `harness-evals/evals/` stage evals exist: review them for patterns the eval-loop has
    flagged — ensure proposed E2E tests cover those patterns where relevant
-7. Produce proposed test cases (priority-ordered, 15–20 range)
-8. Write `openspec/changes/<name>/e2e/e2e-analysis.md`
+7. Produce proposed test cases (priority-ordered, scales with complexity per pre-analysis budget rules)
+8. **Embed operator context into the output:** Populate the "Operator Context (Embedded)" section
+   in `e2e-analysis.md` with deployment model, quality gates, and constraints extracted from
+   `qe-e2e/qe-behaviour.md` (or derived from `agents.md`/`constitution.md` if qe-e2e not present)
+9. Write `openspec/changes/<name>/e2e/e2e-analysis.md`
 
 **Approval gate:**
 - Present the analysis to the user
@@ -246,25 +279,30 @@ Pass the correct inputs based on the resolved mode:
 - On approve → proceed to Stage 2
 
 **Telemetry:** Emit `e2e_stage_start` (stage=1, stage_name="pre_analysis") before processing.
-On approval, emit `e2e_stage_end` with `tokens_in` (PR diff / ADR content + qe-behaviour.md
-+ agents.md + constitution.md token count), `tokens_out` (e2e-analysis.md token count),
-`duration_s`, and `refinement_rounds` (0 if approved first time).
+On approval, emit `e2e_stage_end` with `tokens_in` (PR diff / ADR content + agents.md +
+constitution.md + qe-e2e/qe-behaviour.md + harness-docs + generic qe-behaviour.md token count),
+`tokens_out` (e2e-analysis.md token count), `duration_s`, and `refinement_rounds`
+(0 if approved first time).
 
 ### 5. Stage 2 — Test Plan Generation
 
 Read and follow **`{schema_root}/e2e-workflow/test-plan-generation.md`** in full.
 
-**Inputs:**
-- Approved `e2e-analysis.md` (from stage 1)
-- PR URL + diff
-- `qe-behaviour.md` (for deployment constraints)
+**Inputs (NARROW — no raw operator docs):**
+- Approved `e2e-analysis.md` (from stage 1 — carries all scoping decisions + embedded operator context)
+- `{schema_root}/e2e-workflow/qe-behaviour.md` Sections 1-5 (generic QE writing rules — precision, traceability, surgical scope)
+- PR diff (for traceability to specific file:line — PR Mode / Combined Mode only)
+
+**Do NOT re-read** `agents.md` or `constitution.md` at this stage. The operator context
+they provided is already embedded in `e2e-analysis.md` Section "Operator Context (Embedded)".
 
 **Process:**
-1. Read approved `e2e-analysis.md` as scoping input
-2. Expand proposed test cases into full test steps (preconditions, steps, expected outcomes, cleanup)
-3. Build traceability matrix
-4. Run quality gates (Section 8 of template) — revise until all pass
-5. Write `openspec/changes/<name>/e2e/test-plan.md`
+1. Read approved `e2e-analysis.md` as scoping input (includes embedded operator context)
+2. Read `{schema_root}/e2e-workflow/qe-behaviour.md` Sections 1-5 for QE writing discipline
+3. Expand proposed test cases into full test steps (preconditions, steps, expected outcomes, cleanup)
+4. Build traceability matrix
+5. Run quality gates (Section 8 of template) — revise until all pass
+6. Write `openspec/changes/<name>/e2e/test-plan.md`
 
 **Approval gate:**
 - Present test plan summary (test count, tier distribution, quality gate results)
@@ -273,8 +311,9 @@ Read and follow **`{schema_root}/e2e-workflow/test-plan-generation.md`** in full
 - On approve → proceed to Stage 3
 
 **Telemetry:** Emit `e2e_stage_start` (stage=2, stage_name="test_plan") before processing.
-On approval, emit `e2e_stage_end` with `tokens_in` (e2e-analysis.md + PR diff token count),
-`tokens_out` (test-plan.md token count), `duration_s`, and `refinement_rounds`.
+On approval, emit `e2e_stage_end` with `tokens_in` (e2e-analysis.md + generic qe-behaviour.md
+Sections 1-5 + PR diff token count), `tokens_out` (test-plan.md token count), `duration_s`,
+and `refinement_rounds`.
 
 ### 6. Stage 3 — Consolidation (Config-Driven)
 
@@ -305,16 +344,23 @@ On approval, emit `e2e_stage_end` with `tokens_in` (test-plan.md token count),
 
 Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 
-**Inputs:**
+**Inputs (TARGETED — code-level context only):**
 - Approved `revised-test-plan.md` (from stage 3)
-- Target repo test patterns (detect framework, helpers, constants)
+- `agents.md` — **helpers/style/framework sections ONLY** (for generating compilable code
+  that follows the operator's coding conventions). Do NOT re-read the full architecture
+  sections — use the embedded operator context from `e2e-analysis.md` (carried through
+  `revised-test-plan.md`) for scoping.
+- `qe-e2e/helpers.md` (if found in step 0c — operator-specific test builder function signatures)
+- Target repo `test/e2e/` patterns (auto-discovered: framework, helpers, constants)
 
 **Process:**
 1. ASK: "Which journeys to generate code for? (all / specific numbers / none)"
-2. Detect test framework from target repo (`ginkgo`, `testing`, `testify`)
-3. Generate ONE test file per component/CR kind — all journeys for the same component go in a single
+2. Read `agents.md` for code style conventions and helper function signatures
+3. Read `qe-e2e/helpers.md` if present for operator-specific test builders
+4. Detect test framework from target repo (`ginkgo`, `testing`, `testify`)
+5. Generate ONE test file per component/CR kind — all journeys for the same component go in a single
    `<component>_e2e_test.go`. Create a separate file only for a genuinely different component.
-4. Write generated code to `openspec/changes/<name>/e2e/generated/`
+6. Write generated code to `openspec/changes/<name>/e2e/generated/`
 
 **Approval gate:**
 - Present generated code summary (file path, journey count, framework, helpers used)
@@ -580,9 +626,11 @@ No separate PR is created — the existing development PR receives the E2E commi
 |--------|--------|
 | agents.md | ✓ Read (<path>) |
 | constitution.md | ✓ Read (harness-evals/constitution.md) |
-| harness-docs/ | ✓ N files | ⚠ Not found |
-| harness-evals/evals/ | ✓ N stage evals | — Not found |
-| qe-behaviour.md | ✓ Read | — Not found |
+| harness-docs/ | ✓ N files / ⚠ Not found |
+| harness-evals/evals/ | ✓ N stage evals / — Not found |
+| qe-e2e/qe-behaviour.md | ✓ Read (<path>) / ⚠ Not found (derived from agents.md) |
+| qe-e2e/helpers.md | ✓ Read (<path>) / — Not found (discovered from repo) |
+| qe-behaviour.md (generic) | ✓ Read (Sections 1-5) |
 
 ### Artifacts Generated
 | Stage | Artifact | Path |
@@ -664,10 +712,16 @@ Any feedback on the E2E workflow? (free text, or press Enter to skip)
 - **HARD GUARDRAIL — `harness-evals/constitution.md` required:** Do NOT proceed past Step 0
   without reading `constitution.md`. This defines non-negotiable operator guardrails. STOP
   if missing.
-- **HARD GUARDRAIL — Harness context feeds all stages:** The content from `agents.md`,
-  `constitution.md`, and `harness-docs/` MUST be passed as context to pre-analysis, test
-  plan generation, and code generation stages. Do not generate tests that violate the
-  conventions defined in these files.
+- **HARD GUARDRAIL — Context-narrowing pipeline:** Operator context flows through stages
+  as follows (do NOT violate this pattern):
+  - **Stage 1 (Pre-Analysis):** Reads ALL operator context (`agents.md`, `constitution.md`,
+    `qe-e2e/qe-behaviour.md`, `harness-docs/`, `harness-evals/evals/`). Distills into
+    `e2e-analysis.md` with an embedded "Operator Context" section.
+  - **Stage 2 (Test Plan):** Reads `e2e-analysis.md` + generic QE rules only. Does NOT
+    re-read `agents.md` or `constitution.md`.
+  - **Stage 3 (Consolidation):** Reads `test-plan.md` + `config.yaml` only. No operator context.
+  - **Stage 4 (Code Generation):** Reads `revised-test-plan.md` + `agents.md` (helpers/style
+    sections ONLY) + `qe-e2e/helpers.md` (if present). Does NOT re-read `constitution.md`.
 - **User approval gate after every stage** — do not advance until approved
 - **CI must be green** before running in PR/Combined mode — do not generate E2E for failing PRs
 - **Design Mode stops after code generation** — do not attempt execute or push without a PR

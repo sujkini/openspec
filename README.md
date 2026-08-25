@@ -56,6 +56,24 @@ These docs (architecture guides, coding conventions, testing patterns) are used 
 
 This reads `harness-evals/harness-docs/` and generates `harness-evals/constitution.md`.
 
+**d) Set up E2E context in `qe-e2e/` (recommended for E2E test generation):**
+
+Create a `qe-e2e/` directory at your operator repo root with operator-specific E2E context:
+
+```bash
+mkdir -p qe-e2e
+```
+
+Copy and fill in the template from `openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md` Sections 3a/3b:
+
+```bash
+# Create your operator-specific qe-behaviour.md
+cp openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md qe-e2e/qe-behaviour.md
+# Then edit qe-e2e/qe-behaviour.md — fill in Sections 3a and 3b with your operator's details
+```
+
+See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example. If `qe-e2e/` is not present, `/opsx-e2e` will still work but will derive context from `agents.md` with reduced accuracy.
+
 ### 4. Start the Dashboard
 
 ```bash
@@ -125,19 +143,120 @@ After a phase or final PR is raised and CI passes, trigger the E2E pipeline:
 /opsx-e2e <change-name> --phase N    # phase-iterative: specific phase
 /opsx-e2e <change-name>              # one-shot: final PR
 /opsx-e2e --pr <URL>                 # direct PR URL
+/opsx-e2e --adr <path-or-URL>        # design mode (plan only, no execute/push)
+/opsx-e2e --ep <path-or-URL>         # enhancement proposal (same as ADR)
+/opsx-e2e --pr <URL> --adr <path>    # combined mode (full pipeline + design context)
 ```
+
+### Input Modes
+
+| Input | Mode | Pipeline |
+|-------|------|----------|
+| **PR only** | PR Mode | Full: pre-analysis → plan → consolidation → codegen → execute → push |
+| **ADR or EP only** | Design Mode | Plan-only: pre-analysis → plan → consolidation → codegen → STOP |
+| **ADR/EP + PR** | Combined Mode | Full pipeline with enriched design context |
+| **Change name** | Change Mode | Resolves PR from `state.yaml`, then runs Full |
+
+**Design Mode** generates the test plan and code but does NOT execute or push — there is no branch to push to. Use this to review E2E coverage before a PR exists.
+
+### Pipeline Stages
 
 The pipeline runs five stages, each with a user approval gate:
 
 | Stage | Output | Description |
 |-------|--------|-------------|
-| Pre-analysis | `e2e-analysis.md` | Scoping analysis from PR diff + review comments |
-| Test plan | `test-plan.md` | Full tiered plan (15–20 cases) with traceability |
-| Consolidation | `revised-test-plan.md` | Journey consolidation to configured limit |
-| Code generation | `*_test.go` | Executable Ginkgo/Go test code |
-| Execute | Push + run | Commit tests to PR branch, optionally execute |
+| 1. Pre-analysis | `e2e-analysis.md` | Scoping analysis from PR diff / ADR + operator context |
+| 2. Test plan | `test-plan.md` | Full tiered plan with traceability |
+| 3. Consolidation | `revised-test-plan.md` | Journey consolidation to configured limit |
+| 4. Code generation | `*_test.go` | Executable Ginkgo/Go test code |
+| 5. Execute | Push + run | Commit tests to PR branch, optionally execute (skipped in Design Mode) |
 
 All artifacts are written to `openspec/changes/<name>/e2e/`.
+
+### Context-Narrowing Architecture
+
+The E2E pipeline uses a **context-narrowing** approach to optimize token usage and avoid redundant context:
+
+```
+Stage 1 (Pre-Analysis) — READS ALL CONTEXT:
+  - agents.md (full)
+  - constitution.md (full)
+  - qe-e2e/qe-behaviour.md (operator-specific deployment + quality gates)
+  - harness-docs/*.md
+  - ADR/PR diff
+  → PRODUCES: e2e-analysis.md (embeds deployment context, quality gates, constraints)
+
+Stage 2 (Test Plan) — NARROW CONTEXT:
+  - e2e-analysis.md (carries all scoping decisions + embedded operator context)
+  - Generic QE writing rules (Sections 1-5)
+  → PRODUCES: test-plan.md
+
+Stage 3 (Consolidation) — MINIMAL CONTEXT:
+  - test-plan.md + config.yaml max_test_cases
+  → PRODUCES: revised-test-plan.md
+
+Stage 4 (Code Generation) — TARGETED CONTEXT:
+  - revised-test-plan.md
+  - agents.md (helpers + code style sections ONLY)
+  - Target repo test/e2e/ patterns
+  → PRODUCES: *_test.go files
+```
+
+All operator context is consumed once in Stage 1 and compressed into `e2e-analysis.md`. Downstream stages read the compressed output instead of re-reading raw operator files.
+
+### What each operator repo must have for E2E (`qe-e2e/`)
+
+Each operator repo should maintain a `qe-e2e/` directory at the repo root (alongside `agents.md`) containing operator-specific E2E context:
+
+```
+<operator-repo>/
+├── agents.md                        # Agent routing, architecture (required)
+├── qe-e2e/                          # Operator-specific E2E context (recommended)
+│   └── qe-behaviour.md             # Deployment context + quality gates
+└── harness-evals/
+    ├── constitution.md              # Governance guardrails (required)
+    └── ...
+```
+
+**`qe-e2e/qe-behaviour.md`** must contain two sections filled in by the operator team:
+
+**Section 3a — Operator Deployment Context:**
+- Deployment method (OLM / Helm / Manual)
+- Operator namespace
+- CSV/Deployment name pattern
+- Operand CR kinds and default names
+- Config patching method (how to change operator config at runtime)
+- Scaling method
+- Things the agent must NEVER do (e.g., "Never use `oc scale deployment` — OLM will revert it")
+
+**Section 3b — Operator Quality Gates:**
+
+A table of domain-specific quality gates that E2E tests must cover, organized by category:
+
+| Category | What to define |
+|----------|---------------|
+| Operator Lifecycle | Installation, health, recovery observables |
+| Operand Health | One row per operand CR with ready conditions |
+| Core Functionality | Domain-specific behavior gates (operator team fills in) |
+| Security | RBAC boundaries, SCC/PSA, privilege constraints |
+| Deployment Integration | OLM Upgradeable, Helm hooks, etc. |
+| Resilience | Pod recovery, config reconciliation behavior |
+| Error Paths (optional) | Expected behavior on dependency/config failures |
+| Performance (optional) | Numeric thresholds (restart windows, SLAs) |
+
+A generic template with placeholders is shipped with OpenSpec at `openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md`. Copy Sections 3a/3b from there into your `qe-e2e/qe-behaviour.md` and fill in. See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+
+**If `qe-e2e/` is not present:** `/opsx-e2e` still works — it derives deployment context from `agents.md` and quality gates from `constitution.md`. The test plan will be less precise but functional.
+
+### Generic QE Rules (shipped with OpenSpec)
+
+The generic QE behavioural rules (Sections 1-5) ship with OpenSpec at `{schema_root}/e2e-workflow/qe-behaviour.md` and apply to all operators:
+
+1. **Ask Before Assuming** — surface ambiguity early, don't fabricate requirements
+2. **Precision Over Volume** — one test per observable behavior, no padding
+3. **Surgical Scope** — test only what the change covers, nothing speculative
+4. **Traceability Always** — every test traces to an ADR section or PR diff location
+5. **Self-Verify Before Outputting** — run quality gates before returning any plan
 
 ---
 
@@ -162,6 +281,7 @@ After installation, set up the following:
 | Location | What to provide |
 |----------|----------------|
 | **`agents.md`** (repo root) | Agent routing, repository architecture, test patterns, verification matrix |
+| **`qe-e2e/qe-behaviour.md`** (repo root) | Operator-specific E2E context: deployment model + quality gates (recommended for `/opsx-e2e`) |
 | **`harness-evals/harness-docs/`** | Operator documentation (used by `/opsx-constitute` to generate constitution) |
 | **`harness-evals/constitution.md`** | Coding guardrails, CI gates, governance rules (generated by `/opsx-constitute`) |
 | **`harness-evals/evals/`** | Stage eval cases — quality gates (populated by `/eval-loop` or manually) |
@@ -468,6 +588,8 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 ```
 .
 ├── agents.md                                 # Operator-owned agent routing (at repo root)
+├── qe-e2e/                                   # Operator-owned E2E context (at repo root)
+│   └── qe-behaviour.md                      # Deployment context (3a) + quality gates (3b)
 ├── harness-evals/                            # Operator-owned (constitution + evals + docs)
 │   ├── constitution.md                       # Generated by /opsx-constitute
 │   ├── harness-docs/                         # Operator docs (read by /opsx-constitute)
@@ -480,7 +602,7 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 │   │   ├── e2e-workflow/                     # E2E test generation pipeline templates
 │   │   │   ├── pre-analysis-gate.md          # PR scoping and approval gate
 │   │   │   ├── test-plan-generation.md       # Tiered test plan + consolidation + code gen
-│   │   │   └── qe-behaviour.md              # Project-specific QE context
+│   │   │   └── qe-behaviour.md              # Generic QE rules (Sections 1-5) + templates for 3a/3b
 │   │   ├── stage-gate/                       # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/         # Format spec for rejection rounds
 │   ├── telemetry/                            # Telemetry collection (change metrics, reports)

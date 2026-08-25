@@ -33,87 +33,87 @@ Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, dedu
 - Respect Non-Goals — don't generate tests for excluded behavior unless guarding against regression.
 - Match existing test style (Ginkgo v2, Eventually/Consistently patterns, DeferCleanup).
 - Never inline K8s resource specs (Pod, Deployment, etc.) in test files — use or create a builder helper in `test/e2e/utils/`. Duplicated specs drift silently (e.g. missing SecurityContext, wrong image).
-- Before adding a DeferCleanup, check if the setup helper (e.g. `SetupAttestationTest`) already registers cleanup for that resource. Don't revert a field on a resource that will be deleted entirely by the helper's cleanup — the revert is redundant.
+- Before adding a DeferCleanup, check if the existing setup helper already registers cleanup for that resource. Don't revert a field on a resource that will be deleted entirely by the helper's cleanup — the revert is redundant.
 - Never hardcode time durations (timeouts, polling intervals) in test files — use constants from `test/e2e/utils/constants.go` (e.g. `DefaultTimeout`, `ShortTimeout`, `DefaultInterval`, `ShortInterval`). If no suitable constant exists, add one to `constants.go` first.
 - Don't refactor existing tests unless asked.
 
 **Validation:** Every test case should trace directly to the ADR's stated goals/risks or the PR's changed behaviors.
 
-## 3a. Operator Deployment Context (OLM-Managed)
+## 3a. Operator Deployment Context — Template
 
-**The ZTWIM operator is installed and managed via OLM (Operator Lifecycle Manager). Never assume direct deployment control.**
+> **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. The E2E workflow reads the operator's version at runtime.
+> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
 
-- The operator is deployed via a **ClusterServiceVersion (CSV)**, not a standalone Deployment.
-- **Never use `oc scale deployment`** to change replica count — OLM will immediately revert it. Use CSV patch instead:
-  ```
-  oc patch csv <csv-name> -n zero-trust-workload-identity-manager \
-    --type=json -p '[{"op":"replace","path":"/spec/install/spec/deployments/0/spec/replicas","value":N}]'
-  ```
-- **Never use `oc edit deployment`** to change container args/env — patch the CSV or Subscription instead.
-- To add environment variables (e.g., `CREATE_ONLY_MODE`), patch the **Subscription**:
-  ```
-  oc patch subscription openshift-zero-trust-workload-identity-manager \
-    -n zero-trust-workload-identity-manager --type='merge' \
-    -p '{"spec":{"config":{"env":[{"name":"ENV_VAR","value":"value"}]}}}'
-  ```
-- Operator namespace: `zero-trust-workload-identity-manager`
-- CSV name pattern: `zero-trust-workload-identity-manager.v<VERSION>`
-- Operand CRs: SpireServer, SpireAgent, SpiffeCSIDriver, SpireOIDCDiscoveryProvider, ZeroTrustWorkloadIdentityManager
-- All operands use the name `cluster` (e.g., `oc get spireagent cluster`)
-- When writing test steps involving scaling, env changes, or operator config, always use the OLM-appropriate method (CSV/Subscription patch), not direct deployment manipulation.
+Fill in the following for your operator:
 
-## 3b. ZTWIM Quality Gates (Domain-Specific)
+- **Deployment method:** OLM / Helm / Manual / Other
+- **Operator namespace:** `<operator-namespace>`
+- **CSV / Deployment name pattern:** `<csv-or-deployment-name-pattern>`
+- **Operand CR kinds and default names:**
+  - `<CRKind1>` — default name: `<name>`
+  - `<CRKind2>` — default name: `<name>`
+- **Config patching method:** How to change operator configuration at runtime:
+  - Subscription env patch / CSV patch / Deployment env / CR field / Other
+  - Provide the `oc patch` or `kubectl` command template
+- **Scaling method:** How to scale the operator (e.g., CSV patch for OLM, `kubectl scale` for direct deployments)
+- **Things the agent must NEVER do:** (e.g., "Never use `oc scale deployment` — OLM will revert it")
 
-**Critical quality gates that tests must cover for the ZTWIM operator. Use these to validate test coverage.**
+## 3b. Operator Quality Gates — Template
+
+> **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. Define the domain-specific quality gates that E2E tests must cover.
+> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+
+Fill in the relevant gate categories for your operator. Remove categories that don't apply.
 
 ### Operator Lifecycle
 | Gate | Observable |
 |------|------------|
-| Installation | CSV phase = `Succeeded`, all CRDs `Established=True` |
-| Operator Health | Deployment `Available=True`, pod `Running` |
-| Recovery | New pod `Running` within 60s after deletion |
+| Installation | `<how to verify successful installation>` |
+| Operator Health | `<deployment/pod health observable>` |
+| Recovery | `<expected recovery behavior and timing>` |
 
-### Operand Health (All Must Be Ready)
+### Operand Health
 | Operand | Observable |
 |---------|------------|
-| SpireServer | `Ready=True` condition, StatefulSet pods `1/1` |
-| SpireAgent | `Ready=True` condition, DaemonSet on all nodes |
-| SpiffeCSIDriver | `Ready=True` condition, CSIDriver registered |
-| SpireOIDCDiscoveryProvider | `Ready=True` condition, Route accessible |
-| ZeroTrustWorkloadIdentityManager | `OperandsAvailable=True`, `Ready=True` |
+| `<Operand1>` | `<ready condition and workload status>` |
+| `<Operand2>` | `<ready condition and workload status>` |
 
-### Identity & Attestation (SPIFFE/SPIRE Core)
+### Core Functionality (domain-specific)
 | Gate | Observable |
 |------|------------|
-| SVID Issuance | `svid.pem` exists with valid X.509 certificate |
-| SPIFFE ID Format | URI SAN = `spiffe://<trustDomain>/ns/<ns>/sa/<sa>` |
-| Bundle Distribution | `bundle.pem` contains CA certificates |
-| Certificate Chain | `cert.Verify()` succeeds against bundle |
-| SVID Rotation | Serial number changes before TTL expiry |
+| `<core-gate-1>` | `<observable for domain-specific core behavior>` |
+| `<core-gate-2>` | `<observable for domain-specific core behavior>` |
 
 ### Security
 | Gate | Observable |
 |------|------------|
-| UID/GID Compliance | spire-agent: RunAsAny (UID determined by image default), non-root recommended; GID within namespace range |
-| SCC Applied | Pod annotation shows correct SCC |
-| RBAC Minimal | ClusterRole has no wildcard permissions |
+| RBAC Minimal | `<ClusterRole permission boundaries>` |
+| SCC/PSA | `<security context constraints or Pod Security Admission observable>` |
+| Privilege Boundaries | `<UID/GID or non-root enforcement>` |
 
-### OLM Integration
+### Deployment Integration
 | Gate | Observable |
 |------|------------|
-| Upgradeable=True | When all operands healthy |
-| Upgradeable=False | When any operand fails or CreateOnlyMode enabled |
-| CreateOnlyMode | Condition reflects `CREATE_ONLY_MODE` env var |
+| `<OLM Upgradeable / Helm hooks / etc.>` | `<observable>` |
 
 ### Resilience
 | Gate | Observable |
 |------|------------|
-| Server Recovery | StatefulSet pod recreated, `Ready=True` after deletion |
-| Agent Recovery | DaemonSet pod recreated on node after deletion |
-| Config Reconciliation | Operator restores modified ConfigMaps/Secrets |
-| Multi-Failure Recovery | All operands recover to `Ready=True` |
+| Pod Recovery | `<expected recovery after pod deletion>` |
+| Config Reconciliation | `<operator restores modified resources?>` |
 
-**When writing tests:** Ensure critical gates (Operator Lifecycle, Operand Health, SVID Issuance) are covered. For feature PRs, map new functionality to relevant gates.
+### Error Paths (optional)
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `<dependency failure>` | `<expected operator behavior>` |
+| `<invalid config>` | `<expected error handling>` |
+
+### Performance (optional)
+| Threshold | Value | Source |
+|-----------|-------|--------|
+| `<restart window>` | `<e.g., 60s>` | `<ADR/SLA>` |
+
+**When writing tests:** Ensure critical gates (Operator Lifecycle, Operand Health, Core Functionality) are covered. For feature PRs, map new functionality to relevant gates.
 
 ## 4. Traceability Always
 
@@ -152,13 +152,13 @@ Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, dedu
 
 ```
 BAD step:  "Verify the operator works correctly"
-GOOD step: "Assert status condition Ready=True on SpireServer CR within 60s"
+GOOD step: "Assert status condition Ready=True on <OperandCR> within DefaultTimeout"
 
 BAD step:  "Check security"
-GOOD step: "Exec into spire-server pod; confirm process runs as UID 1000 (non-root)"
+GOOD step: "Exec into operator pod; confirm process runs as non-root (UID != 0)"
 
 BAD step:  "Ensure cleanup happens"
-GOOD step: "Delete SpireServer CR; assert finalizer removes spire-agent DaemonSet within 30s"
+GOOD step: "Delete <OperandCR>; assert finalizer removes owned resources within DefaultTimeout"
 ```
 
 ---

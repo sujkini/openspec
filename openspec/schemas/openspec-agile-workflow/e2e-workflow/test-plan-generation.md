@@ -132,7 +132,7 @@ curl -sS --user "${JIRA_EMAIL}:${JIRA_TOKEN}" \
 
 ### e2e-analysis.md (required pre-analysis input)
 
-Before generating a test plan, check for an **approved `e2e-analysis.md`** file in the working directory. This file is produced by `pre-analysis-gate.mdc` and contains the user-approved scoping analysis.
+Before generating a test plan, check for an **approved `e2e-analysis.md`** file in the working directory. This file is produced by `pre-analysis-gate.md` and contains the user-approved scoping analysis.
 
 - **If `e2e-analysis.md` exists:** Read it and use it as the scoping input for test plan generation. You **MUST**:
   - Use the approved proposed test cases as the starting skeleton — **preserve test IDs** (E2E-001, NEG-001, etc.) from the pre-analysis; do not renumber or reassign them.
@@ -142,9 +142,9 @@ Before generating a test plan, check for an **approved `e2e-analysis.md`** file 
   - Stay within the approved tier distribution (may adjust ±1 per tier if justified and noted).
   - Reference `e2e-analysis.md` in the test plan header under **Sources**.
   - Skip ADR/PR decomposition steps that the pre-analysis already completed — do not redo the analysis from scratch.
-  - When `qe-behaviour.mdc` is present, apply its Section 3a deployment constraints (OLM/CSV/Subscription) in E2E preconditions and steps.
+  - Apply deployment constraints from `e2e-analysis.md` Section "Operator Context (Embedded)" in E2E preconditions and steps.
 
-- **If `e2e-analysis.md` does not exist:** **STOP** and instruct the user to run the pre-analysis gate first (`pre-analysis-gate.mdc`) to generate and approve `e2e-analysis.md` before proceeding.
+- **If `e2e-analysis.md` does not exist:** **STOP** and instruct the user to run the pre-analysis gate first (`pre-analysis-gate.md`) to generate and approve `e2e-analysis.md` before proceeding.
 
 ### Stop condition
 
@@ -169,7 +169,7 @@ Before generating a test plan, check for an **approved `e2e-analysis.md`** file 
 
 Execute in order:
 
-1. **Check for `e2e-analysis.md`:** Look for an approved pre-analysis file in the working directory. If it does not exist, **STOP** and instruct the user to run `pre-analysis-gate.mdc` first.
+1. **Check for `e2e-analysis.md`:** Look for an approved pre-analysis file in the working directory. If it does not exist, **STOP** and instruct the user to run `pre-analysis-gate.md` first.
 2. **Read `e2e-analysis.md`:** Load the approved scope — change type, impact analysis, blast radius, proposed test cases, priority ordering, exclusions, and confidence scores.
 3. **Confirm inputs:** ADR full text available; attempt Jira fetch if provided.
 4. **Decompose the ADR:** Section 4 protocol through Step 8. Skip steps already covered by the pre-analysis — do not redo analysis from scratch.
@@ -314,13 +314,22 @@ If you reach 20 tests and still have uncovered requirements, consolidate further
 
 **No inline K8s resource specs:** Never construct a Pod, Deployment, ConfigMap, or other K8s resource directly in `e2e_test.go` if a builder/helper exists in `test/e2e/utils/utils.go`. If no helper exists, create one in `utils.go` first, then call it from the test. This prevents spec drift (e.g. missing SecurityContext, wrong image) and keeps the single source of truth in one place.
 
-Key builder helpers:
-- `NewAttestationPod(name, ns, saName, appContainer, prefix)` → `*corev1.Pod` — standard attestation pod with spiffe-helper + app container, CSI volume, SecurityContext.
-- `SetupAttestationTest(ctx, k8sClient, clientset, prefix, cspiffeIDMutator)` → `AttestationFixture` — full environment setup (namespace, ClusterSPIFFEID, SA, ConfigMap, pod) with DeferCleanup.
+**Discover operator-specific helpers:** Before writing test code, check for builder/helper functions in:
+1. `agents.md` — may list operator-specific helper signatures
+2. `qe-e2e/helpers.md` — if present in the operator repo, contains builder function signatures
+3. Target repo's `test/e2e/utils/` — scan for existing helper functions (e.g., setup helpers, resource builders)
 
-**No redundant cleanup:** `SetupAttestationTest` already registers DeferCleanup to delete the ClusterSPIFFEID, namespace, and all contained resources. Do NOT add a separate DeferCleanup to revert fields (e.g. SPIFFEIDTemplate) on resources that the helper will delete. Reverting a field before deletion is a no-op.
+Use discovered helpers instead of inlining resource specs. If a setup helper registers DeferCleanup for created resources, do NOT add redundant cleanup for the same resources.
 
-**No hardcoded durations:** Never use raw `time.Minute` / `time.Second` values in test files. Use constants from `test/e2e/utils/constants.go`: `DefaultTimeout` (5m), `ShortTimeout` (2m), `DefaultInterval` (10s), `ShortInterval` (5s). Add new constants if needed.
+**No hardcoded durations:** Never use raw `time.Minute` / `time.Second` values in test files. Use constants from `test/e2e/utils/constants.go` (e.g., `DefaultTimeout`, `ShortTimeout`, `DefaultInterval`, `ShortInterval`). Add new constants if needed.
+
+**During-transition testing:** For every test that changes configuration while the system is running (profile switch, config update, CR field change, key rotation, env var change), propose a companion "during transition" test:
+1. Start a workload or in-flight operation **before** the change
+2. Apply the configuration change
+3. Verify the workload survives or degrades gracefully **during** the transition
+4. Verify the final state is correct **after** the transition completes
+
+Pattern: "Start workload → trigger config change → verify workload continuity → verify final state." This catches issues that before/after testing misses (e.g., in-flight requests failing, connections dropping, certificates becoming invalid mid-rotation).
 
 ### Negative / Destructive Tests (prefix: NEG)
 
@@ -439,7 +448,7 @@ Before returning the test plan, ALL gates must pass:
 
 | Gate | Requirement |
 | --- | --- |
-| **Budget respected** | **Total test cases is 15–20. If over 20, consolidate before outputting.** |
+| **Budget respected** | **Base 15–20 test cases (single ADR/PR). Scales with complexity: multiple ADRs multiply proportionally, complex ADRs (5+ How sections or 3+ variants) = 25–30. If `config.yaml` has `qe.max_test_cases_initial`, use that. Consolidation stage compresses to hard limit.** |
 | ADR fully read | Decomposition complete; missing sections noted |
 | Requirements extracted | Every goal and risk maps to at least one REQ |
 | Tier coverage | Each tier has tests within its allocated budget (Section 6); consolidate sub-cases within tests rather than adding tests |
@@ -455,22 +464,14 @@ Before returning the test plan, ALL gates must pass:
 | Priority assigned | Every test has Critical / High / Medium |
 | Scope respected | No tests for Non-Goals unless regression guard |
 | No redundancy | If two tests cover the same observable behavior, merge them into one |
-| **ZTWIM domain coverage** | **Tests cover relevant ZTWIM quality gates (see Section 3b in qe-behaviour.mdc)** |
+| **Variant coverage** | **If the ADR defines N configuration variants (modes, profiles, tiers), the test plan must include at least N variant-specific E2E scenarios** |
+| **Operator domain coverage** | **Tests cover relevant operator quality gates (from `e2e-analysis.md` embedded quality gates, originally sourced from `qe-e2e/qe-behaviour.md` Section 3b)** |
 
-### ZTWIM Quality Gate Reference
+### Operator Quality Gate Coverage
 
-When generating tests for the ZTWIM operator, ensure coverage of domain-specific quality gates defined in `qe-behaviour.mdc` Section 3b:
+Read the quality gates embedded in `e2e-analysis.md` (Section: Operator Context → Quality Gates). These gates were extracted from `qe-e2e/qe-behaviour.md` Section 3b during pre-analysis.
 
-| Category | Key Gates to Cover |
-|----------|-------------------|
-| **Operator Lifecycle** | Installation, health, recovery |
-| **Operand Health** | SpireServer, SpireAgent, SpiffeCSIDriver, SpireOIDCDiscoveryProvider all `Ready=True` |
-| **Identity & Attestation** | SVID issuance, SPIFFE ID format, certificate chain, rotation |
-| **Security** | UID/GID compliance, SCC, RBAC |
-| **OLM Integration** | Upgradeable condition accuracy |
-| **Resilience** | Pod recovery, config reconciliation |
-
-**For each PR/ADR:** Identify which ZTWIM quality gates are affected (from pre-analysis blast radius when available) and ensure at least one **E2E or NEG test** covers each affected gate. OLM Integration gates (e.g., Upgradeable) require cluster-level E2E assertions — not UT/INT utility tests. If a gate is marked affected in pre-analysis but no E2E test is proposed, either add one or document why it is covered by an existing regression test.
+**For each PR/ADR:** Identify which operator quality gates are affected (from pre-analysis blast radius) and ensure at least one **E2E or NEG test** covers each affected gate. Integration gates (e.g., OLM Upgradeable) require cluster-level E2E assertions — not UT/INT utility tests. If a gate is marked affected in pre-analysis but no E2E test is proposed, either add one or document why it is covered by an existing regression test.
 
 ---
 
@@ -725,7 +726,7 @@ Use the same test case format as ADR Mode (Section 7), with these additions:
 
 | Gate | Requirement |
 | --- | --- |
-| **Budget respected** | **Total test cases is 15–20. If over 20, merge related tests before outputting.** |
+| **Budget respected** | **Base 15–20 (single PR). Scales with complexity. Consolidation compresses to hard limit.** |
 | PR fully read | Diff analyzed, all changed files categorized |
 | Requirements inferred | Every significant code change maps to a requirement |
 | Confidence marked | Every requirement has High/Medium/Low confidence |
@@ -828,7 +829,7 @@ Before consolidating, read the approved pre-analysis file referenced in the init
 #### Rule 1: Create Continuous Journeys
 Group isolated tests that follow a natural lifecycle (e.g., "Test Create", "Test Update", "Test Delete") into a single sequential journey test. Do **not** tear down cluster state between steps — carry state forward so each step builds on the previous one.
 
-**Example:** E2E-001 (Create CR → Ready), E2E-004 (DaemonSet spec validation), E2E-003 (Pod securityContext validation), E2E-005 (SCC annotation check) → combined into one journey: "SpireAgent Hardened Deployment Journey".
+**Example:** E2E-001 (Create CR → Ready), E2E-004 (Workload spec validation), E2E-003 (Pod securityContext validation), E2E-005 (SCC annotation check) → combined into one journey: "ComponentA Hardened Deployment Journey".
 
 #### Rule 2: Eliminate Redundancy
 If multiple initial tests verify similar state changes or the same component from different angles, combine them into one test that asserts all states simultaneously.
@@ -890,8 +891,8 @@ Each consolidated test becomes a **Journey**. Use this structure:
 3. ...
 
 ### Why This Was Merged
-E2E-001 (SpireAgent Ready), E2E-004 (DaemonSet spec), E2E-003 (pod securityContext),
-and E2E-005 (SCC annotation) all operate on the same running SpireAgent and require
+E2E-001 (ComponentA Ready), E2E-004 (Workload spec), E2E-003 (pod securityContext),
+and E2E-005 (SCC annotation) all operate on the same running component and require
 no teardown between them. Combined into a single deployment verification journey.
 
 **Cleanup:** <what to clean up after the full journey, or "None">
