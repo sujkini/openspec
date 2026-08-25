@@ -212,10 +212,10 @@ On first run (no state.yaml):
 ### 4. Execute ONE task
 
 **E2e guard:** Before executing, classify the current task using schema `e2e_exclusion.task_criteria`.
-If it matches (Testing_Agent, e2e in title/objective, e2e target files, would use e2e-generate):
+If it matches (Testing_Agent, e2e in title/objective, e2e target files):
 mark `- [x]` in tasks.md with note `SKIPPED_E2E`, write minimal task-report with
 `status: skipped_e2e`, signal `on-task-complete --status skipped`, and proceed to the
-next pending task — do NOT invoke `e2e-generate` or any OAPE command.
+next pending task. E2E tasks are handled separately via `/opsx-e2e`.
 
 **Context windowing**: Read ONLY the §4 payload for `current_task_id` from tasks.md.
 Do NOT read payloads for other tasks.
@@ -246,7 +246,7 @@ Write `implementation/design-bundle.md`:
 
 ##### 4b. Run OAPE command (exactly one)
 
-1. **IF e2e task** → `/oape:e2e-generate <fork-default-branch>`
+1. **IF e2e task** → SKIP (mark `SKIPPED_E2E` — handled by `/opsx-e2e`)
 2. **ELIF** `API_Agent` verification-only → `/oape:api-generate-tests <api-path>`
 3. **ELIF** `API_Agent` → `/oape:api-generate --design-doc <bundle>` + `make update && make verify`
 4. **ELIF** `OperatorController_Agent` → `/oape:api-implement --design-doc <bundle>`

@@ -313,7 +313,6 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/oape:api-generate` | API_Agent task |
 | `/oape:api-generate-tests` | API_Agent verification task |
 | `/oape:api-implement` | OperatorController_Agent task |
-| `/oape:e2e-generate` | E2E / Testing_Agent task |
 
 These commands are **not used** when `codegen_mode: direct`.
 
@@ -348,7 +347,7 @@ flags:
 
 ### Code generation modes
 
-**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
+**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval. E2E tasks are handled separately via `/opsx-e2e`.
 
 **`direct`** — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
 
@@ -488,7 +487,7 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 │   └── changes/                              # Active changes (created per /opsx-new)
 ├── .cursor/                                  # Pre-built — Cursor loads immediately
 │   ├── commands/                             # opsx-new, opsx-continue, opsx-apply, opsx-e2e, eval-loop
-│   └── skills/                               # openspec-*, effective-go, e2e-test-generator
+│   └── skills/                               # openspec-*, effective-go
 ├── eval-generation/                          # Retrospective eval loop
 │   ├── input/                                # feature-bundle.yaml (your input)
 │   ├── output-evals/                         # Generated evals per stage (auto-synced to harness-evals/)
@@ -603,7 +602,6 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/oape:api-generate` | Write | Generate API types for API_Agent tasks |
 | `/oape:api-generate-tests` | Write | Generate tests for API_Agent verification tasks |
 | `/oape:api-implement` | Write | Implement controller logic for OperatorController_Agent tasks |
-| `/oape:e2e-generate` | Write | Generate E2E test code |
 
 **Retrospective:**
 
