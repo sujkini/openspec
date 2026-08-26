@@ -48,6 +48,19 @@ credentials:
   cluster:
     kubeconfig_path: ""   # absolute path to kubeconfig for E2E execution
 
+# CI Monitor — local /opsx-ci-monitor (default) or optional Prow oape-ci-monitor
+# See openspec/ci-monitor/docs/prow-ci-operator-config.yaml for Prow setup
+ci_monitor:
+  enabled: true
+  runtime: local                # local | prow | both
+  phase: 3                      # 1 = analysis only, 2 = + auto-fix, 3 = + review handler (default: all enabled)
+  monitor_only: false           # when true, skips auto-fix (Phase 1 analysis-only mode)
+  auto_fix: true                # Phase 2: auto-fix trivial CI failures
+  review_handler: true          # Phase 3: address review comments when CI green
+  retest_infra_flakes: false
+  max_retests_per_run: 2
+  post_pr_comment: true         # local: post report on PR (false = file-only artifacts)
+
 rules:
   validation:
     - "Read jira_key from inputs/jira.yaml; use inputs/jira-spec.md as spec source"

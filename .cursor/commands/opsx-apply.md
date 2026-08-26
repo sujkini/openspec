@@ -611,7 +611,10 @@ When all **current phase** tasks are marked complete:
    - If `plan_phases[N].jira_key` is `SKIPPED` or `PENDING`, fall back to: `<jira_key>: [US-XX] <user story title>`
    - Extract `US-XX` and `<user story title>` from plan.md Phase N → `User Story` field.
    Record URL in `state.yaml` → `phase_pr_urls`.
-   Output: **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
+   **CI monitor messaging** — read `openspec/config.yaml → ci_monitor`:
+   - If `ci_monitor.enabled` is `true` and `runtime` is `local` or `both`: Output **"Draft PR raised on upstream: <PR_URL>. Run `/opsx-ci-monitor <change-name>` (or `--pr <PR_URL>`) to analyze CI locally. Once all checks pass, run `/opsx-e2e <change-name> --phase {N}`."**
+   - If `ci_monitor.enabled` is `true` and `runtime` is `prow` only: Output **"Draft PR raised on upstream: <PR_URL>. Prow `oape-ci-monitor` will analyze CI (requires openshift/release config). Once all checks pass, run `/opsx-e2e <change-name> --phase {N}`."**
+   - If `ci_monitor.enabled` is `false`: Output **"Draft PR raised on upstream: <PR_URL>. CI jobs will run automatically. Monitor with `gh pr checks`. Once CI passes, run `/opsx-e2e <change-name> --phase {N}` to generate E2E tests. After E2E code is generated it will be pushed to the same PR branch, triggering CI again to validate the tests."**
 7. Check if `current_plan_phase >= total_plan_phases`:
    - **All phases done:**
      - **Telemetry — signal apply complete:**
@@ -621,14 +624,17 @@ When all **current phase** tasks are marked complete:
      - Write `implementation-report.md` aggregating all `task-reports/*.md`
      - Write `deviation-observed.md` if any deviations logged
      - Present final summary with all phase PR URLs (upstream)
-     - Output: **"All implementation complete. Draft PR(s) raised on upstream — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
+     - **CI monitor messaging** — read `openspec/config.yaml → ci_monitor`:
+       - If enabled and `runtime` is `local` or `both`: Output **"All implementation complete. Draft PR(s) raised — run `/opsx-ci-monitor <change-name>` on each PR. Once checks pass, run `/opsx-e2e <change-name>`."**
+       - If enabled and `runtime` is `prow` only: Output **"All implementation complete. Prow `oape-ci-monitor` will analyze CI on each PR. Once all checks pass, run `/opsx-e2e <change-name>`."**
+       - If disabled: Output **"All implementation complete. Draft PR(s) raised on upstream — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
      - Set state: `COMPLETE`. Write state.yaml.
    - **Phases remain:**
      - Update `state.yaml`: `current_plan_phase = N+1`, state = `IDLE`, reset `phase_feedback_rounds: 0`
      - Skip discarded e2e phase numbers: if `N+1` is in `discarded_e2e_phases`,
        advance `current_plan_phase` until a non-e2e phase is reached (or all done).
      - **If `auto_approve` is `false`:**
-       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks. Once this phase's PR CI passes, run `/opsx-e2e --phase {N}` to generate E2E tests — the generated code will be pushed to the PR, triggering CI again."
+       Output: "Phase {N} complete. Run `/opsx-continue` to generate Phase {N+1} tasks. Run `/opsx-ci-monitor <change-name>` to analyze CI on this phase's PR. When checks pass, run `/opsx-e2e --phase {N}`."
        YIELD.
      - **If `auto_approve` is `true`:**
        Output: "Phase {N} complete. Auto-triggering `/opsx-continue` for Phase {N+1}."

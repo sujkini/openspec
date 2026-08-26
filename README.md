@@ -135,6 +135,77 @@ E2e coverage is still documented in `plan.md` §6 (Verification matrix) for refe
 
 ---
 
+## CI Monitor (local-primary)
+
+Between `/opsx-apply` (raises draft PR) and `/opsx-e2e` (post-CI test generation), run **`/opsx-ci-monitor`** locally to analyze CI, optionally auto-fix trivial failures, and optionally handle review comments.
+
+Vendored from [oape-ai-e2e PR #67](https://github.com/openshift-eng/oape-ai-e2e/pull/67).
+
+| Phase | Behavior | Config flags |
+|-------|----------|--------------|
+| 1 | Poll CI, classify failures, write summary | `monitor_only: true`, `auto_fix: false` |
+| 2 | Auto-fix trivial failures (lint, `make generate`) | `auto_fix: true`, `monitor_only: false` |
+| 3 | Address pending review comments when CI green | `review_handler: true` |
+
+**Default:** `phase: 3` with analysis, auto-fix, and review handling all enabled.
+
+### Default workflow
+
+```
+/opsx-apply  →  /opsx-ci-monitor  →  /opsx-e2e (when CI green)
+```
+
+Or from terminal:
+
+```bash
+bash openspec/ci-monitor/scripts/run-local.sh \
+  --pr-url https://github.com/openshift/<operator>/pull/<N> \
+  --change <change-name> \
+  [--dry-run]
+```
+
+### Configure in `openspec/config.yaml`
+
+```yaml
+ci_monitor:
+  enabled: true
+  runtime: local              # local | prow | both
+  phase: 3                    # default: all phases enabled
+  monitor_only: false
+  auto_fix: true
+  review_handler: true
+  retest_infra_flakes: false
+  max_retests_per_run: 2
+  post_pr_comment: true       # false = file-only (no GitHub comment)
+```
+
+**Artifacts:** `openspec/changes/<change>/implementation/ci-monitor-summary.md`
+
+**Scripts:** `openspec/ci-monitor/scripts/` (installed with `openspec/` via `install.sh`)
+
+### Optional: Prow presubmit
+
+When `runtime: prow` or `both`, apply [`openspec/ci-monitor/docs/prow-ci-operator-config.yaml`](openspec/ci-monitor/docs/prow-ci-operator-config.yaml) in `openshift/release`. Local `/opsx-ci-monitor` is still available when `runtime: both`.
+
+**Prerequisites (Prow):** secrets in `test-credentials`; GitHub App for Phase 2+ pushes.
+
+**Manual Prow trigger:** `/test oape-ci-monitor`
+
+**Allowlist:** `openspec/ci-monitor/config/team-repos.csv`
+
+### Testing on a real operator
+
+1. `./install.sh /path/to/operator-fork` — install OpenSpec into operator repo
+2. Configure `openspec/config.yaml` (`ci_monitor.runtime: local`, credentials)
+3. `/opsx-apply <change>` — raise draft PR; note PR URL
+4. **Dry-run:** `bash openspec/ci-monitor/scripts/run-local.sh --pr-url <URL> --change <name> --dry-run`
+5. **Live Phase 1:** `/opsx-ci-monitor <change> --pr <URL>` (posts report if `post_pr_comment: true`)
+6. When `gh pr checks` is green: `/opsx-e2e <change> --pr <URL>`
+
+Smoke test (no OpenSpec change): `bash openspec/ci-monitor/scripts/pr-agent/test-dry-run.sh --pr-url <URL>`
+
+---
+
 ## E2E Test Generation (Post-CI)
 
 After a phase or final PR is raised and CI passes, trigger the E2E pipeline:
@@ -422,6 +493,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
 | `/opsx-continue` | Create next artifact; eval gate; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
+| `/opsx-ci-monitor` | Analyze PR CI locally; optional auto-fix and review handling |
 | `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-explore` | Explore ideas without creating artifacts |
@@ -712,6 +784,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-new` | Write | Start a new change from a Jira ticket key |
 | `/opsx-continue` | Write | Generate next artifact, run eval gate, approve |
 | `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
+| `/opsx-ci-monitor` | Write | Monitor PR CI locally; optional auto-fix and review handling |
 | `/opsx-e2e` | Write | Generate E2E tests after CI passes |
 | `/opsx-archive` | Write | Archive a completed change |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |

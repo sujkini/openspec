@@ -216,6 +216,28 @@ gh pr checks <PR-NUMBER> --repo <org/repo>
 - If checks pending → STOP: "CI checks still running. Wait for CI to pass, then re-run `/opsx-e2e`."
 - If checks failed → STOP: "CI checks failed. Fix the failures first, then re-run `/opsx-e2e`."
 
+**CI monitor report (when `openspec/config.yaml → ci_monitor.enabled` is `true`):**
+
+1. **Prefer local artifact** (written by `/opsx-ci-monitor`):
+   ```
+   openspec/changes/<name>/implementation/ci-monitor-summary.md
+   openspec/changes/<name>/implementation/ci-monitor-status.json
+   ```
+   If present, read `ci-monitor-summary.md` for failure context.
+
+2. **Fallback — PR comment** (when `post_pr_comment: true` or Prow ran):
+
+```bash
+gh api repos/<org>/<repo>/issues/<PR-NUMBER>/comments \
+  --jq '.[] | select(.body | contains("<!-- oape-ci-monitor -->") or contains("<!-- oape-pr-agent-report -->")) | .body' \
+  | tail -1
+```
+
+- If a report exists, extract failure classifications, flake hints, and recommended actions
+- Write a summary to `openspec/changes/<name>/implementation/ci-monitor-summary.md` for E2E pre-analysis context
+- Surface the summary to the user when checks failed (before STOP) or when proceeding (as context)
+- The CI monitor report is **advisory** — `gh pr checks` remains the hard gate
+
 ### 3. Set up working directory
 
 Create E2E artifacts directory:
