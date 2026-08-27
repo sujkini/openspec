@@ -165,6 +165,36 @@ Format as a checklist:
 
 ---
 
+## 5b. Parse / Filter / Ordering Behaviors (Mandatory)
+
+**After extracting functional claims from Goals/DoD, scan the ADR for internal behaviors that often slip through coverage.**
+
+Look for:
+- **Tables with Valid/Invalid rows** (e.g. a tls_config validity matrix, input validation table)
+- **Constraint tables** (e.g. profile × operator action, edge-case handling)
+- **Phrases:** "filtered", "preserved", "warn", "ignore", "skip", "order", "fallback", "default", "stripped"
+
+For each found, produce a row in this table:
+
+| # | ADR Claim (quote or paraphrase) | Observable? | Tier | Proposed ID or Exclusion |
+|---|---|---|---|---|
+| 1 | e.g. Insecure ciphers filtered with warning | Yes (log + effective cipher list) | UT or INT | UT-003 or EXCLUDED: internal parse, covered by Custom valid |
+| 2 | e.g. Cipher order preserved as declared | Yes (ConfigMap field order probe) | INT | INT-003 or EXCLUDED: not observable without custom tooling |
+| 3 | e.g. min 1.2 + only TLS 1.3 curves → startup fail | Yes (CrashLoop observable) | ERR | ERR-005 or merged into ERR-003 sub-assertion |
+| 4 | e.g. Adherence change during upgrade prevented | No (Platform APIServer responsibility) | — | EXCLUDED: Platform responsibility, not operator |
+
+**Rules:**
+- Each row gets either a proposed test ID or an explicit **EXCLUDED** with a one-line reason.
+- "Not observable at E2E/INT without custom tooling" is a valid exclusion for ordering invariants.
+- If observable, prefer UT/INT (cheap) over E2E (expensive).
+- Platform-owned constraints (upgrade prevention, admission at APIServer) → EXCLUDED with "Platform responsibility, not operator."
+- If a Valid/Invalid table row is already covered by an existing REQ from Goals/DoD extraction, note the REQ ID — no duplicate test needed.
+- This table feeds into the Coverage Breakdown (Stage 2 Section 11) — every row must be accounted for.
+
+**If no ADR tables or constraint phrases are found:** State "No parse/filter/ordering tables found in this ADR" and skip the table.
+
+---
+
 ## 6. Regression Risk Map
 
 **What existing behavior could break?**
@@ -189,14 +219,14 @@ If no regression risk exists, state: **"No regression risk identified — change
 
 ## 7. Proposed Test Cases (Preview)
 
-**This is a lean preview — titles and one-liners only, not full test steps.**
+**This is a lean preview — Scenario one-liners + Pass-when intent, not full test steps.** Full Scenario / Why / Steps / Pass when / Run on is expanded in Stage 2 (`test-plan.md`).
 
 Present in **priority order** (highest-value, highest-risk tests first):
 
-| # | ID | Tier | Title | Description (one line) | Effort | Confidence | Maps To |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | E2E-001 | E2E | ... | ... | S/M/L | High/Med/Low | ADR §X or PR file:L42 |
-| 2 | NEG-001 | NEG | ... | ... | S/M/L | High/Med/Low | ... |
+| # | ID | Tier | Title | Scenario (one line) | Pass when (intent) | Effort | Confidence | Maps To |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | E2E-001 | E2E | Strict ON/OFF four ConfigMaps | Strict ON injects tls_config into all 4 CMs; Strict OFF removes from all 4 | All 4 present or all 4 absent — 3 of 4 = fail | S/M/L | High/Med/Low | ADR §X or PR file:L42 |
+| 2 | NEG-001 | NEG | ... | ... | ... | S/M/L | High/Med/Low | ... |
 
 **Priority ordering criteria:**
 1. Critical risk + no existing coverage → top priority
@@ -212,24 +242,22 @@ Present in **priority order** (highest-value, highest-risk tests first):
 
 ### Estimated Distribution
 
-**Base budget:** 15–20 test cases for a single ADR/PR.
-
-**Scaling rules:**
-- **Multiple ADRs:** Multiply proportionally (2 ADRs → 30–40 initial budget)
-- **Complex ADR** (5+ "How" sections or 3+ configuration variants): Scale to 25–30
-- **Config override:** If `config.yaml` has `qe.max_test_cases_initial`, use that value as the budget
-- The consolidation stage (Stage 3) compresses to the hard limit (`max_test_cases`)
+**Budget (scenario skeleton — not thin one-assertion cases):**
+- **Single ADR/PR:** 12–18 scenarios
+- **Multi-ADR OR 3+ named variants OR DoD tooling named:** 18–28 scenarios
+- **Config override:** If `config.yaml` has `qe.max_test_cases_initial`, use that as the initial budget
+- Count each ERR break+recover pair as **one** scenario slot (not two separate tests)
+- The consolidation stage compresses to the hard journey limit (`qe.max_test_cases`, default 12) **without dropping** DoD, variant, transition, compliance, or federation dimensions
 
 | Tier | Proposed Count | Rationale |
 | --- | --- | --- |
-| E2E | 6–8 | Primary focus — user-facing scenarios |
-| NEG | 3–4 | Operator resilience under destructive conditions |
-| ERR | 3–5 | Error path + recovery pairs (from Section 7a) |
-| MQE | 2–3 | Acceptance + exploratory |
-| INT | 2–3 | Only if reconciler/webhook interactions warrant it |
-| UT | 2–3 | Only for new pure utility functions |
-| NFT | 0–2 | Only if numeric thresholds/SLAs exist (from Section 7d) |
-| **Total** | **15–20** (base) | Scale per rules above |
+| E2E | 6–12 | Primary focus — user-facing scenarios; variants may share journey setup |
+| NEG | 3–5 | Operator resilience under destructive conditions |
+| ERR | 3–5 | Error path + recovery pairs (from Section 7a); one slot per pair |
+| INT | 2–4 | Only if reconciler/webhook interactions warrant it |
+| UT | 2–4 | Only for new pure utility functions |
+| NFT | 0–3 | Thresholds/SLAs (7d) and/or compliance tooling (7c) when named in DoD |
+| **Total** | **12–18** (single) / **18–28** (multi/complex) | Per rules above |
 
 ### Effort Estimate
 
@@ -263,24 +291,25 @@ Propose error + recovery test **pairs** (break it, fix it, verify recovery). The
 Does this feature define multiple modes, profiles, tiers, or configuration variants?
 
 - If **yes:** list every variant from the ADR.
-  - Propose at least one E2E per variant validating variant-specific behavior.
+  - Propose at least one **distinct assertion path** per named variant (may share journey setup later; must not collapse to a single Intermediate-only case).
   - For mutually exclusive variants, propose at least one NEG test verifying the wrong variant is rejected.
+  - For TLS/profile-style ADRs: also build a **variant × primary door/listener** table using listeners named in the ADR (e.g. operator metrics/webhook, Server gRPC/federation/Prometheus, Agent Prometheus, OIDC HTTPS, controller-manager webhook).
 - If **no:** state "No configuration variants identified."
 
-| Variant | Type | Proposed E2E | Proposed NEG |
-|---------|------|-------------|-------------|
-| e.g., Profile: Modern | Config mode | E2E-NNN | NEG-NNN (reject if wrong profile set) |
+| Variant | Type | Primary door(s) | Proposed E2E | Proposed NEG |
+|---------|------|-----------------|-------------|-------------|
+| e.g., Profile: Modern | Config mode | metrics :8443 | E2E-NNN | NEG-NNN (reject if wrong profile set) |
 
 ### 7c. Compliance Tooling Check
 
-Does the ADR or PR mention verification, compliance, or auditing tools (scanners, validators, health checkers, CLI commands)?
+Does the ADR or PR (especially Testing / Definition of Done) mention verification, compliance, or auditing tools (scanners, validators, health checkers, CLI commands — e.g. `tls-scanner`)?
 
-- If **yes:** propose at least one E2E or MQE test that runs the tool and asserts expected output. This is distinct from functional testing — it validates auditor-provable compliance.
+- If **yes:** propose at least one **E2E (functional probe)** and/or **NFT-Compliance** test that runs the named tool and asserts expected output. Do **not** use MQE — there is no Manual QE tier in this workflow.
 - If **no:** state "No compliance tooling identified in scope."
 
 | Tool | What It Checks | Proposed Test |
 |------|---------------|--------------|
-| e.g., `oc adm inspect` | Operator health | MQE-NNN |
+| e.g., tls-scanner | Listener TLS profile compliance | NFT-001 / E2E-NNN |
 
 ### 7d. Threshold and SLA Extraction
 
@@ -300,6 +329,27 @@ For each threshold, propose one NFT test. If the ADR uses vague language ("quick
 | e.g., "recovers quickly" | **VAGUE — suggest 120s?** | ADR §Resilience | NFT-002 (needs user confirmation) |
 
 If no thresholds exist: state "No numeric thresholds or SLAs identified."
+
+### 7e. Definition of Done / Acceptance Extraction (MANDATORY)
+
+Extract every bullet under ADR sections titled **Testing**, **Definition of Done**, **Acceptance Criteria**, or equivalent.
+
+| DoD / AC Bullet (quote) | Proposed Test ID | Exclusion justification (if none) |
+|-------------------------|------------------|-----------------------------------|
+| e.g., "CI tls-scanner under Intermediate, Modern" | NFT-001 | — |
+
+**Checklist:** `[ ] Every DoD/AC bullet is mapped to a proposed test OR an explicit exclusion with justification.`
+
+If more than 3 DoD bullets are unmapped with no justification → **STOP** and ask the user before presenting the analysis.
+
+### 7f. Transition / Continuity Scenarios
+
+If Risks, How, or DoD mention rolling restart, config change while running, mid-change identity/workload continuity, or "self-heal after restart":
+
+- Propose **at least one** transition scenario: start workload/in-flight op → apply change → assert continuity during transition → assert final healthy state.
+- Prefer embedding these as steps inside an existing E2E journey later (do not invent thin companion-only tests that double the budget).
+
+If none apply: state "No transition/continuity scenarios identified."
 
 ---
 
@@ -332,9 +382,9 @@ Format:
 If the user does not see something they expected here, they should flag it before approval.
 
 **Multi-cluster / federation awareness:** Does the ADR mention cross-cluster behavior (federation, replication, mirroring, multi-site, multi-cluster)? If yes:
-- **Do NOT silently exclude.** Propose tests with an explicit `Infrastructure: multi-cluster` tag.
-- Only exclude if the user confirms no multi-cluster lab is available.
-- Surface as: "Proposed but requires multi-cluster lab — confirm availability or exclude explicitly."
+- **Default = INCLUDE.** Propose at least one tagged scenario: `Infrastructure: multi-cluster`.
+- **Do NOT silently exclude** and do not wait indefinitely — include the proposal in Section 7.
+- Exclude **only** after the user explicitly confirms no multi-cluster lab is available.
 - Format: `- <test title> — Infrastructure: multi-cluster — <what it tests>`
 
 ---
@@ -422,8 +472,13 @@ _(or "No regression risk — change is additive.")_
 | 2 | NEG-001 | NEG | ... | M | High | ... |
 | ... | | | | | | |
 
-**Distribution:** E2E: N | NEG: N | MQE: N | INT: N | UT: N | NFT: N | **Total: N**
+**Distribution:** E2E: N | NEG: N | ERR: N | INT: N | UT: N | NFT: N | **Total: N**
 **Estimated Effort:** X–Y hours
+
+## DoD / Acceptance Mapping (from Section 7e)
+| DoD Bullet | Test ID | Status |
+|------------|---------|--------|
+| <quote> | E2E-NNN / NFT-NNN / ERR-NNN | Mapped / Excluded |
 
 ## Exclusions (Will NOT Test)
 - <item> — Reason: <justification>
@@ -433,12 +488,13 @@ _(or "No regression risk — change is additive.")_
 
 > This section is populated during pre-analysis and carried forward to downstream stages.
 > Stages 2-3 read this section instead of re-reading the raw operator files.
+> **Default posture:** Red Hat OpenShift + Operator Framework (OLM) unless agents.md / qe-behaviour.md proves otherwise.
 
 ### Deployment Model
-- **Method:** OLM / Helm / Manual (from qe-e2e/qe-behaviour.md 3a or agents.md)
+- **Method:** OLM (default) / Helm / Manual — only override OLM when Operator Context explicitly says so
 - **Namespace:** <operator namespace>
 - **Operand CRs:** <list of CR kinds and default names>
-- **Config patching:** <Subscription / CSV / Deployment env / CR field>
+- **Config patching:** Subscription / CSV patch (never direct Deployment edit when Method=OLM)
 
 ### Quality Gates (from qe-e2e/qe-behaviour.md 3b or derived)
 | Category | Gate | Observable |
