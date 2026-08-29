@@ -184,6 +184,46 @@ e2e_exclusion:
     - opsx-apply (skip guard — if e2e task slips through, mark SKIPPED_E2E)
     - phases_jira_sync (non-e2e phases only)
     - e2e_workflow (e2e tests generated from excluded phases via /opsx-e2e post-CI)
+    - ci_monitor_workflow (Prow presubmit analyzes CI between /opsx-apply and /opsx-e2e)
+
+# ---------------------------------------------------------------------------
+# ci_monitor_workflow — local /opsx-ci-monitor (+ optional Prow oape-ci-monitor)
+# ---------------------------------------------------------------------------
+ci_monitor_workflow:
+  description: >-
+    After /opsx-apply raises a draft PR, the developer runs /opsx-ci-monitor locally
+    to poll CI checks, classify failures, optionally auto-fix, and optionally address
+    review comments. Phase behavior is controlled by openspec/config.yaml → ci_monitor.
+    Prow presubmit oape-ci-monitor is optional when runtime is prow or both.
+  runtime: local
+  command: /opsx-ci-monitor
+  local_script: openspec/ci-monitor/scripts/run-local.sh
+  config_source: openspec/config.yaml → ci_monitor
+  scripts_dir: openspec/ci-monitor/scripts
+  prow_job: oape-ci-monitor
+  prow_template: openspec/ci-monitor/docs/prow-ci-operator-config.yaml
+  trigger:
+    local: "User invokes /opsx-ci-monitor after /opsx-apply raises PR"
+    prow: "Automatically on every PR push when runtime is prow or both and job is configured"
+  artifacts:
+    - openspec/changes/<change>/implementation/ci-monitor-summary.md
+    - openspec/changes/<change>/implementation/ci-monitor-status.json
+  phases:
+    1:
+      description: "Report only — classify failures, write summary"
+      flags: { monitor_only: true, auto_fix: false, review_handler: false }
+    2:
+      description: "Auto-fix trivial failures via entrypoint.sh / auto-fix.sh"
+      flags: { monitor_only: false, auto_fix: true, review_handler: false }
+    3:
+      description: "Address pending review comments when CI is green"
+      flags: { review_handler: true }
+  report_markers:
+    - "<!-- oape-ci-monitor -->"
+    - "<!-- oape-pr-agent-report -->"
+  gate_for_e2e: >-
+    /opsx-e2e requires all CI checks to pass (gh pr checks). Prefer local artifact
+    ci-monitor-summary.md; fallback to PR comment markers when post_pr_comment is true.
 
 # ---------------------------------------------------------------------------
 # e2e_workflow — post-CI E2E test generation pipeline (triggered by /opsx-e2e)
@@ -194,6 +234,8 @@ e2e_workflow:
     passes, the user triggers /opsx-e2e to generate E2E test plans and executable
     test code. This pipeline is decoupled from /opsx-apply and has its own
     approval gates. E2E phases excluded from OAPE are covered here instead.
+    When ci_monitor.enabled is true, run /opsx-ci-monitor locally (or rely on Prow when
+    runtime is prow/both) for CI failure context before invoking /opsx-e2e.
   command: /opsx-e2e
   trigger:
     phase_iterative: "After phase PR raised + CI green — user invokes /opsx-e2e"
@@ -242,7 +284,7 @@ e2e_workflow:
         type: integer
         description: "Phase number being tested (phase-iterative mode)"
   guardrails:
-    - "CI must pass before /opsx-e2e runs"
+    - "CI must pass before /opsx-e2e runs (verify with gh pr checks; use oape-ci-monitor report for failure context when ci_monitor.enabled)"
     - "User approval gate after every stage"
     - "Respect pre-analysis exclusions in all downstream stages"
     - "Match target repo test style (framework, helpers, constants)"
