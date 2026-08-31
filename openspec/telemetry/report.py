@@ -406,6 +406,13 @@ def generate_report(change: str) -> Path:
     if run:
         enrich_run_metadata(run, change_dir)
 
+    if run and run.get("started_at"):
+        try:
+            _started_dt = datetime.fromisoformat(str(run["started_at"]).replace("Z", "+00:00"))
+            run["started_at_display"] = _started_dt.strftime("%d-%B-%Y %H:%M")
+        except ValueError:
+            run["started_at_display"] = ""
+
     global_health = _compute_global_health(run, phases, tasks, change_dir) if run else {
         "total_tokens_consumed": 0,
         "estimated_cost_usd": 0.0,
