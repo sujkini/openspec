@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +42,49 @@ def _estimate_cost(tokens_in: int, tokens_out: int, model: str = "default") -> f
     """Estimate USD cost from token counts using the price table."""
     rates = PRICE_TABLE.get(model, PRICE_TABLE["default"])
     return (tokens_in * rates["input"] + tokens_out * rates["output"]) / 1_000_000
+
+
+# India Standard Time (UTC+5:30) — all run timestamps are displayed in IST.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _to_ist_display(iso_str: str | None) -> str:
+    """Format an ISO8601 (UTC) timestamp as IST: ``DD-Month-YYYY HH:MM IST``."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST).strftime("%d-%B-%Y %H:%M IST")
+    except (TypeError, ValueError):
+        return ""
+
+
+# Midpoint (hours) for each estimated-manual-effort bucket collected at
+# /opsx-archive step 5 Q1. Used only to derive an approximate time_saved_hours
+# figure for productivity_metrics — not an exact measurement.
+EFFORT_BUCKET_HOURS: dict[str, float] = {
+    "< 2 hours": 1.0,
+    "2–4 hours": 3.0,
+    "2-4 hours": 3.0,
+    "4–8 hours (1 day)": 6.0,
+    "4-8 hours (1 day)": 6.0,
+    "8–16 hours (2 days)": 12.0,
+    "8-16 hours (2 days)": 12.0,
+    "16–40 hours (1 week)": 28.0,
+    "16-40 hours (1 week)": 28.0,
+    "> 40 hours (1+ weeks)": 48.0,
+}
+
+
+def _effort_bucket_to_hours(bucket: str) -> float | None:
+    """Map an estimated-manual-effort bucket string to its midpoint in hours."""
+    if not bucket:
+        return None
+    if bucket in EFFORT_BUCKET_HOURS:
+        return EFFORT_BUCKET_HOURS[bucket]
+    return EFFORT_BUCKET_HOURS.get(bucket.replace("\u2013", "-"))
 
 
 def _detect_operator_name() -> str:
@@ -90,6 +133,7 @@ def _reconstruct_run(events: list[dict[str, Any]]) -> dict[str, Any]:
                 "status": "running",
                 "started_at": ev.get("ts", ""),
                 "completed_at": None,
+                "archived_at": None,
                 "total_tokens_in": 0,
                 "total_tokens_out": 0,
             }
@@ -101,6 +145,12 @@ def _reconstruct_run(events: list[dict[str, Any]]) -> dict[str, Any]:
         if ev.get("type") == "run_end":
             run["status"] = ev.get("status", "completed")
             run["completed_at"] = ev.get("ts")
+        elif ev.get("type") == "archive_feedback":
+            # Marks the true end of the workflow — when the user ran
+            # /opsx-archive — distinct from completed_at (set earlier, when
+            # the last implementation task finished).
+            run["archived_at"] = ev.get("ts")
+            run["status"] = "archived"
     return run
 
 
@@ -388,6 +438,64 @@ def _compute_artifact_edits(change_dir: Path) -> dict[str, Any]:
     }
 
 
+def _reconstruct_productivity_metrics(
+    events: list[dict[str, Any]], wall_time_s: float
+) -> dict[str, Any] | None:
+    """Build productivity_metrics from the ``archive_feedback`` event.
+
+    ``wall_time_s`` is the run's actual agent wall-clock time
+    (``global_health.cumulative_wall_time_s``) — used to derive
+    ``time_saved_hours`` from the user's estimated-manual-effort bucket.
+    Returns ``None`` when /opsx-archive has not yet recorded feedback.
+    """
+    archive_ev: dict[str, Any] | None = None
+    for ev in events:
+        if ev.get("type") == "archive_feedback":
+            archive_ev = ev  # keep the latest if recorded more than once
+
+    if archive_ev is None:
+        return None
+
+    estimated_manual_effort = archive_ev.get("estimated_manual_effort", "") or ""
+    estimated_manual_hours = _effort_bucket_to_hours(estimated_manual_effort)
+    actual_wall_time_hours = round(wall_time_s / 3600, 2)
+
+    time_saved_hours = None
+    if estimated_manual_hours is not None:
+        time_saved_hours = round(estimated_manual_hours - actual_wall_time_hours, 2)
+
+    return {
+        "story_points_delivered": archive_ev.get("story_points_delivered"),
+        "estimated_manual_effort": estimated_manual_effort,
+        "estimated_manual_hours": estimated_manual_hours,
+        "actual_wall_time_hours": actual_wall_time_hours,
+        "time_saved_hours": time_saved_hours,
+        "satisfaction_rating": archive_ev.get("satisfaction_rating"),
+        "comments": archive_ev.get("comments", ""),
+        "captured_at": archive_ev.get("ts", ""),
+        "captured_at_display": _to_ist_display(archive_ev.get("ts", "")),
+    }
+
+
+def _compute_report_status(productivity_metrics: dict[str, Any] | None) -> dict[str, Any]:
+    """Explicit completeness flag for metrics-report.json.
+
+    Story points delivered is mandatory (collected by /opsx-archive step 5).
+    Until it is present, the report is considered incomplete.
+    """
+    missing: list[str] = []
+    if productivity_metrics is None:
+        missing.append("productivity_metrics")
+        missing.append("productivity_metrics.story_points_delivered")
+    elif productivity_metrics.get("story_points_delivered") is None:
+        missing.append("productivity_metrics.story_points_delivered")
+
+    return {
+        "complete": len(missing) == 0,
+        "missing_fields": missing,
+    }
+
+
 def generate_report(change: str) -> Path:
     """Generate metrics-report.json for a single change.
 
@@ -407,11 +515,9 @@ def generate_report(change: str) -> Path:
         enrich_run_metadata(run, change_dir)
 
     if run and run.get("started_at"):
-        try:
-            _started_dt = datetime.fromisoformat(str(run["started_at"]).replace("Z", "+00:00"))
-            run["started_at_display"] = _started_dt.strftime("%d-%B-%Y %H:%M")
-        except ValueError:
-            run["started_at_display"] = ""
+        run["started_at_display"] = _to_ist_display(run["started_at"])
+    if run and run.get("archived_at"):
+        run["archived_at_display"] = _to_ist_display(run["archived_at"])
 
     global_health = _compute_global_health(run, phases, tasks, change_dir) if run else {
         "total_tokens_consumed": 0,
@@ -427,6 +533,11 @@ def generate_report(change: str) -> Path:
     }
     artifact_edits = _compute_artifact_edits(change_dir)
 
+    productivity_metrics = _reconstruct_productivity_metrics(
+        events, global_health.get("cumulative_wall_time_s", 0.0)
+    )
+    report_status = _compute_report_status(productivity_metrics)
+
     jira_fields = read_jira_report_fields(change_dir)
 
     report: dict[str, Any] = {
@@ -439,6 +550,8 @@ def generate_report(change: str) -> Path:
         "events": log_events,
         "global_health": global_health,
         "artifact_edits": artifact_edits,
+        "productivity_metrics": productivity_metrics,
+        "report_status": report_status,
     }
 
     report_path = change_dir / "telemetry" / "metrics-report.json"

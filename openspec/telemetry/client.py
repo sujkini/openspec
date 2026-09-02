@@ -197,6 +197,32 @@ class TelemetryClient:
             event["metadata"] = metadata
         self._write_event(event)
 
+    def record_archive_feedback(
+        self,
+        run_id: str,
+        *,
+        story_points_delivered: float | None = None,
+        estimated_manual_effort: str = "",
+        satisfaction_rating: int | None = None,
+        comments: str = "",
+    ) -> None:
+        """Record mandatory archive-time feedback: story points, time-savings
+        estimate, satisfaction rating, and comments.
+
+        The event's own ``ts`` doubles as the run's ``archived_at`` timestamp
+        (the moment ``/opsx-archive`` collected this feedback).
+        """
+        self._write_event({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "type": "archive_feedback",
+            "change": self._change or "",
+            "run_id": run_id,
+            "story_points_delivered": story_points_delivered,
+            "estimated_manual_effort": estimated_manual_effort,
+            "satisfaction_rating": satisfaction_rating,
+            "comments": comments,
+        })
+
     def log_event(
         self,
         run_id: str,

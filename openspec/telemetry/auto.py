@@ -851,6 +851,38 @@ def sync(args: argparse.Namespace) -> None:
     _regenerate_report(args.change)
 
 
+def on_archive_feedback(args: argparse.Namespace) -> None:
+    """Called by /opsx-archive to record mandatory archive-time feedback.
+
+    Captures story points delivered, the estimated-manual-effort bucket,
+    satisfaction rating, and comments — the same answers written to
+    user-feedback.md — as a structured telemetry event. Must run BEFORE the
+    change directory is moved to openspec/changes/archive/, so the event and
+    the regenerated metrics-report.json are archived with the rest of the
+    change. The event's timestamp becomes the run's ``archived_at``.
+    """
+    state = _load_state(args.change)
+    run_id = state.get("run_id")
+    if not run_id:
+        _out({"skip": True, "reason": "no run_id"})
+        return
+
+    story_points = getattr(args, "story_points", None)
+    client = _client(args.change)
+    try:
+        client.record_archive_feedback(
+            run_id,
+            story_points_delivered=story_points,
+            estimated_manual_effort=getattr(args, "manual_effort", "") or "",
+            satisfaction_rating=getattr(args, "satisfaction", None),
+            comments=getattr(args, "comments", "") or "",
+        )
+        _out({"ok": True, "story_points_delivered": story_points})
+    finally:
+        client.close()
+    _regenerate_report(args.change)
+
+
 def report_cmd(args: argparse.Namespace) -> None:
     """On-demand report regeneration."""
     from .report import generate_report
@@ -934,6 +966,22 @@ def build_parser() -> argparse.ArgumentParser:
     sy = sub.add_parser("sync", help="Sync filesystem state to telemetry")
     sy.add_argument("--change", required=True)
 
+    af = sub.add_parser(
+        "on-archive-feedback",
+        help="Record mandatory archive-time feedback (story points, time savings, satisfaction, comments)",
+    )
+    af.add_argument("--change", required=True)
+    af.add_argument(
+        "--story-points", type=float, default=None,
+        help="Story points delivered for this ticket (mandatory per /opsx-archive guardrail)",
+    )
+    af.add_argument(
+        "--manual-effort", default="",
+        help="Estimated manual-effort bucket, e.g. '4-8 hours (1 day)'",
+    )
+    af.add_argument("--satisfaction", type=int, default=None, help="Satisfaction rating 1-5")
+    af.add_argument("--comments", default="", help="Free-text comments on this run")
+
     rp = sub.add_parser("report", help="Regenerate metrics-report.json")
     rp.add_argument("--change", required=True)
 
@@ -952,6 +1000,7 @@ _DISPATCH = {
     "on-phase-complete": on_phase_complete,
     "on-apply-complete": on_apply_complete,
     "sync": sync,
+    "on-archive-feedback": on_archive_feedback,
     "report": report_cmd,
 }
 
