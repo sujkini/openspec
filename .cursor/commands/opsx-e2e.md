@@ -40,6 +40,13 @@ At completion, a `qe-metrics.json` report is generated with 7 key metrics:
 
 Use the same token estimation approach as the development workflow (`openspec/telemetry/tokens.py`).
 
+**Note:** `/opsx-e2e` does NOT ask for time-saved, story points, or feedback —
+that is collected once, centrally, by `/opsx-archive` (which asks the QE
+questions only if this change has an E2E run, i.e. this events file exists).
+`/opsx-e2e` only needs to emit lifecycle/stage/execution events; `qe-metrics.json`
+will show `qe_feedback: null` and `qe_report_status.complete: false` until
+`/opsx-archive` runs.
+
 **Telemetry module:** `openspec/telemetry/qe_events.py` (event emission),
 `openspec/telemetry/qe_metrics.py` (report generation)
 
@@ -395,7 +402,8 @@ Next steps:
 ======================================================================
 ```
 
-Then proceed directly to Step 9 (Final Summary) and Step 10 (Time Saved & Feedback).
+Then proceed directly to Step 9 (Final Summary). Time-saved, story points, and
+feedback are collected later by `/opsx-archive` — not here.
 
 **PR Mode / Combined Mode:** Continue with Stage 5 below.
 
@@ -570,7 +578,6 @@ the overall E2E outcome and ask the user for their decision.
    "Max feedback rounds reached. Stopping. Re-run `/opsx-e2e` to resume."
 
 **On "Stop":**
-- **Fire time-saved prompt BEFORE stopping** (see Step 9b below).
 - Write E2E summary to `openspec/changes/<name>/e2e/e2e-summary.md` with status `stopped`.
 - Emit telemetry: `e2e_run_end` with status `stopped_by_user`.
 - Regenerate `qe-metrics.json`: `python -m openspec.telemetry.qe_metrics --change <name>`
@@ -658,6 +665,9 @@ No separate PR is created — the existing development PR receives the E2E commi
 | Triage Accuracy | X% (or N/A) |
 | QE Cost | $X.XX (N tokens, Xs wall time) |
 
+Time-saved, story points, and feedback are NOT collected here — `/opsx-archive`
+will ask for them once this change is archived.
+
 ### Next Steps (mode-dependent)
 **PR / Combined Mode:**
 - Review test code in the PR
@@ -669,40 +679,6 @@ No separate PR is created — the existing development PR receives the E2E commi
 - When a PR is raised: `/opsx-e2e --pr <URL>` to execute and push
 - The existing plan will be reused if still valid for the PR scope
 ```
-
-### 10. Time Saved & Feedback Prompt (fires in ALL exit paths)
-
-This step fires **regardless of whether the user chose Push, Stop, or the workflow completed normally**.
-It is referenced as "Step 9b" in the Stop handler (Step 5.5) — execute it there before stopping.
-After the Push path (Step 5.6 → 5.7 → Final Summary), execute it after presenting the summary.
-
-ASK the user:
-
-```
-How much time (%) did OpenSpec save you compared to doing this manually?
-  - Development workflow (specs → plan → tasks → code): ___%
-  - E2E workflow (test plan → code gen → execution): ___%
-  Enter two numbers (e.g. '40 60') or press Enter to skip.
-
-Any feedback on the E2E workflow? (free text, or press Enter to skip)
-```
-
-- Parse time response: two integers (development_pct, e2e_pct).
-- If user presses Enter or says "skip" → record `null` for both.
-- Parse feedback: free text string, or `null` if skipped.
-- Emit `e2e_time_saved` telemetry event with `development_pct`, `e2e_pct`, and `user_feedback`.
-- Regenerate `qe-metrics.json` so it includes `time_saved` and `user_feedback`:
-  ```bash
-  python -m openspec.telemetry.qe_metrics --change <name>
-  ```
-- The final `qe-metrics.json` will contain:
-  ```json
-  "time_saved": {
-    "development_pct": 40,
-    "e2e_pct": 60
-  },
-  "user_feedback": "Test patterns were good but missed edge case X"
-  ```
 
 ## Guardrails
 
@@ -734,3 +710,6 @@ Any feedback on the E2E workflow? (free text, or press Enter to skip)
 - Generated code must compile — verify before presenting
 - If `harness-evals/evals/` stage evals exist, cross-reference them during pre-analysis to
   ensure E2E tests cover patterns the eval-loop has identified as important
+- **Do NOT ask the user for time-saved, story points, or feedback anywhere in this command.**
+  That is collected exactly once, centrally, by `/opsx-archive` — this keeps QE feedback
+  consistent with a single source of truth instead of asking twice (once here, once at archive).

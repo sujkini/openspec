@@ -181,21 +181,28 @@ class QETelemetryClient:
             "user_confirmed": user_confirmed,
         })
 
-    def record_time_saved(
+    def record_archive_feedback(
         self,
-        run_id: str,
-        development_pct: int | None = None,
-        e2e_pct: int | None = None,
-        user_feedback: str | None = None,
+        *,
+        run_id: str = "",
+        time_saved_pct: int | None = None,
+        story_points_delivered: float | None = None,
+        user_feedback: str = "",
     ) -> None:
-        """Record user-reported time saved percentages and feedback."""
+        """Record QE feedback collected by ``/opsx-archive`` — NOT during
+        ``/opsx-e2e`` itself. ``/opsx-archive`` calls this only when it
+        detects this change had at least one E2E run (i.e. this events file
+        exists). ``run_id`` is best-effort — the most recent ``e2e_run_start``
+        id, for traceability — since a phase-iterative change may have had
+        multiple E2E runs (one per phase) by the time archive collects this.
+        """
         self._write_event({
             "ts": datetime.now(timezone.utc).isoformat(),
-            "type": "e2e_time_saved",
+            "type": "qe_archive_feedback",
             "change": self._change,
             "run_id": run_id,
-            "development_pct": development_pct,
-            "e2e_pct": e2e_pct,
+            "time_saved_pct": time_saved_pct,
+            "story_points_delivered": story_points_delivered,
             "user_feedback": user_feedback,
         })
 

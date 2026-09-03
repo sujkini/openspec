@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,24 @@ PRICE_TABLE: dict[str, dict[str, float]] = {
 def _estimate_cost(tokens_in: int, tokens_out: int, model: str = "default") -> float:
     rates = PRICE_TABLE.get(model, PRICE_TABLE["default"])
     return (tokens_in * rates["input"] + tokens_out * rates["output"]) / 1_000_000
+
+
+# India Standard Time (UTC+5:30) — QE run timestamps are displayed in IST,
+# matching the development-workflow report (see telemetry/report.py).
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _to_ist_display(iso_str: str | None) -> str:
+    """Format an ISO8601 (UTC) timestamp as IST: ``DD-Month-YYYY HH:MM IST``."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST).strftime("%d-%B-%Y %H:%M IST")
+    except (TypeError, ValueError):
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -372,35 +390,75 @@ def compute_cost_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Time saved (user-reported)
+# QE run window (start / completion) and feedback (collected at /opsx-archive)
 # ---------------------------------------------------------------------------
 
-def _extract_time_saved(events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Extract user-reported time saved from e2e_time_saved event."""
-    time_event = next(
-        (ev for ev in reversed(events) if ev.get("type") == "e2e_time_saved"),
-        None,
-    )
-    if not time_event:
-        return {
-            "development_pct": None,
-            "e2e_pct": None,
-        }
+def _reconstruct_qe_run_window(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Earliest ``e2e_run_start`` and latest ``e2e_run_end`` across all E2E
+    runs for this change.
+
+    A phase-iterative change may run ``/opsx-e2e`` once per phase, so this
+    represents the overall QE effort window (first start → last finish),
+    not a single run.
+    """
+    starts = [ev.get("ts") for ev in events if ev.get("type") == "e2e_run_start" and ev.get("ts")]
+    ends = [ev.get("ts") for ev in events if ev.get("type") == "e2e_run_end" and ev.get("ts")]
+
+    started_at = min(starts) if starts else None
+    completed_at = max(ends) if ends else None
+
     return {
-        "development_pct": time_event.get("development_pct"),
-        "e2e_pct": time_event.get("e2e_pct"),
+        "qe_started_at": started_at,
+        "qe_started_at_display": _to_ist_display(started_at),
+        "qe_completed_at": completed_at,
+        "qe_completed_at_display": _to_ist_display(completed_at),
     }
 
 
-def _extract_user_feedback(events: list[dict[str, Any]]) -> str | None:
-    """Extract user feedback text from e2e_time_saved event."""
-    time_event = next(
-        (ev for ev in reversed(events) if ev.get("type") == "e2e_time_saved"),
-        None,
-    )
-    if not time_event:
+def _reconstruct_qe_feedback(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Build the ``qe_feedback`` block from the ``qe_archive_feedback`` event.
+
+    This is recorded by ``/opsx-archive`` — NOT during ``/opsx-e2e`` itself —
+    once it detects this change has at least one E2E run. Returns ``None``
+    until ``/opsx-archive`` has collected it (e.g. while E2E work is still
+    in progress and the change hasn't been archived yet).
+    """
+    feedback_ev: dict[str, Any] | None = None
+    for ev in events:
+        if ev.get("type") == "qe_archive_feedback":
+            feedback_ev = ev  # keep the latest if recorded more than once
+
+    if feedback_ev is None:
         return None
-    return time_event.get("user_feedback")
+
+    return {
+        "time_saved_pct": feedback_ev.get("time_saved_pct"),
+        "story_points_delivered": feedback_ev.get("story_points_delivered"),
+        "user_feedback": feedback_ev.get("user_feedback", ""),
+        "captured_at": feedback_ev.get("ts", ""),
+        "captured_at_display": _to_ist_display(feedback_ev.get("ts", "")),
+    }
+
+
+def _compute_qe_report_status(qe_feedback: dict[str, Any] | None) -> dict[str, Any]:
+    """Explicit completeness flag for qe-metrics.json.
+
+    Story points delivered is mandatory (collected by ``/opsx-archive`` once
+    it detects an E2E run for this change). Until it is present, the QE
+    report is considered incomplete — mirrors ``report_status`` in
+    ``metrics-report.json`` (telemetry/report.py).
+    """
+    missing: list[str] = []
+    if qe_feedback is None:
+        missing.append("qe_feedback")
+        missing.append("qe_feedback.story_points_delivered")
+    elif qe_feedback.get("story_points_delivered") is None:
+        missing.append("qe_feedback.story_points_delivered")
+
+    return {
+        "complete": len(missing) == 0,
+        "missing_fields": missing,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -446,8 +504,9 @@ def generate_qe_report(change: str) -> Path:
     bugs = compute_bugs(events)
     triage = compute_triage_accuracy(events)
     cost = compute_cost_metrics(events)
-    time_saved = _extract_time_saved(events)
-    user_feedback = _extract_user_feedback(events)
+    run_window = _reconstruct_qe_run_window(events)
+    qe_feedback = _reconstruct_qe_feedback(events)
+    qe_report_status = _compute_qe_report_status(qe_feedback)
 
     report: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -457,6 +516,7 @@ def generate_qe_report(change: str) -> Path:
         "pr_url": run_event.get("pr_url", ""),
         "phase": run_event.get("phase"),
         "mode": run_event.get("mode", "phase-iterative"),
+        **run_window,
         "ac_scenario_coverage": ac_coverage,
         "automation_coverage": automation,
         "first_pass_rate": first_pass,
@@ -464,8 +524,8 @@ def generate_qe_report(change: str) -> Path:
         "bugs": bugs,
         "triage_accuracy": triage,
         "cost": cost,
-        "time_saved": time_saved,
-        "user_feedback": user_feedback,
+        "qe_feedback": qe_feedback,
+        "qe_report_status": qe_report_status,
     }
 
     report_path = change_dir / "telemetry" / "qe-metrics.json"
