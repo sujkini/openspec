@@ -437,6 +437,21 @@ latest, since phase-iterative changes may run E2E once per phase).
 The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
 `metrics-report.json` for its live view — see `dashboard/README.md` for details.
 
+### Cost optimization: single-shot `tasks.md`
+
+Only the **`tasks`** artifact uses a same-session, single-turn generation path
+(no tool calls during generation). Validation, specs, repo-assessment, plan, and
+implementation remain agentic. After `tasks.md` is written, a deterministic
+structural validator runs (no LLM):
+
+```bash
+python -m openspec.validators.tasks_structural --change "<name>"
+```
+
+Compare token usage before/after by running the same Jira ticket twice and
+diffing `metrics-report.json` → `global_health.total_tokens_consumed` and the
+`tasks` phase row in `phases[]`.
+
 ### Publishing metrics to the cross-operator dashboard
 
 ```

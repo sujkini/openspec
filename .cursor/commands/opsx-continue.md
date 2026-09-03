@@ -129,6 +129,48 @@ If preflight is not printed, the run is non-compliant.
      If Phase N > 1: append new phase tasks to existing tasks.md.
    - **one-shot**: pass `task_sizing` metadata only (no `phase_scope`). Generate all
      phases in a single tasks.md.
+
+   **7a. Single-shot `tasks.md` generation (ONLY when artifact is `tasks` — cost optimization)**
+
+   All other artifacts (`validation`, `specs`, `repo-assessment`, `plan`) remain **agentic**
+   (tool use allowed). For `tasks` only, use a **same-session, single-turn, no-tools** call:
+
+   **Before generating (load packed bundle — tool reads allowed here only):**
+   1. `openspec instructions tasks --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
+   2. Read every dependency from the change directory: `specs.md`, `plan.md`, `repo-assessment.md`,
+      `validation.json` (if present), `inputs/jira.yaml`
+   3. Read `harness-evals/constitution.md`
+   4. Read `agents.md` from the operator repo root (`./agents.md`)
+   5. Read `{schema_root}/templates/tasks-template.md` (or path from instructions JSON)
+   6. **phase-iterative:** read existing `tasks.md` (prior phases are read-only context),
+      include `phase_scope: N` and `task_sizing` metadata in the user message
+   7. **one-shot:** include `task_sizing` metadata only (no `phase_scope`)
+
+   **During generation (FORBIDDEN — no tool calls):**
+   - Do **NOT** use grep, file search, terminal, MCP reads, sub-agents, or any tool that
+     re-fetches repo state. The packed bundle above is the **only** allowed context.
+   - Produce the complete `tasks.md` (§0 through §5) in **one response turn**.
+   - Do **NOT** use multi-pass mode (`pass_mode: skeleton|payloads|orchestration`) unless
+     output is genuinely truncated; prefer single-pass (default).
+   - Write the result to `outputPath` (append with `---` separator when phase-iterative Phase N > 1).
+
+   **7b. Structural validation gate (ONLY when artifact is `tasks`)**
+
+   Immediately after writing `tasks.md`, **before** step 8 telemetry:
+
+   ```bash
+   python -m openspec.validators.tasks_structural --change "<name>"
+   ```
+
+   - **If `ok: true`:** proceed to step 8.
+   - **If `ok: false`:** regenerate `tasks.md` using the same single-shot rules (step 7a),
+     passing the `failures[]` list as fix instructions. **Max 2 auto-regeneration attempts.**
+     Re-run the validator after each regeneration.
+   - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
+     evaluation report and approval prompt; do **not** silently ignore structural violations.
+
+   This replaces informal LLM self-check with deterministic checks (Fibonacci complexity,
+   agent roster, §0 FR/US coverage, §3/§4 parity, DAG vs linear order, no Testing_Agent/e2e tasks).
 8. **Telemetry — signal artifact written** (silent, non-blocking; emits `phase_progress` with partial tokens):
    ```bash
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --phase <N>
@@ -317,6 +359,7 @@ Stop after user approval/rejection of the current artifact and completion of any
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
+- **`tasks.md` is single-shot only** — For the `tasks` artifact, step 7a forbids tool use during generation; step 7b runs `openspec.validators.tasks_structural` as a hard gate. All other artifacts remain agentic.
 
 ## Batch / Continue-All Telemetry
 
