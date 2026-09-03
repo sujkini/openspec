@@ -437,6 +437,23 @@ latest, since phase-iterative changes may run E2E once per phase).
 The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
 `metrics-report.json` for its live view — see `dashboard/README.md` for details.
 
+### Publishing metrics to the cross-operator dashboard
+
+```
+/opsx-publish-metrics [change-name]
+```
+
+Standalone command (not auto-triggered by `/opsx-archive`) that forks
+[anandkuma77/open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard)
+via the `user-github` MCP server, branches, and opens a PR adding this change's
+`metrics-report.json` (and `qe-metrics.json`, if this change ran `/opsx-e2e`) under
+`data/open-spec-matrics/operators/<operator>/`. The operator folder is derived
+automatically from `metrics-report.json → operator_name`. Publishing doesn't require
+`report_status.complete`/`qe_report_status.complete` to be `true` — it warns on
+incomplete data but doesn't block. Note that merging the resulting PR does not
+automatically update the live dashboard; the dashboard repo owner must separately
+re-run its `Generate Processed Metrics` GitHub Action.
+
 ---
 
 ## Working Modes
@@ -471,6 +488,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
 | `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
 | `/opsx-archive` | Archive a completed change |
+| `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-dashboard as a PR |
 | `/opsx-explore` | Explore ideas without creating artifacts |
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
@@ -761,6 +779,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
 | `/opsx-e2e` | Write | Generate E2E tests after CI passes |
 | `/opsx-archive` | Write | Archive a completed change |
+| `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-dashboard |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
 | `/opsx-explore` | Read | Explore ideas without creating artifacts |
 
@@ -818,6 +837,12 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 - Execute arbitrary network requests beyond GitHub and Jira APIs
 - Modify previously approved artifacts (specs, plan, repo-assessment are immutable once approved)
 - Append to source files using `>>` or `tee -a` (in-place edits only)
+
+**Explicit exception — `/opsx-publish-metrics`:** the one command permitted to write outside
+the operator working directory/fork. It only ever writes the two local telemetry JSON files
+(`metrics-report.json`, `qe-metrics.json`) verbatim, only to a fork of
+`anandkuma77/open-spec-dashboard`, and only as a PR — it never merges. It is a standalone,
+user-invoked command (never triggered autonomously by another command).
 - Launch background sub-agents during `/opsx-apply` or `/opsx-continue`
 - Auto-approve phase gates, PR creation, or Jira ticket creation regardless of configuration
 
@@ -892,6 +917,8 @@ The agent operates under the executing developer's identity and inherits their e
 - **Git operations:** Uses the developer's local SSH keys or configured Git credentials
 - **GitHub API:** Uses the personal access token from `config.yaml → credentials.github.token`
 - **Jira API:** Uses the personal API token from `config.yaml → credentials.jira.api_token`
+- **`/opsx-publish-metrics`:** uses the `user-github` Cursor MCP server (the developer's own
+  authenticated GitHub identity via Cursor), separate from `config.yaml → credentials.github.token`
 
 The agent cannot access any repository, Jira project, or API the user is not already authorized to access. No service accounts are used. All operations run under the developer's identity with their existing RBAC permissions.
 

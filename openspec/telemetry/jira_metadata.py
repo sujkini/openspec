@@ -74,16 +74,20 @@ def read_jira_report_fields(change_dir: Path) -> dict[str, str]:
 
     Output keys match the report schema::
 
-        jira_epic_link, jira_epic_name, jira_task_name, Jira_task_link
+        jira_epic_link, jira_epic_name, jira_task_name, jira_task_link
+
+    Always returns all four keys (defaulting to ``""`` when Jira metadata is
+    unavailable) rather than an empty dict — downstream consumers, notably
+    the open-spec-dashboard repo's ``generate_processed_metrics.py``, do a
+    direct (non-``.get()``) key lookup on ``jira_epic_link``/``jira_task_link``
+    and would raise ``KeyError`` if the key were missing entirely.
     """
     meta = read_jira_metadata(change_dir)
-    if not meta:
-        return {}
     return {
         "jira_epic_link": meta.get("epic_url", ""),
         "jira_epic_name": meta.get("epic_name", ""),
         "jira_task_name": meta.get("jira_summary", ""),
-        "Jira_task_link": meta.get("jira_url", ""),
+        "jira_task_link": meta.get("jira_url", ""),
     }
 
 

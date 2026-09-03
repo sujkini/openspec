@@ -142,7 +142,7 @@ The generated `metrics-report.json` contains:
   "jira_epic_link": "https://issues.redhat.com/browse/CM-800",
   "jira_epic_name": "Cert-manager Q3 features",
   "jira_task_name": "Trust manager addon controller",
-  "Jira_task_link": "https://issues.redhat.com/browse/CM-830",
+  "jira_task_link": "https://issues.redhat.com/browse/CM-830",
   "run": {
     "id": "...",
     "change_name": "CM-830 — cm-830",
