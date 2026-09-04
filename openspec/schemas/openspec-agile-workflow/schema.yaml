@@ -815,9 +815,11 @@ user_approval_feedback_gate:
     on_reject: >-
       ai-helpers mode: Append user feedback to REVISION FEEDBACK in
       design-bundle.md; re-run OAPE commands for the current task only.
-      direct mode: Incorporate feedback into implementation approach; re-run
-      current task only. Both modes: do not mark the task complete, do not
-      advance to the next task, and do not edit approved upstream artifacts.
+      direct mode: Re-run the current task using tasks.md §4 payload + user feedback
+      only — do not re-read agents.md, constitution.md, specs.md, plan.md, or
+      repo-assessment.md (phase context already loaded). Both modes: do not mark the
+      task complete, do not advance to the next task, and do not edit approved upstream
+      artifacts.
   exit_on_reject:
     description: >-
       For listed artifacts, user rejection at the approval gate **ends the change
@@ -1188,6 +1190,11 @@ artifacts:
     instruction: |
       You are the "Specification Validator": a quality gate for software specs before engineering.
 
+      ## Generation mode (cost optimization)
+      Load inputs with tool reads once, then emit validation.json in a **single turn with
+      no further tool calls**. Packed bundle only: jira-spec.md, inputs/jira.yaml,
+      validation-template.md rubric. Do not grep the repo or re-fetch Jira mid-generation.
+
       ## Mission
       Reduce rework by catching ambiguous, incomplete, inconsistent, or un-testable requirements early.
       Make gaps explicit as questions and actionable edits — do not invent product behavior.
@@ -1224,6 +1231,12 @@ artifacts:
     template: spec-template.md
     instruction: |
       Transform the Jira specification into a user-approved specs.md artifact.
+
+      ## Generation mode (cost optimization)
+      Load inputs with tool reads once, then produce specs.md in a **single turn with
+      no further tool calls**. Packed bundle only: jira-spec.md, inputs/jira.yaml,
+      validation.json (if present), spec-template.md. Do not grep the repo or explore
+      the codebase during specs generation.
 
       ## Process
       1. Read the Specification Analyst preamble and output template in spec.md — follow both.
@@ -1615,9 +1628,10 @@ artifacts:
       verify, run **code-generation evals**, refine code until evals pass, then
       **request user approval of the code** before advancing to the next task.
 
-      **direct mode**: For each task, read context files (agents.md, constitution.md,
-      specs.md, plan.md, repo-assessment.md, task §4 payload), implement code
-      directly, verify, then **request user approval** before advancing.
+      **direct mode**: For each task, load **phase-scoped** shared context once per phase
+      (excerpted agents.md, constitution.md, specs.md, plan.md Phase N, repo-assessment.md),
+      then task §4 payload per task; implement code directly, verify, then **request user
+      approval** before advancing.
 
       Work in the user's fork working copy, **or the project working folder when
       use_working_folder_as_repo is true** (see schema working_folder_repo). Push
@@ -1724,11 +1738,21 @@ artifacts:
 
       ## Task execution loop — direct mode (codegen_mode = direct)
 
+      **Phase-scoped context (cost optimization):** On the **first pending task of the
+      current phase**, read and excerpt agents.md, constitution.md, specs.md (stories/FR/SC
+      for this phase), plan.md (Phase N section only), and repo-assessment.md (phase-cited
+      target files). Retain only phase-relevant excerpts — do not carry full documents into
+      every task. On **one-shot** mode, load shared context once on the first pending task
+      of the run.
+
       FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
 
-      1. **Read context**: agents.md, constitution.md, specs.md, plan.md,
-         repo-assessment.md, tasks.md §4 payload for **current Task ID only**.
-         Include REVISION FEEDBACK if retrying after rejection.
+      1. **Read context**:
+         - **First task of phase (or first pending task in one-shot):** load shared context
+           per phase-scoped rules above (excerpts only).
+         - **Every task:** tasks.md §4 payload for **current Task ID only**.
+         - **On reject/retry:** task §4 payload + user feedback only — do **not** re-read
+           agents.md, constitution.md, specs.md, plan.md, or repo-assessment.md.
       2. **Implement code directly**: Apply code changes in the working copy following
          agents.md patterns, constitution.md guardrails, task payload instructions,
          and acceptance criteria.
@@ -1741,8 +1765,8 @@ artifacts:
       3. **Verify**: Run Acceptance criteria for this task; record pass/fail.
       4. **Present** task summary and files touched.
       5. **ASK**: "Approve the code changes for task {task_id} ({task_title})?"
-      6. **ON REJECT**: Incorporate feedback into implementation approach; re-run
-         **this task only** from step 1.
+      6. **ON REJECT**: Re-run **this task only** from step 1 using task §4 payload + user
+         feedback — do **not** reload phase shared context.
       7. **ON APPROVE**:
          - Write `implementation/task-reports/<task-id>.md`
          - Mark task `- [x]` in tasks.md
@@ -1822,8 +1846,8 @@ artifacts:
         ai-helpers mode: Run user_approval_feedback_gate per_task_implementation_variant:
         append user feedback to design-bundle.md REVISION FEEDBACK; re-run OAPE commands
         for the current task only.
-        direct mode: Incorporate feedback into implementation approach; re-run current
-        task only.
+        direct mode: Re-run current task with tasks.md §4 payload + user feedback only;
+        do not reload phase shared context.
         Both modes: do not mark the task complete, do not advance to the next task,
         and do not modify approved upstream artifacts.
       on_command_failure: >-
@@ -1948,14 +1972,17 @@ apply:
       8. On reject: REVISION FEEDBACK in design bundle; re-run current task only.
 
       **direct mode (codegen_mode = direct):**
-      1. Read context files (agents.md, constitution.md, specs.md, plan.md,
-         repo-assessment.md, tasks.md §4 payload for current Task ID only).
+      1. **Phase-scoped context:** On first pending task of the current phase (or first
+         pending task in one-shot), read and excerpt agents.md, constitution.md, specs.md,
+         plan.md (Phase N only), repo-assessment.md (phase-cited sections). Every task:
+         tasks.md §4 for current Task ID only. On reject: task §4 + feedback only — do
+         not reload shared context.
       2. Implement code directly in the working copy.
       3. Verify per task Acceptance criteria.
       4. Present task summary; ask user to approve code changes.
       5. On approve: write implementation/task-reports/<task-id>.md; mark task `- [x]`;
          next task.
-      6. On reject: incorporate feedback; re-run current task only.
+      6. On reject: re-run current task with task §4 + feedback only (no shared-context reload).
 
     After all tasks: write implementation-report.md aggregating all task-reports/.
     Do not advance to the next task until the user approves the code for the current task.

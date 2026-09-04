@@ -130,10 +130,40 @@ If preflight is not printed, the run is non-compliant.
    - **one-shot**: pass `task_sizing` metadata only (no `phase_scope`). Generate all
      phases in a single tasks.md.
 
-   **7a. Single-shot `tasks.md` generation (ONLY when artifact is `tasks` — cost optimization)**
+   **7a. Single-shot `validation.json` generation (ONLY when artifact is `validation` — cost optimization)**
 
-   All other artifacts (`validation`, `specs`, `repo-assessment`, `plan`) remain **agentic**
-   (tool use allowed). For `tasks` only, use a **same-session, single-turn, no-tools** call:
+   Use a **same-session, single-turn, no-tools** call:
+
+   **Before generating (load packed bundle — tool reads allowed here only):**
+   1. `openspec instructions validation --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
+   2. Read `inputs/jira.yaml`, `inputs/jira-spec.md` (or Jira content from MCP)
+   3. Read `{schema_root}/templates/validation-template.md` (or path from instructions JSON)
+
+   **During generation (FORBIDDEN — no tool calls):**
+   - Do **NOT** use grep, file search, terminal, MCP reads, sub-agents, or any tool that
+     re-fetches repo state. The packed bundle above is the **only** allowed context.
+   - Emit ONE valid JSON object matching the validation template schema in **one response turn**.
+   - Write the result to `outputPath`.
+
+   **7b. Single-shot `specs.md` generation (ONLY when artifact is `specs` — cost optimization)**
+
+   Use a **same-session, single-turn, no-tools** call:
+
+   **Before generating (load packed bundle — tool reads allowed here only):**
+   1. `openspec instructions specs --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
+   2. Read `inputs/jira.yaml`, `inputs/jira-spec.md`, `validation.json` (if present)
+   3. Read `{schema_root}/templates/spec-template.md` (or path from instructions JSON)
+
+   **During generation (FORBIDDEN — no tool calls):**
+   - Do **NOT** use grep, file search, terminal, MCP reads, sub-agents, or any tool that
+     re-fetches repo state. The packed bundle above is the **only** allowed context.
+   - Produce the complete `specs.md` in **one response turn**.
+   - Write the result to `outputPath`.
+
+   **7c. Single-shot `tasks.md` generation (ONLY when artifact is `tasks` — cost optimization)**
+
+   `repo-assessment` and `plan` remain **agentic** (tool use allowed). For `validation`,
+   `specs`, and `tasks`, use a **same-session, single-turn, no-tools** call:
 
    **Before generating (load packed bundle — tool reads allowed here only):**
    1. `openspec instructions tasks --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
@@ -154,7 +184,7 @@ If preflight is not printed, the run is non-compliant.
      output is genuinely truncated; prefer single-pass (default).
    - Write the result to `outputPath` (append with `---` separator when phase-iterative Phase N > 1).
 
-   **7b. Structural validation gate (ONLY when artifact is `tasks`)**
+   **7d. Structural validation gate (ONLY when artifact is `tasks`)**
 
    Immediately after writing `tasks.md`, **before** step 8 telemetry:
 
@@ -163,7 +193,7 @@ If preflight is not printed, the run is non-compliant.
    ```
 
    - **If `ok: true`:** proceed to step 8.
-   - **If `ok: false`:** regenerate `tasks.md` using the same single-shot rules (step 7a),
+   - **If `ok: false`:** regenerate `tasks.md` using the same single-shot rules (step 7c),
      passing the `failures[]` list as fix instructions. **Max 2 auto-regeneration attempts.**
      Re-run the validator after each regeneration.
    - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
@@ -359,7 +389,7 @@ Stop after user approval/rejection of the current artifact and completion of any
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
-- **`tasks.md` is single-shot only** — For the `tasks` artifact, step 7a forbids tool use during generation; step 7b runs `openspec.validators.tasks_structural` as a hard gate. All other artifacts remain agentic.
+- **`validation.json`, `specs.md`, and `tasks.md` are single-shot** — For these artifacts, steps 7a/7b/7c forbid tool use during generation; step 7d runs `openspec.validators.tasks_structural` as a hard gate for `tasks` only. `repo-assessment` and `plan` remain agentic.
 
 ## Batch / Continue-All Telemetry
 

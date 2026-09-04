@@ -170,7 +170,7 @@ Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default
 - Append feedback to `rejections[]`
 - Set state: `EXECUTING_TASK`
 - **ai-helpers mode**: Add REVISION FEEDBACK to design-bundle
-- **direct mode**: Incorporate feedback into implementation approach
+- **direct mode**: Re-run **current task only** using tasks.md §4 payload for `current_task_id` + user feedback verbatim. Do **not** re-read agents.md, constitution.md, specs.md, plan.md, or repo-assessment.md — phase context was already loaded on the first task of this phase
 - Continue to step 3 (re-execute current task)
 
 ### 3. Select change and verify (first invocation only)
@@ -303,16 +303,26 @@ current_task_result:
 
 #### ELSE (codegen_mode = direct)
 
-##### 4a. Read context files
+##### 4a. Read context files (phase-scoped — cost optimization)
 
-Read the following for architecture patterns, guardrails, and task-specific guidance:
-- agents.md (repo root) — architecture patterns, test exemplars, coding conventions
-- constitution.md (harness-evals/constitution.md) — guardrails and verification requirements
-- specs.md — requirements traced by this task
-- plan.md — phase goals and verification hooks
-- repo-assessment.md — target files, reusable assets
-- tasks.md §4 payload for **current Task ID only**
-- REVISION FEEDBACK if retrying after rejection
+**First pending task of the current phase only** — load shared context once per phase (not once per task):
+
+1. Read and **excerpt** (retain phase-relevant slices only — do not carry full documents into every task):
+   - `agents.md` (repo root) — patterns and test exemplars for this phase's Assigned Agents
+   - `harness-evals/constitution.md` — guardrails for this phase's task types and target files
+   - `specs.md` — user stories, FR, and SC referenced by this phase's tasks (from tasks.md §3 User Story column)
+   - `plan.md` — **current Phase N section only** (Goal, Target files, Verification hooks)
+   - `repo-assessment.md` — target-file and reuse sections cited by this phase only
+
+2. **Context scope:** Use only excerpts relevant to Phase N's target files and user stories. Do not reload or re-reason over full constitution.md, plan.md, or repo-assessment.md on individual tasks.
+
+**Every task in the phase** (including reject/retry):
+- Read `tasks.md` §4 payload for **current Task ID only**
+- On reject/retry: task §4 payload + user feedback from `rejections[]` only — **do not** re-invoke Read on agents.md, constitution.md, specs.md, plan.md, or repo-assessment.md
+
+**Guardrail:** Do NOT re-read shared context files for subsequent tasks in the same phase. Shared artifacts do not change mid-phase.
+
+**One-shot mode:** When `task_execution_mode = one-shot`, load shared context once on the **first pending task** of the run; subsequent tasks read only §4 payloads.
 
 ##### 4b. Implement code directly
 

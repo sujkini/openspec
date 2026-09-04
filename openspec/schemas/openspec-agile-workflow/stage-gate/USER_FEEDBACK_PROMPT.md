@@ -51,17 +51,20 @@ Resolve `{schema_root}` (`openspec/schemas/openspec-agile-workflow/` installed, 
 
 Load mapping from `{schema_root}/stage-gate/artifact-eval-map.yaml` for the current artifact(s).
 
+**Cost optimization:** Load the **minimum** context needed to address user feedback. Do not reload full prior approved artifacts unless feedback explicitly requires cross-checking multiple sections.
+
 | # | Context | Source |
 |---|---------|--------|
-| 1 | **Prior approved artifacts** | Every dependency / `requires` artifact with status `done` — **read-only** |
+| 1 | **Prior approved artifacts** | **Reference by section only** (cite heading/ID) — load full text **only** when feedback names a specific section or contradiction across artifacts |
 | 2 | **Current artifact draft** | Full text at `outputPath` (post eval-gate version) |
 | 3 | **Current template** | `{schema_root}/templates/<schema_template>.md` from artifact-eval-map |
 | 4 | **Openspec instructions** | `openspec instructions <artifact-id> --change "<name>" --json` (`instruction`, `rules`, `context`) |
 | 5 | **Eval scorecard** | `openspec/changes/<change>/eval-results/<artifact-id>.yaml` if stage evals ran |
 | 6 | **Prior feedback rounds** | `openspec/changes/<change>/feedback_stage_artifacts/<artifact-id>/round-*.yaml` |
-| 7 | **Change inputs** | `inputs/jira.yaml`, `jira-spec.md` if present |
+| 7 | **Change inputs** | `inputs/jira.yaml`, `jira-spec.md` if present — **only fields cited by feedback** when possible |
+| 8 | **User feedback** | Verbatim rejection text (always required) |
 
-For **joint gates** (`repo-assessment` + `constitution`): load both current artifacts and both templates; revise both in one round.
+For **joint gates** (`repo-assessment` + `constitution`): load both current artifacts and both templates; revise both in one round. Prior approved artifacts remain reference-by-section unless feedback requires full cross-read.
 
 ---
 
@@ -88,11 +91,11 @@ When updating:
 
 Using:
 
-- Prior approved artifacts (read-only context)
-- Current artifact draft
+- Current artifact draft (full)
 - Updated template (Step 3)
 - User feedback (verbatim)
 - Openspec instructions
+- Prior approved artifacts **only as section excerpts** when feedback requires them (not full reload by default)
 
 Regenerate **only** the current artifact at `outputPath`. For joint gates, regenerate **both** co-generated files — never upstream approved artifacts.
 
@@ -181,10 +184,17 @@ Single joint approval covers both. On reject:
 
 ## Implementation task approval variant
 
-Implementation runs OAPE **task-by-task**. User approval is required **after every
-task** before advancing to the next. On reject, append feedback to
-`implementation/design-bundle.md` **REVISION FEEDBACK** and re-run OAPE commands for
-the **current task only** — do not use this artifact feedback loop for per-task code.
+Implementation runs **task-by-task**. User approval is required **after every
+task** before advancing to the next.
+
+- **ai-helpers mode:** On reject, append feedback to
+  `implementation/design-bundle.md` **REVISION FEEDBACK** and re-run OAPE commands for
+  the **current task only** — do not use this artifact feedback loop for per-task code.
+
+- **direct mode:** On reject, re-run the **current task only** using tasks.md §4 payload +
+  user feedback — do **not** reload phase shared context (agents.md, constitution.md,
+  specs.md, plan.md, repo-assessment.md). Do not use this artifact feedback loop for
+  per-task code.
 
 ---
 
