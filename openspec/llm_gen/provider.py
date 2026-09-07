@@ -17,6 +17,7 @@ updated to return real token usage from the API response:
 """
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from dataclasses import dataclass
@@ -25,6 +26,23 @@ from typing import Any
 from openspec.llm_gen.config import LLMConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _accepts_kwarg(fn: Any, name: str) -> bool:
+    """True if ``fn``'s signature declares a parameter named ``name``.
+
+    Current-generation ``anthropic`` SDK releases (adaptive-thinking models,
+    e.g. Claude Opus 5 / Sonnet 5) dropped ``temperature`` from
+    ``messages.create()`` entirely — it's no longer a valid kwarg for those
+    models. Older SDK versions / legacy models still accept it. Checking the
+    live signature (rather than hardcoding one behavior) keeps this working
+    across SDK versions without silently swallowing a real TypeError from an
+    unrelated bad kwarg.
+    """
+    try:
+        return name in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return True
 
 
 class LLMError(RuntimeError):
@@ -148,14 +166,16 @@ class LLMProvider:
             ) from exc
 
         client = anthropic.Anthropic(api_key=self.config.api_key, base_url=self.config.base_url or None)
+        kwargs: dict[str, Any] = dict(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        if _accepts_kwarg(client.messages.create, "temperature"):
+            kwargs["temperature"] = temperature
         try:
-            resp = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
+            resp = client.messages.create(**kwargs)
         except Exception as exc:  # anthropic.APIError and friends
             raise LLMError(f"Anthropic API call failed: {exc}") from exc
 
@@ -254,14 +274,16 @@ class LLMProvider:
             )
 
         client = AnthropicVertex(project_id=self.config.project_id, region=self.config.location)
+        kwargs: dict[str, Any] = dict(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        if _accepts_kwarg(client.messages.create, "temperature"):
+            kwargs["temperature"] = temperature
         try:
-            resp = client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system,
-                messages=[{"role": "user", "content": user}],
-            )
+            resp = client.messages.create(**kwargs)
         except Exception as exc:  # anthropic.APIError and friends
             raise LLMError(f"Anthropic-on-Vertex API call failed: {exc}") from exc
 
