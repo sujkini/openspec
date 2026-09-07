@@ -7,7 +7,10 @@ argument-hint: "[change-name] [--pr <URL>] [--adr <path-or-URL>] [--ep <path-or-
 ---
 
 Generate E2E test plans and executable test code. Supports **three input modes** — the
-pipeline depth adapts based on what is provided:
+pipeline depth adapts based on what is provided.
+
+**When to use:** after OpenSpec development (change name + PR from `/opsx-apply`) **or**
+standalone when you already have a PR and/or ADR/EP — no prior `/opsx-new` workflow required.
 
 | Input | Mode | Pipeline |
 |-------|------|----------|
@@ -211,19 +214,7 @@ gh api repos/<org>/<repo>/pulls/<PR-NUMBER>/reviews
 **Telemetry:** Emit `e2e_run_start` event with `pr_url` (or null), `adr_provided`, `ep_provided`,
 `mode` (pr/design/combined), and `phase`.
 
-### 2. Verify CI status (PR Mode and Combined Mode ONLY)
-
-**Skip this step entirely in Design Mode** (no PR exists).
-
-```bash
-gh pr checks <PR-NUMBER> --repo <org/repo>
-```
-
-- If all checks pass → proceed
-- If checks pending → STOP: "CI checks still running. Wait for CI to pass, then re-run `/opsx-e2e`."
-- If checks failed → STOP: "CI checks failed. Fix the failures first, then re-run `/opsx-e2e`."
-
-### 3. Set up working directory
+### 2. Set up working directory
 
 Create E2E artifacts directory:
 ```
@@ -236,7 +227,7 @@ If no change name exists (Design Mode without prior `/opsx-new`):
 
 All E2E artifacts are written here: `e2e-analysis.md`, `test-plan.md`, `revised-test-plan.md`, generated code.
 
-### 4. Stage 1 — Pre-Analysis
+### 3. Stage 1 — Pre-Analysis
 
 Read and follow **`{schema_root}/e2e-workflow/pre-analysis-gate.md`** in full.
 
@@ -291,7 +282,7 @@ constitution.md + qe-e2e/qe-behaviour.md + harness-docs + generic qe-behaviour.m
 `tokens_out` (e2e-analysis.md token count), `duration_s`, and `refinement_rounds`
 (0 if approved first time).
 
-### 5. Stage 2 — Test Plan Generation
+### 4. Stage 2 — Test Plan Generation
 
 Read and follow **`{schema_root}/e2e-workflow/test-plan-generation.md`** in full.
 
@@ -322,7 +313,7 @@ On approval, emit `e2e_stage_end` with `tokens_in` (e2e-analysis.md + generic qe
 Sections 1-5 + PR diff token count), `tokens_out` (test-plan.md token count), `duration_s`,
 and `refinement_rounds`.
 
-### 6. Stage 3 — Consolidation (Config-Driven)
+### 5. Stage 3 — Consolidation (Config-Driven)
 
 Apply Section 12 of `test-plan-generation.md` (Revised Plan Consolidation).
 
@@ -347,7 +338,7 @@ Apply Section 12 of `test-plan-generation.md` (Revised Plan Consolidation).
 On approval, emit `e2e_stage_end` with `tokens_in` (test-plan.md token count),
 `tokens_out` (revised-test-plan.md token count), `duration_s`, and `refinement_rounds`.
 
-### 7. Stage 4 — Code Generation
+### 6. Stage 4 — Code Generation
 
 Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 
@@ -379,7 +370,7 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo patterns token count),
 `tokens_out` (sum of all generated *_test.go file token counts), `duration_s`, and `refinement_rounds`.
 
-### 8. Stage 5 — Execute, Evaluate, and Push
+### 7. Stage 5 — Execute, Evaluate, and Push
 
 **Design Mode gate:** If running in **Design Mode** (ADR/EP only, no PR), skip Stage 5
 entirely. Instead, output:
@@ -402,7 +393,7 @@ Next steps:
 ======================================================================
 ```
 
-Then proceed directly to Step 9 (Final Summary). Time-saved, story points, and
+Then proceed directly to Step 8 (Final Summary). Time-saved, story points, and
 feedback are collected later by `/opsx-archive` — not here.
 
 **PR Mode / Combined Mode:** Continue with Stage 5 below.
@@ -617,7 +608,7 @@ No separate PR is created — the existing development PR receives the E2E commi
 - Emit `e2e_stage_end` with `tokens_in`, `tokens_out`, `duration_s`.
 - Emit `e2e_run_end` with status (`passed`, `failed_approved`, `not_executed`).
 
-### 9. Final Summary
+### 8. Final Summary
 
 ```
 ## E2E Generation Complete: <change-name>
@@ -699,7 +690,6 @@ will ask for them once this change is archived.
   - **Stage 4 (Code Generation):** Reads `revised-test-plan.md` + `agents.md` (helpers/style
     sections ONLY) + `qe-e2e/helpers.md` (if present). Does NOT re-read `constitution.md`.
 - **User approval gate after every stage** — do not advance until approved
-- **CI must be green** before running in PR/Combined mode — do not generate E2E for failing PRs
 - **Design Mode stops after code generation** — do not attempt execute or push without a PR
 - Never skip the pre-analysis gate — it prevents wasted effort
 - Respect pre-analysis exclusions in all downstream stages

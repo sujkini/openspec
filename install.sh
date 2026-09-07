@@ -21,7 +21,7 @@ Options:
   --no-dashboard   Skip copying and installing the observability dashboard
 
 Prerequisites:
-  git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+  git clone -b main https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 
 Then run:
   /tmp/openspec-workflow/install.sh /path/to/your-project

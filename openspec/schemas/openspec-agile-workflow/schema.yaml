@@ -190,14 +190,16 @@ e2e_exclusion:
 # ---------------------------------------------------------------------------
 e2e_workflow:
   description: >-
-    After a phase PR (phase-iterative) or final PR (one-shot) is raised and CI
-    passes, the user triggers /opsx-e2e to generate E2E test plans and executable
-    test code. This pipeline is decoupled from /opsx-apply and has its own
-    approval gates. E2E phases excluded from OAPE are covered here instead.
+    Generate E2E test plans and executable test code via /opsx-e2e. Can run after
+    OpenSpec development (phase or final PR from /opsx-apply) or standalone when
+    the user provides a PR URL and/or ADR/EP — no prior OpenSpec workflow required.
+    Decoupled from /opsx-apply with its own approval gates. E2E phases excluded
+    from OAPE are covered here instead.
   command: /opsx-e2e
   trigger:
-    phase_iterative: "After phase PR raised + CI green — user invokes /opsx-e2e"
-    one_shot: "After final PR raised + CI green — user invokes /opsx-e2e"
+    phase_iterative: "After OpenSpec phase PR — or standalone with --pr / --adr / --ep"
+    one_shot: "After OpenSpec final PR — or standalone with --pr / --adr / --ep"
+    standalone: "User invokes /opsx-e2e with --pr and/or --adr / --ep (no change workflow)"
   templates:
     pre_analysis_gate: e2e-workflow/pre-analysis-gate.md
     test_plan_generation: e2e-workflow/test-plan-generation.md
@@ -242,7 +244,6 @@ e2e_workflow:
         type: integer
         description: "Phase number being tested (phase-iterative mode)"
   guardrails:
-    - "CI must pass before /opsx-e2e runs"
     - "User approval gate after every stage"
     - "Respect pre-analysis exclusions in all downstream stages"
     - "Match target repo test style (framework, helpers, constants)"

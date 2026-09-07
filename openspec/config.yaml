@@ -18,8 +18,8 @@ flags:
   #                  specialized Cursor commands for API/controller/e2e generation, eval scoring)
   #   "direct"     — plain agent implementation (reads context files, applies FILE OPERATIONS
   #                  directly, no OAPE commands, no code eval gate)
-  codegen_mode: ai-helpers
-  auto_approve: true              # true = auto-approve artifacts (/opsx-continue) and per-task code approval (/opsx-apply). Phase approval, PR creation, and Jira creation are NEVER auto-approved.
+  codegen_mode: direct
+  auto_approve: false             # false = prompt for artifact + per-task code approval (/opsx-apply). Phase approval, PR creation, and Jira creation are NEVER auto-approved.
   max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
   exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
   generate_evaluation_reports: true # Generate <artifact>_evaluation_report.md alongside each artifact
