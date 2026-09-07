@@ -489,11 +489,20 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```bash
    python -m openspec.telemetry.auto on-apply-complete --change "<name>"
    ```
-2. Write `implementation-report.md` aggregating all `task-reports/*.md`
-3. Write `deviation-observed.md` if any deviations logged
+2. Write `implementation-report.md` aggregating all `task-reports/*.md`, and
+   `deviation-observed.md` if any deviations logged. **Cost optimization:** both are
+   deterministic (built directly from files already on disk — no LLM call needed), so
+   when `config.yaml → flags.generation_runtime.reports` is `script` (default), run:
+   ```bash
+   python -m openspec.llm_gen.run --stage report --change "<name>" --report-id implementation-report
+   python -m openspec.llm_gen.run --stage report --change "<name>" --report-id deviation-observed
+   ```
+   `deviation-observed` returns `ok: true, skipped: true` when no task reported a deviation —
+   that is expected, not a failure. On `ok: false`, or when the flag is `agent`,
+   write both files agentically as described.
 
 4. **Implementation approval gate (approve / reject with feedback):**
-   - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).
+   - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).   
    - ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
      - **On approve:** proceed to step 5 (PR prompt).
      - **On reject:** user provides feedback. Increment `implementation_feedback_rounds` in
@@ -628,8 +637,10 @@ When all **current phase** tasks are marked complete:
        ```bash
        python -m openspec.telemetry.auto on-apply-complete --change "<name>"
        ```
-     - Write `implementation-report.md` aggregating all `task-reports/*.md`
-     - Write `deviation-observed.md` if any deviations logged
+     - Write `implementation-report.md` aggregating all `task-reports/*.md`, and
+       `deviation-observed.md` if any deviations logged (same script dispatch as the
+       one-shot path above — see step 6 IF one-shot, item 2 — when
+       `flags.generation_runtime.reports: script`)
      - Present final summary with all phase PR URLs (upstream)
      - Output: **"All implementation complete. Draft PR(s) raised on upstream — CI jobs will run. Once CI passes, run `/opsx-e2e <change-name>` to generate E2E tests. The generated E2E code will be pushed to the PR branch, triggering CI again to validate the tests."**
      - Set state: `COMPLETE`. Write state.yaml.

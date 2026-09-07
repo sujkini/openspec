@@ -123,14 +123,49 @@ If preflight is not printed, the run is non-compliant.
    ```
    Include `--phase <N>` only when task_execution_mode = "phase-iterative" AND artifact is `tasks`.
    Omit `--phase` for one-shot mode and non-task artifacts.
-7. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
+7. **Generation-runtime dispatch.** Read `config.yaml → flags.generation_runtime.<artifact-id>`
+   (`validation` | `specs` | `plan` | `tasks`; default `script` when absent). This flag is the
+   single switch between the **script path (7-script)** and the **agent path (7-agent)** below
+   — both produce the same artifact at the same `outputPath`; only where the tokens are spent
+   differs. Flip the flag to `agent` any time to instantly opt a stage back into the agent
+   session (e.g. to debug, or as a temporary fallback).
+
+   ### 7-script — Non-agentic generation (`generation_runtime.<artifact-id>: script`)
+
+   Applies to `validation`, `specs`, `plan`, `tasks` only (`repo-assessment` and `implementation`
+   are never toggleable — always agentic; see `cost-optimization-stratergy.md`).
+
+   ```bash
+   python -m openspec.llm_gen.run --stage <artifact-id> --change "<name>" \
+     [--phase <N>]                                              # tasks, phase-iterative only, Phase N
+     [--task-min <min> --task-max <max> --task-consolidation-threshold <t>]  # tasks only
+   ```
+
+   - The script reads its own closed bundle (declared dependency files only — never greps the
+     repo), calls the configured LLM API directly (`config.yaml → credentials.llm`), writes the
+     artifact to `outputPath`, and runs the matching deterministic structural gate
+     (`openspec.validators.validation_schema` / `specs_structural` / `plan_structural` /
+     `tasks_structural`) with fail-closed retries (bounded, `credentials.llm.max_retries`) before
+     returning.
+   - It prints **exactly one line of JSON** to stdout: `{"ok": bool, "artifact": "<path>",
+     "score"?, "retries"?, "tokens_in"?, "tokens_out"?, "reason"?}`.
+   - **If `ok: true`:** the artifact is already written and structurally valid — read the
+     summary fields, then proceed directly to step 8 (skip 7a/7b/7c/7d below entirely).
+   - **If `ok: false`:** the script already exhausted its own retries. Do **not** re-invoke it
+     blindly. Escalate this one artifact to the **agent path (7-agent)** below for this
+     invocation only (log that escalation happened), or halt and surface `reason` to the user —
+     whichever the failure calls for. Never silently accept a broken artifact.
+
+   ### 7-agent — Agentic generation (`generation_runtime.<artifact-id>: agent`, or escalated from 7-script)
+
+   `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
    - Generation uses **`{schema_root}/templates/`** (from openspec instructions).
    - **phase-iterative**: pass `phase_scope` and `task_sizing` metadata to the template.
      If Phase N > 1: append new phase tasks to existing tasks.md.
    - **one-shot**: pass `task_sizing` metadata only (no `phase_scope`). Generate all
      phases in a single tasks.md.
 
-   **7a. Single-shot `validation.json` generation (ONLY when artifact is `validation` — cost optimization)**
+   **7a. Single-shot `validation.json` generation (ONLY when artifact is `validation`)**
 
    Use a **same-session, single-turn, no-tools** call:
 
@@ -145,7 +180,7 @@ If preflight is not printed, the run is non-compliant.
    - Emit ONE valid JSON object matching the validation template schema in **one response turn**.
    - Write the result to `outputPath`.
 
-   **7b. Single-shot `specs.md` generation (ONLY when artifact is `specs` — cost optimization)**
+   **7b. Single-shot `specs.md` generation (ONLY when artifact is `specs`)**
 
    Use a **same-session, single-turn, no-tools** call:
 
@@ -160,10 +195,27 @@ If preflight is not printed, the run is non-compliant.
    - Produce the complete `specs.md` in **one response turn**.
    - Write the result to `outputPath`.
 
-   **7c. Single-shot `tasks.md` generation (ONLY when artifact is `tasks` — cost optimization)**
+   **7b2. Single-shot `plan.md` generation (ONLY when artifact is `plan` AND `generation_runtime.plan:
+   agent`, or escalated from 7-script — plan is single-shot-safe once repo-assessment.md +
+   constitution.md already exist as frozen files, so no tool discovery is needed even in the
+   agent path)**
 
-   `repo-assessment` and `plan` remain **agentic** (tool use allowed). For `validation`,
-   `specs`, and `tasks`, use a **same-session, single-turn, no-tools** call:
+   **Before generating (load packed bundle — tool reads allowed here only):**
+   1. `openspec instructions plan --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
+   2. Read `specs.md`, `repo-assessment.md`, `harness-evals/constitution.md`, `agents.md`
+      (repo root, optional), `validation.json` (if present)
+   3. Read `{schema_root}/templates/plan-template.md` (or path from instructions JSON)
+
+   **During generation (FORBIDDEN — no tool calls):**
+   - Do **NOT** use grep, file search, terminal, MCP reads, sub-agents, or any tool that
+     re-fetches repo state — no new repo discovery is needed at this point in the pipeline.
+   - Produce the complete `plan.md` (§0 through §8) in **one response turn**.
+   - Write the result to `outputPath`.
+
+   **7c. Single-shot `tasks.md` generation (ONLY when artifact is `tasks`)**
+
+   `repo-assessment` remains fully agentic (tool use allowed) always. For `validation`,
+   `specs`, `plan`, and `tasks`, use a **same-session, single-turn, no-tools** call:
 
    **Before generating (load packed bundle — tool reads allowed here only):**
    1. `openspec instructions tasks --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
@@ -184,23 +236,26 @@ If preflight is not printed, the run is non-compliant.
      output is genuinely truncated; prefer single-pass (default).
    - Write the result to `outputPath` (append with `---` separator when phase-iterative Phase N > 1).
 
-   **7d. Structural validation gate (ONLY when artifact is `tasks`)**
+   **7d. Structural validation gate (ONLY when artifact is `plan` or `tasks`, agent path)**
 
-   Immediately after writing `tasks.md`, **before** step 8 telemetry:
+   Immediately after writing the artifact, **before** step 8 telemetry:
 
    ```bash
-   python -m openspec.validators.tasks_structural --change "<name>"
+   python -m openspec.validators.plan_structural --change "<name>"     # artifact == plan
+   python -m openspec.validators.tasks_structural --change "<name>"    # artifact == tasks
    ```
 
    - **If `ok: true`:** proceed to step 8.
-   - **If `ok: false`:** regenerate `tasks.md` using the same single-shot rules (step 7c),
+   - **If `ok: false`:** regenerate the artifact using the same single-shot rules (step 7b2/7c),
      passing the `failures[]` list as fix instructions. **Max 2 auto-regeneration attempts.**
      Re-run the validator after each regeneration.
    - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
      evaluation report and approval prompt; do **not** silently ignore structural violations.
 
-   This replaces informal LLM self-check with deterministic checks (Fibonacci complexity,
-   agent roster, §0 FR/US coverage, §3/§4 parity, DAG vs linear order, no Testing_Agent/e2e tasks).
+   This replaces informal LLM self-check with deterministic checks — for `tasks`: Fibonacci
+   complexity, agent roster, §0 FR/US coverage, §3/§4 parity, DAG vs linear order, no
+   Testing_Agent/e2e tasks; for `plan`: §0–§8 section presence, phase template fields, 1:1
+   user-story↔phase mapping, no standalone e2e phase.
 8. **Telemetry — signal artifact written** (silent, non-blocking; emits `phase_progress` with partial tokens):
    ```bash
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --phase <N>
@@ -216,6 +271,26 @@ If preflight is not printed, the run is non-compliant.
    - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
    - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
+
+   **Generation-runtime dispatch for Steps 2–4 (scoring + refinement + evaluation report):**
+   Read `config.yaml → flags.generation_runtime.stage_eval` and `...reports`. When
+   `stage_eval: script` (applies to `repo-assessment`, `plan`, `tasks` — the only `gate:
+   stage_evals` artifacts):
+   ```bash
+   python -m openspec.llm_gen.run --stage stage-eval --change "<name>" --artifact-id <artifact-id>
+   ```
+   This performs STAGE_EVAL_GATE_PROMPT.md Steps 2–3 non-agentically (scoring is always
+   possible without tools since the artifact already exists on disk; auto-refinement — Step 3 —
+   is applied for `plan`/`tasks` only, up to 2 passes; `repo-assessment` is **scored** but never
+   auto-refined here — a failing score is returned as-is for the agent to handle per the
+   existing agentic refinement path). Read the returned JSON (`score`, `pass`, `eval_results`)
+   and continue to Step 4. On `ok: false`, fall back to running Steps 2–3 agentically per the
+   prompt. When `reports: script`, generate the Step 4 evaluation report with:
+   ```bash
+   python -m openspec.llm_gen.run --stage report --change "<name>" --report-id evaluation-report --artifact-id <artifact-id>
+   ```
+   When either flag is `agent`, follow STAGE_EVAL_GATE_PROMPT.md Steps 2–4 exactly as
+   written (in-session agent scoring/refinement/report).
 10. **Telemetry — signal waiting for approval** (silent, non-blocking; emits `phase_progress` with eval score):
     ```bash
     python -m openspec.telemetry.auto on-waiting-approval --change "<name>" --artifact "<artifact-id>" --score <eval_score>
@@ -389,7 +464,12 @@ Stop after user approval/rejection of the current artifact and completion of any
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
-- **`validation.json`, `specs.md`, and `tasks.md` are single-shot** — For these artifacts, steps 7a/7b/7c forbid tool use during generation; step 7d runs `openspec.validators.tasks_structural` as a hard gate for `tasks` only. `repo-assessment` and `plan` remain agentic.
+- **`validation.json`, `specs.md`, `plan.md`, and `tasks.md` can run non-agentically** — Read
+  `config.yaml → flags.generation_runtime.<artifact-id>` at step 7 (see 7-script/7-agent). When
+  `script` (default), `python -m openspec.llm_gen.run` calls the configured LLM API directly and
+  returns a small JSON verdict; when `agent`, steps 7a/7b/7c forbid tool use during generation as
+  before, and step 7d runs the matching `openspec.validators.*_structural` hard gate for `plan`
+  and `tasks`. `repo-assessment` and `implementation` are **never** toggleable — always agentic.
 
 ## Batch / Continue-All Telemetry
 

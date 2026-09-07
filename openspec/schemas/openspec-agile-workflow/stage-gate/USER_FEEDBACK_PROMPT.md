@@ -89,6 +89,24 @@ When updating:
 
 ## Step 4 — Regenerate refined artifact(s)
 
+**Cost optimization — non-agentic regeneration path:** For `validation`, `plan`, and `tasks`
+(never `repo-assessment` — its feedback may require re-verifying against the real repo, so it
+always stays agentic; `specs` rejection never reaches this step — see the exit-workflow
+exception above), regeneration runs via a direct LLM API call whenever `config.yaml →
+flags.generation_runtime.feedback` is `script`:
+
+```bash
+python -m openspec.llm_gen.run --stage feedback --change "<name>" --artifact-id <artifact-id> \
+  --feedback "<verbatim user feedback>" [--phase <N>]
+```
+
+This re-reads the same closed bundle the original generation stage used, appends the feedback
+verbatim to the prompt, regenerates the artifact, and re-runs the matching structural gate —
+Step 3 (template updates) is skipped by this path since it only ever regenerates the artifact,
+never the template; if feedback requires a template change, update the template agentically
+first, then dispatch the script for the content regeneration. On `ok: false`, or when the flag
+is `agent`, regenerate agentically as described next.
+
 Using:
 
 - Current artifact draft (full)

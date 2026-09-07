@@ -1,0 +1,13 @@
+# Direct-LLM-API dependencies for openspec.llm_gen (non-agentic stage execution).
+# pyyaml is required for every provider.
+pyyaml>=6.0
+
+# Install ONLY the SDK matching openspec/config.yaml -> credentials.llm.provider:
+#   provider: anthropic         ->  pip install anthropic
+#   provider: openai            ->  pip install openai
+#   provider: vertex            ->  pip install google-cloud-aiplatform
+#   provider: anthropic_vertex  ->  pip install anthropic   (same package as provider: anthropic;
+#                                    includes the AnthropicVertex client. Also requires
+#                                    Application Default Credentials, e.g. `gcloud auth
+#                                    application-default login` — no separate google-cloud package
+#                                    needed for this provider.)

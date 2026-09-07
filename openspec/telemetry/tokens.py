@@ -49,14 +49,44 @@ def estimate_tokens_for_files(paths: Sequence[Path]) -> int:
     return sum(estimate_file_tokens(p) for p in paths)
 
 
+def read_real_usage(change_dir: Path, artifact_id: str) -> tuple[int, int] | None:
+    """Read real token usage written by openspec.llm_gen (see
+    ``llm_gen/telemetry_bridge.py``) for an artifact generated non-agentically.
+
+    Returns None when no such file exists — callers should fall back to the
+    tiktoken estimate for agent-generated artifacts (real usage is strictly
+    more accurate than any estimate, so it always wins when present).
+    """
+    path = change_dir / "telemetry" / "llm-usage" / f"{artifact_id}.json"
+    if not path.exists():
+        return None
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return int(data.get("tokens_in", 0)), int(data.get("tokens_out", 0))
+    except Exception as exc:
+        logger.debug("Could not read real usage for %s: %s", artifact_id, exc)
+        return None
+
+
 def estimate_artifact_tokens(change_dir: Path, artifact_id: str) -> tuple[int, int]:
     """Estimate input and output tokens for an artifact creation.
+
+    Prefers **real** token usage from a direct LLM API call
+    (``openspec.llm_gen`` — see ``read_real_usage``) when available; this is
+    exact rather than an estimate. Falls back to the tiktoken estimate below
+    for artifacts generated in-agent.
 
     Input = dependency artifacts + inputs that the agent reads as context.
     Output = the artifact file that was generated.
 
     Returns (tokens_in, tokens_out).
     """
+    real_usage = read_real_usage(change_dir, artifact_id)
+    if real_usage is not None:
+        return real_usage
+
     input_files: list[Path] = []
     output_files: list[Path] = []
 
@@ -171,12 +201,33 @@ def estimate_artifact_phase_tokens(change_dir: Path, phase_number: int) -> tuple
 
     Like ``estimate_phase5_tokens`` but for artifact phases: counts shared
     inputs once and sums all artifact outputs in the phase.
+
+    Artifacts generated via ``openspec.llm_gen`` (real usage file present)
+    contribute their exact token counts directly instead of going through the
+    shared-input estimate below — real usage already reflects the full bundle
+    that call actually sent, so it is never double-counted against the
+    heuristic shared-input files collected for the remaining, agent-generated
+    artifacts in the phase.
     """
     from .change_metrics import PHASE_ARTIFACTS
 
     artifact_ids = PHASE_ARTIFACTS.get(phase_number, [])
     if not artifact_ids:
         return 0, 0
+
+    tokens_in = 0
+    tokens_out = 0
+    estimated_ids = []
+    for artifact_id in artifact_ids:
+        real_usage = read_real_usage(change_dir, artifact_id)
+        if real_usage is not None:
+            tokens_in += real_usage[0]
+            tokens_out += real_usage[1]
+        else:
+            estimated_ids.append(artifact_id)
+
+    if not estimated_ids:
+        return tokens_in, tokens_out
 
     input_files: list[Path] = []
     output_files: list[Path] = []
@@ -195,7 +246,7 @@ def estimate_artifact_phase_tokens(change_dir: Path, phase_number: int) -> tuple
         "tasks": ["specs.md", "plan.md", "constitution.md"],
     }
     seen_deps: set[str] = set()
-    for artifact_id in artifact_ids:
+    for artifact_id in estimated_ids:
         for dep_name in dependency_map.get(artifact_id, []):
             if dep_name not in seen_deps:
                 dep_path = change_dir / dep_name
@@ -209,7 +260,7 @@ def estimate_artifact_phase_tokens(change_dir: Path, phase_number: int) -> tuple
                 output_files.append(out_path)
                 break
 
-    tokens_in = estimate_tokens_for_files(input_files)
-    tokens_out = estimate_tokens_for_files(output_files)
+    tokens_in += estimate_tokens_for_files(input_files)
+    tokens_out += estimate_tokens_for_files(output_files)
 
     return tokens_in, tokens_out

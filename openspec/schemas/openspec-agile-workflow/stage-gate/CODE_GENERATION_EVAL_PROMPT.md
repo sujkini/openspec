@@ -130,6 +130,26 @@ Do NOT continue refinement on a duplicated/corrupted Go file body.
 
 ## Step 3 — Score each applicable eval case
 
+**Cost optimization — non-agentic scoring path (primary):** Steps 2 and 4 (real `go
+build`/`go vet`/`make`/`go test` execution) are **never** LLM reasoning, so they always stay
+literal shell commands run directly by the agent — nothing to offload there. Step 3 (judging
+assertions against the diff) has no tool dependency once Step 2's real exit codes are known, so
+it runs via a direct LLM API call whenever `config.yaml → flags.generation_runtime.code_eval_score`
+is `script`:
+
+```bash
+python -m openspec.llm_gen.run --stage code-eval --change "<name>" \
+  --task-id <TASK_ID> --oape-command <resolved-command> --fork-dir <fork-working-copy-path> \
+  --results-file <path-to-json-with-real-verification-and-test_execution-results>
+```
+
+Write `--results-file` yourself from the REAL Step 2/Step 4 command output before calling
+this, shaped as `{"verification": {...Step 2c schema...}, "test_execution": {...Step 4d
+schema...}, "refinement_rounds": N}` — the script never re-derives or guesses these; it only
+scores the LLM-judgeable assertions and merges everything into the single eval-results file
+below. On `ok: false`, or when the flag is `agent`, score Step 3 agentically as
+written next.
+
 For each filtered case in `evals:`:
 
 1. Read case `prompt`, `assertions`, `scoring.pass_threshold`

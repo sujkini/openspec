@@ -437,20 +437,109 @@ latest, since phase-iterative changes may run E2E once per phase).
 The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
 `metrics-report.json` for its live view — see `dashboard/README.md` for details.
 
-### Cost optimization: single-shot `tasks.md`
+### Cost optimization: non-agentic generation via `openspec.llm_gen`
 
-Only the **`tasks`** artifact uses a same-session, single-turn generation path
-(no tool calls during generation). Validation, specs, repo-assessment, plan, and
-implementation remain agentic. After `tasks.md` is written, a deterministic
-structural validator runs (no LLM):
+`validation`, `specs`, `plan`, and `tasks` can each generate **outside** the
+Cursor agent session — a plain Python script (`openspec.llm_gen`) reads the
+exact same closed bundle the agent would have read, calls an LLM API directly
+with your own API key, writes the artifact, and runs a deterministic
+structural gate before handing back a one-line JSON verdict for the agent to
+resume on. `repo-assessment` and `implementation` are **never** eligible —
+they require real repository discovery/tool use and always stay agentic.
+
+**Why this saves tokens without a quality trade-off:** the savings come from
+removing the *agent-loop overhead* (system prompt, tool schemas,
+chain-of-thought, repeated context reloads across turns) — not from
+downgrading the model. Configure the same (or an even stronger) model for
+generation in `credentials.llm.model`.
+
+**Enabled by default, per stage** in `openspec/config.yaml` (each flag is
+independently reversible — set a stage to `agent` any time, with zero code
+change, to opt just that one stage back into the agent session):
+
+```yaml
+credentials:
+  llm:
+    provider: anthropic              # anthropic | openai | vertex | anthropic_vertex
+    model: ""                        # generation model (validation/specs/plan/tasks) — keep as strong as the agent
+    judge_model: ""                  # scoring/report model (stage_eval/code_eval_score/reports) — may be cheaper
+    api_key_env: OPENSPEC_LLM_API_KEY  # set this env var — never put the raw key in this file (unused for vertex/anthropic_vertex)
+    project_id: ""                    # vertex and anthropic_vertex only
+    location: "us-central1"           # vertex and anthropic_vertex only
+    max_output_tokens: 8000
+    temperature: 0.2
+    max_retries: 2
+
+flags:
+  generation_runtime:
+    validation: script       # -> agent to fall back to in-agent generation for this stage
+    specs: script
+    plan: script
+    tasks: script
+    stage_eval: script       # scoring+refinement for repo-assessment/plan/tasks
+    code_eval_score: script  # code-generation eval scoring only (build/test/verify always run for real)
+    reports: script          # implementation-report / deviation-observed / <artifact>_evaluation_report
+    feedback: script         # regeneration on user-rejection feedback (validation/plan/tasks)
+```
+
+| `provider` | Auth | Notes |
+|---|---|---|
+| `anthropic` | API key (`api_key_env`) | Direct Anthropic API |
+| `openai` | API key (`api_key_env`) | Direct OpenAI API |
+| `vertex` | ADC (`gcloud auth application-default login`, no API key) | Gemini models via Vertex AI; needs `project_id` + `location` |
+| `anthropic_vertex` | ADC (`gcloud auth application-default login`, no API key) | Claude models on Vertex AI Model Garden; needs `project_id` + `location`, and **`model`/`judge_model` set explicitly** to the model ID enabled in your Vertex deployment (current-generation models use dateless IDs, e.g. `claude-opus-5` / `claude-sonnet-5`; older models need a dated suffix like `claude-3-5-sonnet-v2@20241022`) — there's no safe generic default to guess for this provider |
+
+Install the SDK matching your chosen provider (see
+`openspec/llm_gen/requirements.txt`): `pip install anthropic` (covers both
+`anthropic` and `anthropic_vertex`), `pip install openai`, or
+`pip install google-cloud-aiplatform` (`vertex` only).
+
+`/opsx-continue` and `/opsx-apply` dispatch to `openspec.llm_gen` automatically
+for any stage whose flag is `script` (the default) — see the
+"Generation-runtime dispatch" notes in `.cursor/commands/opsx-continue.md`
+and `.cursor/commands/opsx-apply.md`. **Set `OPENSPEC_LLM_API_KEY` (or your
+configured `api_key_env`) before starting the workflow** — if it's missing,
+every script call fails closed (`ok: false`) and the workflow automatically
+escalates that stage to in-agent generation instead, so nothing breaks, but
+you also won't get the token savings until the key is set. You can also
+invoke the script directly:
 
 ```bash
+python -m openspec.llm_gen.run --stage validation --change "<name>"
+python -m openspec.llm_gen.run --stage plan --change "<name>"
+```
+
+**Fail-closed, always:** on invalid output or a failed structural gate, the
+script retries the same call (up to `credentials.llm.max_retries`) with the
+failures fed back into the prompt. If still failing, it returns `ok: false`
+with a `reason` — the workflow escalates that one artifact to the agent or
+halts; it never silently accepts a broken artifact.
+
+**New deterministic structural gates** (parity with the existing
+`tasks_structural.py`, now applied to every generated artifact):
+
+```bash
+python -m openspec.validators.validation_schema --change "<name>"
+python -m openspec.validators.specs_structural --change "<name>"
+python -m openspec.validators.plan_structural --change "<name>"
 python -m openspec.validators.tasks_structural --change "<name>"
 ```
 
-Compare token usage before/after by running the same Jira ticket twice and
-diffing `metrics-report.json` → `global_health.total_tokens_consumed` and the
-`tasks` phase row in `phases[]`.
+**Real token accounting:** direct API calls report exact `tokens_in`/`tokens_out`
+from the provider response, written to
+`openspec/changes/<name>/telemetry/llm-usage/<artifact-id>.json`.
+`openspec.telemetry.tokens` prefers this exact figure over the tiktoken
+estimate whenever it is present, so `metrics-report.json` totals are exact
+for script-generated artifacts and estimated (as before) for agent-generated
+ones.
+
+**Compare before/after:** run the same Jira ticket once with a stage's flag
+set to `agent` and once set to `script`, then diff
+`eval-results/<artifact-id>.yaml` scores and `metrics-report.json` →
+`global_health.total_tokens_consumed` (plus the artifact's row in
+`phases[]`). The acceptance bar for keeping a stage on `script` is eval-score
+parity or better versus the agentic baseline — not just a lower token count.
+See `cost-optimization-stratergy.md` for the full design rationale.
 
 ### Publishing metrics to the cross-operator dashboard
 
@@ -535,6 +624,20 @@ flags:
   auto_approve: true                    # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
   max_feedback_rounds: 3
   exit_on_all_tasks_complete: true
+  generation_runtime:                   # per-stage agent | script — see "Cost optimization" below
+    validation: script
+    specs: script
+    plan: script
+    tasks: script
+    stage_eval: script
+    code_eval_score: script
+    reports: script
+    feedback: script
+
+credentials:
+  llm:                                  # only used when a generation_runtime flag above is "script"
+    provider: anthropic                 # anthropic | openai | vertex
+    api_key_env: OPENSPEC_LLM_API_KEY
 ```
 
 | Flag | Default | What it does |
@@ -544,6 +647,8 @@ flags:
 | `auto_approve` | `true` | Auto-approve artifacts (`/opsx-continue`) and per-task code approval (`/opsx-apply`). Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
 | `max_feedback_rounds` | `3` | Max rejection + refinement loops per artifact before halting |
 | `exit_on_all_tasks_complete` | `true` | Auto-exit implementation when all tasks marked `[x]` |
+| `generation_runtime.*` | `script` (every key) | Per-stage switch to run that stage as an external script + direct LLM API call instead of in the Cursor agent session. Set a key to `agent` to opt that stage back into the agent session. See [Cost optimization](#cost-optimization-non-agentic-generation-via-openspecllm_gen). |
+| `credentials.llm.*` | unset | Provider/model/API-key-env for `openspec.llm_gen` — must be configured (API key exported) for the `script` default to actually run non-agentically; falls back to `agent` per stage on `ok: false` otherwise. |
 
 ### Code generation modes
 
@@ -685,6 +790,12 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 │   │   │   └── qe-behaviour.md              # Generic QE rules (Sections 1-5) + templates for 3a/3b
 │   │   ├── stage-gate/                       # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/         # Format spec for rejection rounds
+│   ├── validators/                           # Deterministic (no-LLM) structural gates per artifact
+│   ├── llm_gen/                              # Non-agentic stage execution — direct LLM API calls
+│   │   ├── run.py                            # CLI dispatcher: python -m openspec.llm_gen.run --stage ...
+│   │   ├── provider.py                       # Multi-provider LLM client (anthropic/openai/vertex)
+│   │   ├── context_pack.py                   # Closed-bundle dependency-file reader
+│   │   └── stages/                           # validation, specs, plan, tasks, stage_eval, code_eval, report, feedback
 │   ├── telemetry/                            # Telemetry collection: metrics-report.json (dev) + qe-metrics.json (QE)
 │   └── changes/                              # Active changes (created per /opsx-new)
 ├── .cursor/                                  # Pre-built — Cursor loads immediately
@@ -818,6 +929,20 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 |-------------|------------|-------------|
 | Jira MCP | Read tickets, create Stories under Epic | `config.yaml → credentials.jira` (user's PAT) |
 | GitHub MCP | Read repos, create draft PRs | `config.yaml → credentials.github` (user's PAT) |
+
+**Direct LLM API calls (`openspec.llm_gen`, default for validation/specs/plan/tasks/stage-eval/code-eval/reports/feedback):**
+
+| Integration | Operations | Credentials |
+|-------------|------------|-------------|
+| Anthropic / OpenAI / Vertex AI API | Generate or score `validation.json`, `specs.md`, `plan.md`, `tasks.md`, stage-eval scores, code-eval scores, reports | `config.yaml → credentials.llm.api_key_env` (user's own provider API key, read from an environment variable — never stored in `config.yaml`) |
+
+This path is exercised whenever `config.yaml → flags.generation_runtime.<stage>` is `script`
+(the default for every stage listed above — set a stage's flag to `agent` to opt it back into
+the Cursor agent session). It runs as a plain local Python script — not a hosted service — and
+reads only the same declared dependency files the agent would otherwise have read. It calls the
+provider's API directly with the user's own key, billed to the user's own provider account
+(separate from any Cursor/Claude Code subscription). `repo-assessment` and `implementation` are
+never eligible for this path and always run agentically.
 
 **Data Sources:**
 
@@ -955,6 +1080,8 @@ The agent cannot access any repository, Jira project, or API the user is not alr
 | Duplicate `package` errors in Go build | Agent appended to a source file instead of editing | Reset file with `git checkout -- <file>`, then re-run `/opsx-apply` |
 | State recovery after crash | `state.yaml` persists the last transition | Re-run `/opsx-apply` — it reads `state.yaml` and resumes from last state |
 | Preflight log not printed | Agent skipped mandatory config read | Re-run the command; if repeated, check that `openspec/config.yaml` exists |
+| `openspec.llm_gen` returns `"No API key found..."` | `generation_runtime.<stage>` is `script` (the default) but the env var named by `credentials.llm.api_key_env` isn't exported | `export OPENSPEC_LLM_API_KEY=...` (or your configured var name) — the workflow already fell back to `agent` for this run automatically |
+| `openspec.llm_gen` returns `ok: false` after retries | Structural gate kept failing, or the LLM API call errored | Read `reason` in the printed JSON; the workflow escalates that one artifact to the agent — no manual action usually needed |
 
 ### Feedback Mechanism
 

@@ -37,6 +37,23 @@ Save a copy reference: you will need v1 text for refinement even after overwriti
 
 ## Step 2 — Run stage evals
 
+**Cost optimization — non-agentic scoring path (primary):** Judging an artifact that already
+exists on disk needs no tools, so Steps 2–3 below run via a direct LLM API call whenever
+`config.yaml → flags.generation_runtime.stage_eval` is `script`:
+
+```bash
+python -m openspec.llm_gen.run --stage stage-eval --change "<name>" --artifact-id <artifact-id>
+```
+
+This reads `artifact-eval-map.yaml` and `<stage>_eval.yaml` itself, scores every case, and
+— for `plan`/`tasks` only — auto-refines up to 2 passes (feeding failed-case details back into
+the same non-agentic generator). `repo-assessment` is scored but never auto-refined here;
+a failing score is returned for the agent to refine per this document's Step 3 (agentic path),
+since repo-assessment refinement may require re-verifying against the real repo. It writes
+`eval-results/<artifact-id>.yaml` in the exact schema shown below and returns
+`{"ok", "score", "pass", "eval_results", "tokens_in", "tokens_out"}`. On `ok: false`, or when
+the flag is `agent`, fall back to the fully agentic Steps 2–3 below.
+
 Load mapping from `artifact-eval-map.yaml`:
 
 | `gate` | Action |
@@ -124,6 +141,18 @@ Include in the refinement prompt — do not regenerate blind:
 Re-run Step 2 on v2. Update eval-results file (append `refinement_round: 2` or replace with latest).
 
 ## Step 4 — Generate evaluation report
+
+**Cost optimization — non-agentic report path:** When `config.yaml → flags.generation_runtime.reports`
+is `script`:
+
+```bash
+python -m openspec.llm_gen.run --stage report --change "<name>" --report-id evaluation-report --artifact-id <artifact-id>
+```
+
+This builds the Eval Summary table deterministically from `eval-results/<artifact-id>.yaml`
+(no LLM call for the table) and makes one short LLM call for the Gap Analysis / Quality
+Assessment / Recommendations narrative only. Falls back to the fully agentic path below on
+`ok: false` or when the flag is `agent`.
 
 After eval scoring (or rubric check for validation), generate an **evaluation report** and write it alongside the artifact:
 

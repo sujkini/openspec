@@ -1344,6 +1344,16 @@ artifacts:
     instruction: |
       Create plan.md — the Technical Implementation Plan for the feature.
 
+      ## Generation mode (cost optimization)
+      Unlike repo-assessment, plan.md needs NO new repo discovery once specs.md,
+      repo-assessment.md, and constitution.md already exist as frozen, approved files.
+      Load inputs with tool reads once, then produce plan.md in a **single turn with no
+      further tool calls**. Packed bundle only: specs.md, repo-assessment.md,
+      constitution.md, AGENTS.md (if present), validation.json (if present),
+      plan-template.md. Do not grep the repo or re-run repo-assessment mid-generation.
+      This stage may run as an external script (see `openspec/config.yaml →
+      flags.generation_runtime.plan`) — see `{schema_root}/../../llm_gen/stages/plan.py`.
+
       ## Input precedence (conflicts)
       1. constitution.md (non-negotiable guardrails — resolved as INPUT, not generated)
       2. specs.md (validated feature requirements)

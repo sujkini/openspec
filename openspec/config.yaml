@@ -18,7 +18,7 @@ flags:
   #                  specialized Cursor commands for API/controller/e2e generation, eval scoring)
   #   "direct"     — plain agent implementation (reads context files, applies FILE OPERATIONS
   #                  directly, no OAPE commands, no code eval gate)
-  codegen_mode: ai-helpers
+  codegen_mode: direct
   auto_approve: true              # true = auto-approve artifacts (/opsx-continue) and per-task code approval (/opsx-apply). Phase approval, PR creation, and Jira creation are NEVER auto-approved.
   max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
   exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
@@ -34,6 +34,24 @@ flags:
     default_min: 2
     default_max: 3
     consolidation_threshold: 2
+  # generation_runtime controls, per stage, whether artifact generation/scoring runs
+  # in the Cursor agent session ("agent") or as an external script that calls an LLM
+  # API directly ("script" — see openspec.llm_gen). Default is "script" everywhere —
+  # this is the whole point of openspec.llm_gen (token/cost savings). Each stage is
+  # still an independent, instantly reversible toggle — flip a stage to "agent" only
+  # to debug or temporarily fall back for that one stage.
+  # repo-assessment and implementation are NOT listed here — they are always agentic
+  # and cannot be routed through openspec.llm_gen (deep reasoning / repo discovery
+  # required).
+  generation_runtime:
+    validation: script          # agent | script
+    specs: script                # agent | script
+    plan: script                  # agent | script
+    tasks: script                  # agent | script
+    stage_eval: script              # agent | script — scoring+refinement for repo-assessment/plan/tasks
+    code_eval_score: script          # agent | script — code-generation eval scoring only (verification/tests always run as real shell commands)
+    reports: script                   # agent | script — implementation-report.md, deviation-observed.md, <artifact>_evaluation_report.md
+    feedback: script                   # agent | script — regeneration on user-rejection feedback (validation/specs/plan/tasks only)
 
 # User credentials (fill before /opsx-apply or /opsx-e2e)
 credentials:
@@ -47,6 +65,31 @@ credentials:
     token: ""             # GitHub PAT (for cross-repo PR creation)
   cluster:
     kubeconfig_path: ""   # absolute path to kubeconfig for E2E execution
+  llm:
+    # Direct LLM API credentials used ONLY by openspec.llm_gen (non-agentic stages).
+    # Never commit a real key here — set the environment variable named by api_key_env
+    # instead. This is entirely separate from the Cursor/Claude Code subscription;
+    # calling a provider API directly bills the provider account, not Cursor.
+    provider: anthropic_vertex    # anthropic | openai | vertex | anthropic_vertex
+    # anthropic         -> direct Anthropic API, auth via api_key_env
+    # openai            -> direct OpenAI API, auth via api_key_env
+    # vertex            -> Gemini models on Vertex AI, auth via ADC (project_id + location, no api key)
+    # anthropic_vertex  -> Claude models on Vertex AI Model Garden, auth via ADC (project_id + location,
+    #                      no api key) — run `gcloud auth application-default login` first, and make
+    #                      sure the chosen model is Enabled in your project's Vertex Model Garden.
+    #                      Current-generation Claude models use dateless Vertex IDs (e.g. "claude-opus-5",
+    #                      "claude-sonnet-5"); older models need a dated snapshot suffix (e.g.
+    #                      "claude-3-5-sonnet-v2@20241022"). Set `model`/`judge_model` explicitly —
+    #                      there is no generic default to guess for this provider.
+    model: "claude-opus-5"        # generation model (validation/specs/plan/tasks/feedback) — Anthropic's recommended default for "most workloads" / "complex agentic coding and enterprise work" as of this writing; confirm it's still Enabled in your project's Vertex Model Garden
+    judge_model: "claude-sonnet-5"  # scoring/report model (stage_eval/code_eval_score/reports) — "best combination of speed and intelligence", cheaper than Opus 5 while still current-generation
+    api_key_env: OPENSPEC_LLM_API_KEY  # name of the env var holding the API key (never store the raw key in this file; unused for vertex/anthropic_vertex)
+    base_url: ""                 # optional override (e.g. self-hosted gateway, Azure OpenAI endpoint) — anthropic/openai only
+    project_id: "itpc-ca-b69e82dfde"  # vertex and anthropic_vertex only
+    location: "global"             # vertex and anthropic_vertex only — from your Claude Code /login wizard; verify in the GCP console that Claude models are actually served in "global" for this project (Claude-on-Vertex has historically required a specific region like us-east5/europe-west1/asia-southeast1 rather than "global" — if the API call errors with a region/model-not-found message, switch this to your model's actual serving region)
+    max_output_tokens: 8000
+    temperature: 0.2
+    max_retries: 2                 # fail-closed: retry the same call with failures fed back, then hard-fail (ok: false)
 
 rules:
   validation:
