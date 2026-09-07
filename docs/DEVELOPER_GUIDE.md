@@ -25,7 +25,6 @@ Optional but recommended:
 - **`agents.md`** at operator repo root — coding/test conventions
 - **`harness-evals/constitution.md`** — run `/opsx-constitute` once to generate
 - **`harness-evals/harness-docs/`** — operator docs fed into constitution
-- **`qe-e2e/qe-behaviour.md`** — operator E2E deployment context (for `/opsx-e2e`)
 
 ---
 
