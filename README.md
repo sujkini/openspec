@@ -12,7 +12,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ```bash
 rm -rf /tmp/openspec-workflow
-git clone -b openspec-v1-restructured https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b llm-api-cost-optimization https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
@@ -33,6 +33,23 @@ flags:
 | `codegen_mode` | `ai-helpers` / `direct` | Code generation strategy |
 | `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
 | `auto_approve` | `true` / `false` | Auto-approve artifacts and per-task code approval. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
+
+**Non-agentic generation is on by default.** `validation`, `specs`, `plan`,
+`tasks`, and the eval/report/feedback stages run as external scripts
+(`openspec.llm_gen`) calling an LLM API directly instead of consuming Cursor
+agent-loop tokens (`flags.generation_runtime.*` defaults to `script` for all
+of them — see [Cost optimization](#cost-optimization-non-agentic-generation-via-openspecllm_gen)).
+Before your first `/opsx-continue`, either:
+
+- **Set up an API key** — export the env var named by `credentials.llm.api_key_env`
+  (default `OPENSPEC_LLM_API_KEY`) and `pip install anthropic` (or `openai` /
+  `google-cloud-aiplatform`, matching `credentials.llm.provider`), **or**
+- **Opt out** by setting the stages you haven't configured yet back to `agent`
+  in `flags.generation_runtime` (`openspec/config.yaml`).
+
+If a stage is `script` but no key is set, it fails closed and the workflow
+automatically falls back to agentic generation for that stage — nothing
+breaks, but you won't get the token savings until a key is configured.
 
 ### 3. Add operator documentation
 
