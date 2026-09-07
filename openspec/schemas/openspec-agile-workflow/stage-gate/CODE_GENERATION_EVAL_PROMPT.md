@@ -42,7 +42,6 @@ From the current task, determine `oape_command`:
 | `/oape:api-generate` | `api-generate` |
 | `/oape:api-generate-tests` | `api-generate-tests` |
 | `/oape:api-implement` | `api-implement` |
-| `/oape:e2e-generate` | `e2e-generate` |
 | Manual agent (no OAPE) | `manual` |
 
 Load `harness-evals/evals/code-generation_eval.yaml`. Score only cases where:
@@ -179,7 +178,7 @@ the task type. Tests are **real `go test` executions** — not agent assertions.
 | **Feature gate** | modifies `features.go` | Tier 2 | Run existing tests |
 | **Codegen / verify** | `make generate` | Tier 3 | `make verify` |
 | **OLM bundle** | modifies bundle/ or CSV | Tier 3 | `make bundle && hack/verify-bundle.sh` |
-| **E2E** | `e2e-generate` | Tier 3 | `go build` on test package |
+| **E2E** | handled by `/opsx-e2e` | — | Skipped during OAPE |
 
 ### 4b-i. Controller logic tasks — co-generate `_test.go` (Tier 1)
 

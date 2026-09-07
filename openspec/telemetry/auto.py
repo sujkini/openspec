@@ -47,6 +47,42 @@ def _regenerate_report(change: str) -> None:
         logger.debug("Report generation failed (non-fatal): %s", exc)
 
 
+def _regenerate_qe_report(change: str) -> None:
+    """Re-generate qe-metrics.json after a QE hook fires."""
+    try:
+        from .qe_metrics import generate_qe_report
+        generate_qe_report(change)
+    except Exception as exc:
+        logger.debug("QE report generation failed (non-fatal): %s", exc)
+
+
+def _e2e_events_path(change: str) -> Path:
+    return CHANGES_DIR / change / "telemetry" / "e2e-events.jsonl"
+
+
+def _latest_e2e_run_id(change: str) -> str:
+    """Best-effort lookup of the most recent e2e_run_start id for this change.
+
+    Used only for traceability on the qe_archive_feedback event — a
+    phase-iterative change may have multiple E2E runs by archive time.
+    """
+    path = _e2e_events_path(change)
+    if not path.exists():
+        return ""
+    run_id = ""
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            ev = json.loads(line)
+            if ev.get("type") == "e2e_run_start":
+                run_id = ev.get("id", "") or run_id
+    except (OSError, json.JSONDecodeError):
+        pass
+    return run_id
+
+
 def _state_path(change: str) -> Path:
     return CHANGES_DIR / change / STATE_FILE
 
@@ -851,6 +887,64 @@ def sync(args: argparse.Namespace) -> None:
     _regenerate_report(args.change)
 
 
+def on_archive_feedback(args: argparse.Namespace) -> None:
+    """Called by /opsx-archive to record mandatory archive-time feedback.
+
+    Captures story points delivered, the estimated-manual-effort bucket,
+    satisfaction rating, and comments — the same answers written to
+    user-feedback.md — as a structured telemetry event. Must run BEFORE the
+    change directory is moved to openspec/changes/archive/, so the event and
+    the regenerated metrics-report.json are archived with the rest of the
+    change. The event's timestamp becomes the run's ``archived_at``.
+    """
+    state = _load_state(args.change)
+    run_id = state.get("run_id")
+    if not run_id:
+        _out({"skip": True, "reason": "no run_id"})
+        return
+
+    story_points = getattr(args, "story_points", None)
+    client = _client(args.change)
+    try:
+        client.record_archive_feedback(
+            run_id,
+            story_points_delivered=story_points,
+            estimated_manual_effort=getattr(args, "manual_effort", "") or "",
+            satisfaction_rating=getattr(args, "satisfaction", None),
+            comments=getattr(args, "comments", "") or "",
+        )
+        _out({"ok": True, "story_points_delivered": story_points})
+    finally:
+        client.close()
+    _regenerate_report(args.change)
+
+
+def on_qe_archive_feedback(args: argparse.Namespace) -> None:
+    """Called by /opsx-archive to record QE feedback — ONLY when this change
+    had at least one E2E run (detected by the presence of
+    ``telemetry/e2e-events.jsonl``). Unlike development feedback, this is
+    NOT collected inside ``/opsx-e2e`` itself — it fires once, at archive
+    time, alongside the mandatory development feedback questions. Skips
+    silently (not an error) when no E2E run exists for this change.
+    """
+    if not _e2e_events_path(args.change).exists():
+        _out({"skip": True, "reason": "no e2e run for this change"})
+        return
+
+    from .qe_events import QETelemetryClient
+
+    story_points = getattr(args, "story_points", None)
+    client = QETelemetryClient(args.change)
+    client.record_archive_feedback(
+        run_id=_latest_e2e_run_id(args.change),
+        time_saved_pct=getattr(args, "time_saved_pct", None),
+        story_points_delivered=story_points,
+        user_feedback=getattr(args, "feedback", "") or "",
+    )
+    _out({"ok": True, "story_points_delivered": story_points})
+    _regenerate_qe_report(args.change)
+
+
 def report_cmd(args: argparse.Namespace) -> None:
     """On-demand report regeneration."""
     from .report import generate_report
@@ -934,6 +1028,37 @@ def build_parser() -> argparse.ArgumentParser:
     sy = sub.add_parser("sync", help="Sync filesystem state to telemetry")
     sy.add_argument("--change", required=True)
 
+    af = sub.add_parser(
+        "on-archive-feedback",
+        help="Record mandatory archive-time feedback (story points, time savings, satisfaction, comments)",
+    )
+    af.add_argument("--change", required=True)
+    af.add_argument(
+        "--story-points", type=float, default=None,
+        help="Story points delivered for this ticket (mandatory per /opsx-archive guardrail)",
+    )
+    af.add_argument(
+        "--manual-effort", default="",
+        help="Estimated manual-effort bucket, e.g. '4-8 hours (1 day)'",
+    )
+    af.add_argument("--satisfaction", type=int, default=None, help="Satisfaction rating 1-5")
+    af.add_argument("--comments", default="", help="Free-text comments on this run")
+
+    qaf = sub.add_parser(
+        "on-qe-archive-feedback",
+        help="Record QE feedback at archive time — only if this change had an E2E run (skips silently otherwise)",
+    )
+    qaf.add_argument("--change", required=True)
+    qaf.add_argument(
+        "--story-points", type=float, default=None,
+        help="QE story points delivered (mandatory when this change had an E2E run)",
+    )
+    qaf.add_argument(
+        "--time-saved-pct", type=int, default=None,
+        help="Estimated time (%%) saved by the E2E/QE workflow vs. writing/executing tests manually",
+    )
+    qaf.add_argument("--feedback", default="", help="Free-text feedback on the E2E/QE workflow")
+
     rp = sub.add_parser("report", help="Regenerate metrics-report.json")
     rp.add_argument("--change", required=True)
 
@@ -952,6 +1077,8 @@ _DISPATCH = {
     "on-phase-complete": on_phase_complete,
     "on-apply-complete": on_apply_complete,
     "sync": sync,
+    "on-archive-feedback": on_archive_feedback,
+    "on-qe-archive-feedback": on_qe_archive_feedback,
     "report": report_cmd,
 }
 

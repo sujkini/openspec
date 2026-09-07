@@ -16,11 +16,12 @@ Behavioral guidelines to reduce common LLM mistakes in QE workflows. Apply to al
 
 ## 2. Precision Over Volume
 
-**One test per observable behavior. No padding.**
+**One assertion per observable behavior. Multiple assertions per journey are OK. No padding.**
 
 - Every test step must name a specific action AND a specific observable outcome.
 - Never use vague verbs ("verify", "ensure", "check") without a named observable (e.g. condition `Ready=True`, HTTP 200, specific field value).
 - Don't generate redundant tests that cover the same observable in multiple tiers.
+- Prefer consolidating related assertions into one journey over inventing thin duplicate tests.
 - If you write 10 tests and 5 cover the same behavior, consolidate to 5.
 
 Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, deduplicate.
@@ -29,101 +30,124 @@ Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, dedu
 
 **Test only what the change covers. Nothing speculative.**
 
-- Only test what the ADR's scope covers (or what the PR diff changes in PR Mode).
+- Only test what the ADR's scope covers (or what the PR diff changes in PR Mode) — including ADR **Testing / Definition of Done / Acceptance** bullets.
 - Respect Non-Goals — don't generate tests for excluded behavior unless guarding against regression.
 - Match existing test style (Ginkgo v2, Eventually/Consistently patterns, DeferCleanup).
 - Never inline K8s resource specs (Pod, Deployment, etc.) in test files — use or create a builder helper in `test/e2e/utils/`. Duplicated specs drift silently (e.g. missing SecurityContext, wrong image).
-- Before adding a DeferCleanup, check if the setup helper (e.g. `SetupAttestationTest`) already registers cleanup for that resource. Don't revert a field on a resource that will be deleted entirely by the helper's cleanup — the revert is redundant.
+- Before adding a DeferCleanup, check if the existing setup helper already registers cleanup for that resource. Don't revert a field on a resource that will be deleted entirely by the helper's cleanup — the revert is redundant.
 - Never hardcode time durations (timeouts, polling intervals) in test files — use constants from `test/e2e/utils/constants.go` (e.g. `DefaultTimeout`, `ShortTimeout`, `DefaultInterval`, `ShortInterval`). If no suitable constant exists, add one to `constants.go` first.
 - Don't refactor existing tests unless asked.
+- **Default platform:** All e2e-workflow prompts assume **Red Hat OpenShift + Operator Framework (OLM)** unless Operator Context proves otherwise. Never invent Helm/direct-deploy steps when Method=OLM.
+- When an ADR has a validity/constraint table (e.g. Valid/Invalid rows, profile × action matrices), extract each row as a potential REQ. At minimum, test the "happy boundary" and "reject boundary" for each constraint. Internal parse details (cipher order, filter logging) may be excluded with rationale if not observable without custom tooling.
+- When an ADR lists multiple named values for a field (modes, types, profiles, adherence levels), every named value must have a distinct assertion path — or be explicitly consolidated with rationale (e.g. "LegacyAdheringComponentsOnly behaves identically to NoOpinion — covered by same test"). Silent omission of a named value is a gap.
+- When an ADR provides a scope/listener/endpoint table listing N surfaces, compliance tooling (scanners, probes) must cover ALL N surfaces — not a subset. If a scan covers 2/4 listed endpoints, the plan is incomplete.
+- When ADR Risks name specific affected client types (scrapers, proxies, admin tooling, non-SPIRE peers), at least one NEG test must simulate that specific client class — not just a generic TLS-version rejection. The risk called out the client for a reason.
+- When a DoD bullet mentions RBAC registration, watcher registration, or permission requirements, verify it with an observable assertion (e.g. confirm ClusterRole contains expected API group). "It works" is not sufficient traceability for a registration DoD.
 
-**Validation:** Every test case should trace directly to the ADR's stated goals/risks or the PR's changed behaviors.
+**Validation:** Every test case should trace directly to the ADR's stated goals/risks/DoD or the PR's changed behaviors.
 
-## 3a. Operator Deployment Context (OLM-Managed)
+## 3a. Operator Deployment Context — Template
 
-**The ZTWIM operator is installed and managed via OLM (Operator Lifecycle Manager). Never assume direct deployment control.**
+> **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. The E2E workflow reads the operator's version at runtime.
+> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+>
+> **Default posture for this workflow:** OpenShift + OLM. Fill Method as OLM unless the operator is truly not OLM-managed.
 
-- The operator is deployed via a **ClusterServiceVersion (CSV)**, not a standalone Deployment.
-- **Never use `oc scale deployment`** to change replica count — OLM will immediately revert it. Use CSV patch instead:
-  ```
-  oc patch csv <csv-name> -n zero-trust-workload-identity-manager \
-    --type=json -p '[{"op":"replace","path":"/spec/install/spec/deployments/0/spec/replicas","value":N}]'
-  ```
-- **Never use `oc edit deployment`** to change container args/env — patch the CSV or Subscription instead.
-- To add environment variables (e.g., `CREATE_ONLY_MODE`), patch the **Subscription**:
-  ```
-  oc patch subscription openshift-zero-trust-workload-identity-manager \
-    -n zero-trust-workload-identity-manager --type='merge' \
-    -p '{"spec":{"config":{"env":[{"name":"ENV_VAR","value":"value"}]}}}'
-  ```
-- Operator namespace: `zero-trust-workload-identity-manager`
-- CSV name pattern: `zero-trust-workload-identity-manager.v<VERSION>`
-- Operand CRs: SpireServer, SpireAgent, SpiffeCSIDriver, SpireOIDCDiscoveryProvider, ZeroTrustWorkloadIdentityManager
-- All operands use the name `cluster` (e.g., `oc get spireagent cluster`)
-- When writing test steps involving scaling, env changes, or operator config, always use the OLM-appropriate method (CSV/Subscription patch), not direct deployment manipulation.
+Fill in the following for your operator:
 
-## 3b. ZTWIM Quality Gates (Domain-Specific)
+- **Deployment method:** OLM (default) / Helm / Manual / Other
+- **Operator namespace:** `<operator-namespace>`
+- **CSV / Deployment name pattern:** `<csv-or-deployment-name-pattern>`
+- **Operand CR kinds and default names:**
+  - `<CRKind1>` — default name: `<name>`
+  - `<CRKind2>` — default name: `<name>`
+- **Config patching method:** How to change operator configuration at runtime:
+  - Subscription env patch / CSV patch / Deployment env / CR field / Other
+  - Provide the `oc patch` or `kubectl` command template
+- **Scaling method:** How to scale the operator (e.g., CSV patch for OLM, `kubectl scale` for direct deployments)
+- **Things the agent must NEVER do:** (e.g., "Never use `oc scale deployment` — OLM will revert it")
 
-**Critical quality gates that tests must cover for the ZTWIM operator. Use these to validate test coverage.**
+## 3b. Operator Quality Gates — Template
+
+> **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. Define the domain-specific quality gates that E2E tests must cover.
+> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+
+Fill in the relevant gate categories for your operator. Remove categories that don't apply.
 
 ### Operator Lifecycle
 | Gate | Observable |
 |------|------------|
-| Installation | CSV phase = `Succeeded`, all CRDs `Established=True` |
-| Operator Health | Deployment `Available=True`, pod `Running` |
-| Recovery | New pod `Running` within 60s after deletion |
+| Installation | `<how to verify successful installation>` |
+| Operator Health | `<deployment/pod health observable>` |
+| Recovery | `<expected recovery behavior and timing>` |
 
-### Operand Health (All Must Be Ready)
+### Operand Health
 | Operand | Observable |
 |---------|------------|
-| SpireServer | `Ready=True` condition, StatefulSet pods `1/1` |
-| SpireAgent | `Ready=True` condition, DaemonSet on all nodes |
-| SpiffeCSIDriver | `Ready=True` condition, CSIDriver registered |
-| SpireOIDCDiscoveryProvider | `Ready=True` condition, Route accessible |
-| ZeroTrustWorkloadIdentityManager | `OperandsAvailable=True`, `Ready=True` |
+| `<Operand1>` | `<ready condition and workload status>` |
+| `<Operand2>` | `<ready condition and workload status>` |
 
-### Identity & Attestation (SPIFFE/SPIRE Core)
+### Core Functionality (domain-specific)
 | Gate | Observable |
 |------|------------|
-| SVID Issuance | `svid.pem` exists with valid X.509 certificate |
-| SPIFFE ID Format | URI SAN = `spiffe://<trustDomain>/ns/<ns>/sa/<sa>` |
-| Bundle Distribution | `bundle.pem` contains CA certificates |
-| Certificate Chain | `cert.Verify()` succeeds against bundle |
-| SVID Rotation | Serial number changes before TTL expiry |
+| `<core-gate-1>` | `<observable for domain-specific core behavior>` |
+| `<core-gate-2>` | `<observable for domain-specific core behavior>` |
 
 ### Security
 | Gate | Observable |
 |------|------------|
-| UID/GID Compliance | spire-agent: RunAsAny (UID determined by image default), non-root recommended; GID within namespace range |
-| SCC Applied | Pod annotation shows correct SCC |
-| RBAC Minimal | ClusterRole has no wildcard permissions |
+| RBAC Minimal | `<ClusterRole permission boundaries>` |
+| SCC/PSA | `<security context constraints or Pod Security Admission observable>` |
+| Privilege Boundaries | `<UID/GID or non-root enforcement>` |
 
-### OLM Integration
+### Deployment Integration
 | Gate | Observable |
 |------|------------|
-| Upgradeable=True | When all operands healthy |
-| Upgradeable=False | When any operand fails or CreateOnlyMode enabled |
-| CreateOnlyMode | Condition reflects `CREATE_ONLY_MODE` env var |
+| `<OLM Upgradeable / Helm hooks / etc.>` | `<observable>` |
 
 ### Resilience
 | Gate | Observable |
 |------|------------|
-| Server Recovery | StatefulSet pod recreated, `Ready=True` after deletion |
-| Agent Recovery | DaemonSet pod recreated on node after deletion |
-| Config Reconciliation | Operator restores modified ConfigMaps/Secrets |
-| Multi-Failure Recovery | All operands recover to `Ready=True` |
+| Pod Recovery | `<expected recovery after pod deletion>` |
+| Config Reconciliation | `<operator restores modified resources?>` |
 
-**When writing tests:** Ensure critical gates (Operator Lifecycle, Operand Health, SVID Issuance) are covered. For feature PRs, map new functionality to relevant gates.
+### Error Paths (optional)
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `<dependency failure>` | `<expected operator behavior>` |
+| `<invalid config>` | `<expected error handling>` |
+
+### Performance (optional)
+| Threshold | Value | Source |
+|-----------|-------|--------|
+| `<restart window>` | `<e.g., 60s>` | `<ADR/SLA>` |
+
+### Compliance Tooling (optional — required when ADR DoD names a tool)
+| Gate | Observable |
+|------|------------|
+| `<tls-scanner / auditor CLI>` | `<expected pass criteria under named profiles>` |
+
+### Federation / Multi-cluster (optional — include when ADR names it)
+| Gate | Observable |
+|------|------------|
+| Federation health after change | `<peer trust / bundle / SVID still valid>` |
+
+### Config-transition Continuity (optional — include when rolling restart / mid-change is in scope)
+| Gate | Observable |
+|------|------------|
+| Workload continuity during profile/config change | `<SVID/traffic survives transition; final Ready=True>` |
+
+**When writing tests:** Ensure critical gates (Operator Lifecycle, Operand Health, Core Functionality) are covered. For feature PRs, map new functionality to relevant gates.
 
 ## 4. Traceability Always
 
 **Every test traces back to a source. No orphan tests.**
 
-- In ADR Mode: every test traces to an ADR section or Jira acceptance criteria.
+- In ADR Mode: every test traces to an ADR section, DoD/AC bullet, or Jira acceptance criteria.
 - In PR Mode: every test traces to a specific diff location (`file.go:L42`) or PR description.
 - Never trace to commits or unrelated PRs.
 - Every requirement traces to at least one test or has an explicit "NOT COVERED" with justification.
-- Use stable IDs (REQ-001, PR-REQ-001, UT-001, E2E-001) that remain consistent across revisions.
+- Use stable IDs (REQ-001, PR-REQ-001, UT-001, E2E-001, ERR-001) that remain consistent across revisions.
 
 ## 5. Self-Verify Before Outputting
 
@@ -146,21 +170,51 @@ Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, dedu
 - ADR has no "How" section → WARN user, generate with reduced Tier 1/2 coverage
 - Jira conflicts with ADR → Document conflict, follow ADR, ask user to resolve
 - More than 3 ambiguous requirements → STOP, list ambiguities, ask for clarification
+- ADR has DoD/Testing/AC and more than 3 DoD bullets are unmapped with no justification → STOP, list unmapped bullets, ask for clarification
 - PR-only mode: more than 3 low-confidence requirements → WARN user, recommend ADR review
 
 ## Good vs Bad Examples
 
 ```
 BAD step:  "Verify the operator works correctly"
-GOOD step: "Assert status condition Ready=True on SpireServer CR within 60s"
+GOOD step: "Confirm Ready=True on <OperandCR> within DefaultTimeout"
 
 BAD step:  "Check security"
-GOOD step: "Exec into spire-server pod; confirm process runs as UID 1000 (non-root)"
+GOOD step: "Exec into operator pod; confirm process runs as non-root (UID != 0)"
 
 BAD step:  "Ensure cleanup happens"
-GOOD step: "Delete SpireServer CR; assert finalizer removes spire-agent DaemonSet within 30s"
+GOOD step: "Delete <OperandCR>; confirm finalizer removes owned resources within DefaultTimeout"
+
+BAD case body (dense jargon):
+  Scenario: Under Strict Intermediate we record the operator pod UID, switch
+  the profile to Modern, and assert SecurityProfileWatcher causes exactly one
+  replacement pod (new UID), with CSV Succeeded and Deployment Available.
+  Steps: 1. Patch APIServer Intermediate→Modern. 2. Assert UID ≠ old.
+
+GOOD case body (easy plain English — required tone):
+  Scenario:
+  Cluster is on Strict + Intermediate. We note the current operator pod ID (UID).
+  We change the profile to Modern (still Strict). The SecurityProfileWatcher should
+  restart the operator once. A new pod must appear (different UID) — not a restart
+  loop. Then the CSV is still Succeeded and the Deployment is Available.
+
+  Why:
+  Proves profile changes restart the operator exactly once. No restart or many restarts both fail.
+
+  Steps:
+    1. Cluster is on Strict + Intermediate. Note the current operator pod’s ID (UID).
+    2. Change the cluster profile to Modern (still Strict).
+    3. Wait for the SecurityProfileWatcher to restart the operator.
+    4. Confirm a new pod appears (different UID) — only one restart, not a loop.
+    5. Confirm CSV is Succeeded and Deployment is Available.
+
+  Pass when:
+  Exactly one new Running pod (new UID); CSV Succeeded; Deployment Available.
+  No restart or many restarts = fail.
+
+  Run on: Both FIPS and non-FIPS (at least once each).
 ```
 
 ---
 
-**These guidelines are working if:** test plans have zero vague steps, every test traces to a requirement, no redundant tests exist across tiers, and clarifying questions come before generation rather than after mistakes.
+**These guidelines are working if:** test plans have zero vague steps, every test uses easy plain-English Scenario/Why/Steps/Pass when/Run on, every test traces to a requirement, no redundant tests exist across tiers, and clarifying questions come before generation rather than after mistakes.

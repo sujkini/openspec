@@ -167,7 +167,7 @@ e2e_exclusion:
       - Acceptance criteria references make test-e2e or test-e2e-wait-for-stable-state
       - Target file(s) under test/ (e2e, ginkgo, or *_test.go integration/e2e paths)
       - Task Title or Objective contains "e2e" or "end-to-end" (case-insensitive)
-      - OAPE command would be e2e-generate
+      - OAPE command would be e2e (now handled by /opsx-e2e)
   phase_criteria:
     when_any:
       - Phase heading or Goal contains "e2e", "end-to-end", or "E2E"
@@ -634,7 +634,6 @@ code_generation_eval_gate:
     api-generate: api-generate
     api-generate-tests: api-generate-tests
     api-implement: api-implement
-    e2e-generate: e2e-generate
     manual: manual
   also_run_cases_with_oape_command: any
   mandatory_before_user_approval: true
@@ -937,7 +936,6 @@ oape_routing:
     - api-generate
     - api-generate-tests
     - api-implement
-    - e2e-generate
   do_not_invoke_during_implementation:
     - predict-regressions
     - review
@@ -946,7 +944,8 @@ oape_routing:
     - init
   command_resolution: >-
     Resolve exactly ONE OAPE command per task — no other OAPE commands.
-    IF the task is an e2e task (see e2e_task): use e2e-generate.
+    IF the task is an e2e task (see e2e_task): SKIP — e2e tasks are handled
+    separately via /opsx-e2e after implementation completes.
     ELIF Assigned Agent is API_Agent and task is verification-only: use api-generate-tests.
     ELIF Assigned Agent is API_Agent: use api-generate.
     ELIF Assigned Agent is OperatorController_Agent: use api-implement.
@@ -955,15 +954,14 @@ oape_routing:
     ELSE: halt and ask user which allowed command applies.
   e2e_task:
     description: >-
-      When any condition is true, the task is an e2e task and MUST use e2e-generate
-      (and no other OAPE command).
+      When any condition is true, the task is an e2e task. E2E tasks are SKIPPED
+      during /opsx-apply and handled separately via /opsx-e2e.
     when_any:
       - Assigned Agent (tasks.md §3) is Testing_Agent
       - tasks.md §4 Acceptance criteria references make test-e2e or test-e2e-wait-for-stable-state
       - tasks.md §4 Target file(s) under test/ (e2e, ginkgo, or *_test.go integration/e2e paths)
       - Task Title or §4 Objective contains "e2e" or "end-to-end" (case-insensitive)
-    command: e2e-generate
-    args: "<fork-default-branch>"
+    action: skip_mark_SKIPPED_E2E
   design_bundle:
     path: openspec/changes/<change>/implementation/design-bundle.md
     template: templates/design-bundle-template.md
@@ -1043,18 +1041,13 @@ oape_routing:
         NOT an e2e task AND current task Assigned Agent is OperatorController_Agent
       args: "--design-doc <design-bundle-path>"
       follow_up: make generate && make manifests && make build && make test
-    - id: e2e-generate
-      command: /oape:e2e-generate
-      command_file: e2e-generate.md
-      when: current task is an e2e task (see e2e_task)
-      args: "<fork-default-branch>"
   agent_routing:
     API_Agent:
       verification_only: api-generate-tests
       implementation: api-generate
     OperatorController_Agent: api-implement
-    Testing_Agent: e2e-generate
-    e2e_task: e2e-generate
+    Testing_Agent: skip_e2e (handled by /opsx-e2e)
+    e2e_task: skip_e2e (handled by /opsx-e2e)
     ManifestsBindata_Agent: manual
     WebhookTLS_Agent: manual
     RBACSecurity_Agent: manual
@@ -1075,7 +1068,7 @@ oape_routing:
     - make
     - >-
       OAPE command files in .cursor/commands/ — api-generate.md, api-generate-tests.md,
-      api-implement.md, e2e-generate.md only
+      api-implement.md only (e2e handled by /opsx-e2e)
 
 # ---------------------------------------------------------------------------
 # Workflow stages (source of truth)
@@ -1680,9 +1673,10 @@ artifacts:
 
       1. **Compose** design-bundle.md scoped to this Task ID.
       2. **Resolve command** — exactly ONE from oape_routing.command_resolution /
-         allowed_commands. IF e2e task → e2e-generate. ELIF API_Agent verification-only
-         → api-generate-tests. ELIF API_Agent → api-generate. ELIF OperatorController_Agent
-         → api-implement. Do not invoke predict-regressions, review, or any other OAPE command.
+         allowed_commands. IF e2e task → SKIP (mark SKIPPED_E2E, handled by /opsx-e2e).
+         ELIF API_Agent verification-only → api-generate-tests. ELIF API_Agent → api-generate.
+         ELIF OperatorController_Agent → api-implement. Do not invoke predict-regressions,
+         review, or any other OAPE command.
       3. **Announce**: Phase, Task ID, Task Title, command.
       4. **Invoke**: Read .cursor/commands/<command_file> and execute its workflow
          in the fork cwd. Pass --design-doc with absolute path to design-bundle.md
@@ -1721,13 +1715,12 @@ artifacts:
           - Advance to next task in §2 order
 
       Allowed OAPE commands (one per task):
-      - **e2e task** → `/oape:e2e-generate <fork-default-branch>`
+      - **e2e task** → SKIP (mark SKIPPED_E2E — handled separately by `/opsx-e2e`)
       - **API_Agent** (implementation) → `/oape:api-generate --design-doc <bundle>`
       - **API_Agent** (verification-only) → `/oape:api-generate-tests <api-path>`
       - **OperatorController_Agent** → `/oape:api-implement --design-doc <bundle>`
 
       api-generate-tests path: derive from current task §4 Target file(s) or repo-assessment.
-      Base branch for e2e-generate: fork default (main/master).
 
       ## Task execution loop — direct mode (codegen_mode = direct)
 
@@ -1943,7 +1936,7 @@ apply:
       **ai-helpers mode (codegen_mode = ai-helpers):**
       1. Compose implementation/design-bundle.md scoped to current Task ID only.
       2. Resolve ONE OAPE command per oape_routing.command_resolution (allowed only:
-         api-generate, api-generate-tests, api-implement, e2e-generate if e2e task).
+         api-generate, api-generate-tests, api-implement; e2e tasks are skipped).
       3. Execute manual-agent work for this task when assigned (no OAPE command).
       4. Verify per task Acceptance criteria.
       5. Run code_generation_eval_gate (CODE_GENERATION_EVAL_PROMPT.md): score fork code;

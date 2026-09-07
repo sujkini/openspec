@@ -55,7 +55,7 @@ Each task resolves to **exactly one** execution route (see schema `oape_routing.
 | `/oape:api-generate` | API_Agent (implementation) | Read `.cursor/commands/api-generate.md`; execute in cwd; pass `--design-doc` |
 | `/oape:api-generate-tests` | API_Agent (verification-only) | Read `.cursor/commands/api-generate-tests.md`; execute in cwd |
 | `/oape:api-implement` | OperatorController_Agent | Read `.cursor/commands/api-implement.md`; execute in cwd; pass `--design-doc` |
-| `/oape:e2e-generate` | E2E / Testing_Agent | Read `.cursor/commands/e2e-generate.md`; execute in cwd |
+| **E2E / Testing_Agent** | Testing_Agent | SKIP — e2e tasks handled separately via `/opsx-e2e` |
 | **Manual agent** | ManifestsBindata, WebhookTLS, RBACSecurity, OLMRelease, Docs | Apply FILE OPERATIONS below directly in cwd |
 
 - **One** command per task — never invoke multiple OAPE commands for the same task.

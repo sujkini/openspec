@@ -2,7 +2,7 @@
 
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two execution strategies (**phase-iterative** and **one-shot**), two code-generation modes (**ai-helpers** and **direct**), per-phase Jira traceability, and a post-CI E2E test generation pipeline.
 
-> **After completing a change, run `/opsx-archive` to capture your feedback and time savings.** This is mandatory for compliance and helps us measure the value of AI-assisted development.
+> **After completing a change (and E2E, if applicable), run `/opsx-archive` to capture your feedback and time savings.** This is the single, mandatory place all feedback is collected — `/opsx-apply` and `/opsx-e2e` never prompt for it. Run `/opsx-e2e` *before* archiving if this change needs E2E coverage; once archived, the change moves out of the live directory. See [Telemetry & Metrics](#telemetry--metrics).
 
 ---
 
@@ -56,6 +56,24 @@ These docs (architecture guides, coding conventions, testing patterns) are used 
 
 This reads `harness-evals/harness-docs/` and generates `harness-evals/constitution.md`.
 
+**d) Set up E2E context in `qe-e2e/` (recommended for E2E test generation):**
+
+Create a `qe-e2e/` directory at your operator repo root with operator-specific E2E context:
+
+```bash
+mkdir -p qe-e2e
+```
+
+Copy and fill in the template from `openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md` Sections 3a/3b:
+
+```bash
+# Create your operator-specific qe-behaviour.md
+cp openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md qe-e2e/qe-behaviour.md
+# Then edit qe-e2e/qe-behaviour.md — fill in Sections 3a and 3b with your operator's details
+```
+
+See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example. If `qe-e2e/` is not present, `/opsx-e2e` will still work but will derive context from `agents.md` with reduced accuracy.
+
 ### 4. Start the Dashboard
 
 ```bash
@@ -77,13 +95,13 @@ Restart Cursor so slash commands load from `.cursor/commands/`.
 
 ### 7. Archive and capture feedback
 
-After implementation is complete and your PR is raised, run:
+After implementation is complete (and `/opsx-e2e` has run, if this change needs E2E coverage), run:
 
 ```
 /opsx-archive
 ```
 
-This archives the change and **collects mandatory feedback**: estimated manual hours (time saved) and a satisfaction rating. Responses are saved to `user-feedback.md` inside the archived change directory. This data is used for continuous monitoring and performance review (MON-01 compliance).
+This archives the change and **collects mandatory feedback**: estimated manual hours (time saved), a satisfaction rating, comments, and story points delivered — written to `user-feedback.md` and `metrics-report.json` inside the archived change directory. If this change ran `/opsx-e2e`, it also collects **QE feedback** (QE time saved, QE story points, QE feedback) into `qe-metrics.json` — skipped automatically if E2E was never run. This data is used for continuous monitoring and performance review (MON-01 compliance). See [Telemetry & Metrics](#telemetry--metrics) for details.
 
 ---
 
@@ -125,19 +143,120 @@ After a phase or final PR is raised and CI passes, trigger the E2E pipeline:
 /opsx-e2e <change-name> --phase N    # phase-iterative: specific phase
 /opsx-e2e <change-name>              # one-shot: final PR
 /opsx-e2e --pr <URL>                 # direct PR URL
+/opsx-e2e --adr <path-or-URL>        # design mode (plan only, no execute/push)
+/opsx-e2e --ep <path-or-URL>         # enhancement proposal (same as ADR)
+/opsx-e2e --pr <URL> --adr <path>    # combined mode (full pipeline + design context)
 ```
+
+### Input Modes
+
+| Input | Mode | Pipeline |
+|-------|------|----------|
+| **PR only** | PR Mode | Full: pre-analysis → plan → consolidation → codegen → execute → push |
+| **ADR or EP only** | Design Mode | Plan-only: pre-analysis → plan → consolidation → codegen → STOP |
+| **ADR/EP + PR** | Combined Mode | Full pipeline with enriched design context |
+| **Change name** | Change Mode | Resolves PR from `state.yaml`, then runs Full |
+
+**Design Mode** generates the test plan and code but does NOT execute or push — there is no branch to push to. Use this to review E2E coverage before a PR exists.
+
+### Pipeline Stages
 
 The pipeline runs five stages, each with a user approval gate:
 
 | Stage | Output | Description |
 |-------|--------|-------------|
-| Pre-analysis | `e2e-analysis.md` | Scoping analysis from PR diff + review comments |
-| Test plan | `test-plan.md` | Full tiered plan (15–20 cases) with traceability |
-| Consolidation | `revised-test-plan.md` | Journey consolidation to configured limit |
-| Code generation | `*_test.go` | Executable Ginkgo/Go test code |
-| Execute | Push + run | Commit tests to PR branch, optionally execute |
+| 1. Pre-analysis | `e2e-analysis.md` | Scoping analysis from PR diff / ADR + operator context |
+| 2. Test plan | `test-plan.md` | Full tiered plan with traceability |
+| 3. Consolidation | `revised-test-plan.md` | Journey consolidation to configured limit |
+| 4. Code generation | `*_test.go` | Executable Ginkgo/Go test code |
+| 5. Execute | Push + run | Commit tests to PR branch, optionally execute (skipped in Design Mode) |
 
 All artifacts are written to `openspec/changes/<name>/e2e/`.
+
+### Context-Narrowing Architecture
+
+The E2E pipeline uses a **context-narrowing** approach to optimize token usage and avoid redundant context:
+
+```
+Stage 1 (Pre-Analysis) — READS ALL CONTEXT:
+  - agents.md (full)
+  - constitution.md (full)
+  - qe-e2e/qe-behaviour.md (operator-specific deployment + quality gates)
+  - harness-docs/*.md
+  - ADR/PR diff
+  → PRODUCES: e2e-analysis.md (embeds deployment context, quality gates, constraints)
+
+Stage 2 (Test Plan) — NARROW CONTEXT:
+  - e2e-analysis.md (carries all scoping decisions + embedded operator context)
+  - Generic QE writing rules (Sections 1-5)
+  → PRODUCES: test-plan.md
+
+Stage 3 (Consolidation) — MINIMAL CONTEXT:
+  - test-plan.md + config.yaml max_test_cases
+  → PRODUCES: revised-test-plan.md
+
+Stage 4 (Code Generation) — TARGETED CONTEXT:
+  - revised-test-plan.md
+  - agents.md (helpers + code style sections ONLY)
+  - Target repo test/e2e/ patterns
+  → PRODUCES: *_test.go files
+```
+
+All operator context is consumed once in Stage 1 and compressed into `e2e-analysis.md`. Downstream stages read the compressed output instead of re-reading raw operator files.
+
+### What each operator repo must have for E2E (`qe-e2e/`)
+
+Each operator repo should maintain a `qe-e2e/` directory at the repo root (alongside `agents.md`) containing operator-specific E2E context:
+
+```
+<operator-repo>/
+├── agents.md                        # Agent routing, architecture (required)
+├── qe-e2e/                          # Operator-specific E2E context (recommended)
+│   └── qe-behaviour.md             # Deployment context + quality gates
+└── harness-evals/
+    ├── constitution.md              # Governance guardrails (required)
+    └── ...
+```
+
+**`qe-e2e/qe-behaviour.md`** must contain two sections filled in by the operator team:
+
+**Section 3a — Operator Deployment Context:**
+- Deployment method (OLM / Helm / Manual)
+- Operator namespace
+- CSV/Deployment name pattern
+- Operand CR kinds and default names
+- Config patching method (how to change operator config at runtime)
+- Scaling method
+- Things the agent must NEVER do (e.g., "Never use `oc scale deployment` — OLM will revert it")
+
+**Section 3b — Operator Quality Gates:**
+
+A table of domain-specific quality gates that E2E tests must cover, organized by category:
+
+| Category | What to define |
+|----------|---------------|
+| Operator Lifecycle | Installation, health, recovery observables |
+| Operand Health | One row per operand CR with ready conditions |
+| Core Functionality | Domain-specific behavior gates (operator team fills in) |
+| Security | RBAC boundaries, SCC/PSA, privilege constraints |
+| Deployment Integration | OLM Upgradeable, Helm hooks, etc. |
+| Resilience | Pod recovery, config reconciliation behavior |
+| Error Paths (optional) | Expected behavior on dependency/config failures |
+| Performance (optional) | Numeric thresholds (restart windows, SLAs) |
+
+A generic template with placeholders is shipped with OpenSpec at `openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.md`. Copy Sections 3a/3b from there into your `qe-e2e/qe-behaviour.md` and fill in. See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+
+**If `qe-e2e/` is not present:** `/opsx-e2e` still works — it derives deployment context from `agents.md` and quality gates from `constitution.md`. The test plan will be less precise but functional.
+
+### Generic QE Rules (shipped with OpenSpec)
+
+The generic QE behavioural rules (Sections 1-5) ship with OpenSpec at `{schema_root}/e2e-workflow/qe-behaviour.md` and apply to all operators:
+
+1. **Ask Before Assuming** — surface ambiguity early, don't fabricate requirements
+2. **Precision Over Volume** — one test per observable behavior, no padding
+3. **Surgical Scope** — test only what the change covers, nothing speculative
+4. **Traceability Always** — every test traces to an ADR section or PR diff location
+5. **Self-Verify Before Outputting** — run quality gates before returning any plan
 
 ---
 
@@ -162,6 +281,7 @@ After installation, set up the following:
 | Location | What to provide |
 |----------|----------------|
 | **`agents.md`** (repo root) | Agent routing, repository architecture, test patterns, verification matrix |
+| **`qe-e2e/qe-behaviour.md`** (repo root) | Operator-specific E2E context: deployment model + quality gates (recommended for `/opsx-e2e`) |
 | **`harness-evals/harness-docs/`** | Operator documentation (used by `/opsx-constitute` to generate constitution) |
 | **`harness-evals/constitution.md`** | Coding guardrails, CI gates, governance rules (generated by `/opsx-constitute`) |
 | **`harness-evals/evals/`** | Stage eval cases — quality gates (populated by `/eval-loop` or manually) |
@@ -272,6 +392,70 @@ The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 
 ---
 
+## Telemetry & Metrics
+
+OpenSpec keeps **development metrics** and **QE/E2E metrics** in two separate,
+file-based reports — no database, no server. Both are regenerated automatically
+after every relevant hook fires.
+
+| | Development | QE / E2E |
+|---|---|---|
+| Events | `openspec/changes/<name>/telemetry/events.jsonl` | `openspec/changes/<name>/telemetry/e2e-events.jsonl` |
+| Report | `openspec/changes/<name>/telemetry/metrics-report.json` | `openspec/changes/<name>/telemetry/qe-metrics.json` |
+| Own tokens-in/out + cost | ✓ | ✓ |
+| Generated by | `/opsx-new`, `/opsx-continue`, `/opsx-apply` (throughout the workflow) | `/opsx-e2e` (throughout the E2E pipeline) |
+| Completeness flag | `report_status.complete` | `qe_report_status.complete` |
+
+**Feedback is collected exactly once, centrally, by `/opsx-archive`** — not
+mid-workflow. Neither `/opsx-apply` nor `/opsx-e2e` ever prompts for
+time-saved, satisfaction, or story points; `/opsx-archive` is the single
+source of truth for that data, asked right before the change directory is
+moved into `openspec/changes/archive/`.
+
+`/opsx-archive` always asks the **development** questions (mandatory, every
+archive):
+- Estimated manual effort (time savings)
+- Satisfaction rating (1–5)
+- Comments
+- **Story points delivered** — mandatory; `metrics-report.json` is marked
+  `report_status.complete: false` until it's recorded
+
+`/opsx-archive` additionally asks the **QE** questions, but **only if this
+change ran `/opsx-e2e` at least once** (detected by the presence of
+`telemetry/e2e-events.jsonl`; skipped silently otherwise):
+- QE time saved (%)
+- **QE story points delivered** — mandatory when E2E ran; `qe-metrics.json`
+  is marked `qe_report_status.complete: false` until it's recorded
+- QE feedback
+
+Both reports also carry IST-formatted timestamps for when the work started
+and finished: `run.started_at_display` / `run.archived_at_display` in
+`metrics-report.json`, and `qe_started_at_display` / `qe_completed_at_display`
+in `qe-metrics.json` (the latter spans the earliest `/opsx-e2e` run to the
+latest, since phase-iterative changes may run E2E once per phase).
+
+The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
+`metrics-report.json` for its live view — see `dashboard/README.md` for details.
+
+### Publishing metrics to the cross-operator dashboard
+
+```
+/opsx-publish-metrics [change-name]
+```
+
+Standalone command (not auto-triggered by `/opsx-archive`) that forks
+[anandkuma77/open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard)
+via the `user-github` MCP server, branches, and opens a PR adding this change's
+`metrics-report.json` (and `qe-metrics.json`, if this change ran `/opsx-e2e`) under
+`data/open-spec-matrics/operators/<operator>/`. The operator folder is derived
+automatically from `metrics-report.json → operator_name`. Publishing doesn't require
+`report_status.complete`/`qe_report_status.complete` to be `true` — it warns on
+incomplete data but doesn't block. Note that merging the resulting PR does not
+automatically update the live dashboard; the dashboard repo owner must separately
+re-run its `Generate Processed Metrics` GitHub Action.
+
+---
+
 ## Working Modes
 
 ### Mode A: Working-folder mode (local code changes)
@@ -304,6 +488,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
 | `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
 | `/opsx-archive` | Archive a completed change |
+| `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-dashboard as a PR |
 | `/opsx-explore` | Explore ideas without creating artifacts |
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
@@ -313,7 +498,6 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/oape:api-generate` | API_Agent task |
 | `/oape:api-generate-tests` | API_Agent verification task |
 | `/oape:api-implement` | OperatorController_Agent task |
-| `/oape:e2e-generate` | E2E / Testing_Agent task |
 
 These commands are **not used** when `codegen_mode: direct`.
 
@@ -348,7 +532,7 @@ flags:
 
 ### Code generation modes
 
-**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`, `e2e-generate`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval.
+**`ai-helpers`** — For each task, composes a `design-bundle.md`, routes to specialized OAPE Cursor commands (`api-generate`, `api-implement`), scores generated code via a code-generation eval gate, refines until evals pass, then asks for user approval. E2E tasks are handled separately via `/opsx-e2e`.
 
 **`direct`** — The Cursor agent reads context files directly, implements code via FILE OPERATIONS, verifies against acceptance criteria, and asks for user approval. No OAPE commands, no design bundles, no code eval gate. Simpler and faster for straightforward tasks.
 
@@ -469,6 +653,8 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 ```
 .
 ├── agents.md                                 # Operator-owned agent routing (at repo root)
+├── qe-e2e/                                   # Operator-owned E2E context (at repo root)
+│   └── qe-behaviour.md                      # Deployment context (3a) + quality gates (3b)
 ├── harness-evals/                            # Operator-owned (constitution + evals + docs)
 │   ├── constitution.md                       # Generated by /opsx-constitute
 │   ├── harness-docs/                         # Operator docs (read by /opsx-constitute)
@@ -481,14 +667,14 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 │   │   ├── e2e-workflow/                     # E2E test generation pipeline templates
 │   │   │   ├── pre-analysis-gate.md          # PR scoping and approval gate
 │   │   │   ├── test-plan-generation.md       # Tiered test plan + consolidation + code gen
-│   │   │   └── qe-behaviour.md              # Project-specific QE context
+│   │   │   └── qe-behaviour.md              # Generic QE rules (Sections 1-5) + templates for 3a/3b
 │   │   ├── stage-gate/                       # Eval gate prompts and artifact map
 │   │   └── feedback_stage_artifacts/         # Format spec for rejection rounds
-│   ├── telemetry/                            # Telemetry collection (change metrics, reports)
+│   ├── telemetry/                            # Telemetry collection: metrics-report.json (dev) + qe-metrics.json (QE)
 │   └── changes/                              # Active changes (created per /opsx-new)
 ├── .cursor/                                  # Pre-built — Cursor loads immediately
 │   ├── commands/                             # opsx-new, opsx-continue, opsx-apply, opsx-e2e, eval-loop
-│   └── skills/                               # openspec-*, effective-go, e2e-test-generator
+│   └── skills/                               # openspec-*, effective-go
 ├── eval-generation/                          # Retrospective eval loop
 │   ├── input/                                # feature-bundle.yaml (your input)
 │   ├── output-evals/                         # Generated evals per stage (auto-synced to harness-evals/)
@@ -593,6 +779,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
 | `/opsx-e2e` | Write | Generate E2E tests after CI passes |
 | `/opsx-archive` | Write | Archive a completed change |
+| `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-dashboard |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
 | `/opsx-explore` | Read | Explore ideas without creating artifacts |
 
@@ -603,7 +790,6 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/oape:api-generate` | Write | Generate API types for API_Agent tasks |
 | `/oape:api-generate-tests` | Write | Generate tests for API_Agent verification tasks |
 | `/oape:api-implement` | Write | Implement controller logic for OperatorController_Agent tasks |
-| `/oape:e2e-generate` | Write | Generate E2E test code |
 
 **Retrospective:**
 
@@ -651,6 +837,12 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 - Execute arbitrary network requests beyond GitHub and Jira APIs
 - Modify previously approved artifacts (specs, plan, repo-assessment are immutable once approved)
 - Append to source files using `>>` or `tee -a` (in-place edits only)
+
+**Explicit exception — `/opsx-publish-metrics`:** the one command permitted to write outside
+the operator working directory/fork. It only ever writes the two local telemetry JSON files
+(`metrics-report.json`, `qe-metrics.json`) verbatim, only to a fork of
+`anandkuma77/open-spec-dashboard`, and only as a PR — it never merges. It is a standalone,
+user-invoked command (never triggered autonomously by another command).
 - Launch background sub-agents during `/opsx-apply` or `/opsx-continue`
 - Auto-approve phase gates, PR creation, or Jira ticket creation regardless of configuration
 
@@ -725,6 +917,8 @@ The agent operates under the executing developer's identity and inherits their e
 - **Git operations:** Uses the developer's local SSH keys or configured Git credentials
 - **GitHub API:** Uses the personal access token from `config.yaml → credentials.github.token`
 - **Jira API:** Uses the personal API token from `config.yaml → credentials.jira.api_token`
+- **`/opsx-publish-metrics`:** uses the `user-github` Cursor MCP server (the developer's own
+  authenticated GitHub identity via Cursor), separate from `config.yaml → credentials.github.token`
 
 The agent cannot access any repository, Jira project, or API the user is not already authorized to access. No service accounts are used. All operations run under the developer's identity with their existing RBAC permissions.
 
