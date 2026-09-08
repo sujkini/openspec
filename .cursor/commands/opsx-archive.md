@@ -187,6 +187,32 @@ Archive a completed change in the experimental workflow.
    - Spec sync status (synced / sync skipped / no delta specs)
    - Note about any warnings (incomplete artifacts/tasks)
 
+8. **External agent feedback form — prompt at end (MANDATORY display)**
+
+   After showing the step 7 summary, **always** present this closing message to the user.
+   Do NOT skip even if the user is in a hurry — it is separate from step 5 (in-chat
+   telemetry feedback) and captures quality issues for the OpenSpec maintainers.
+
+   Output verbatim (replace `<change-name>` and `<jira_key>` when available):
+
+   ```
+   ## One more step — Agent feedback form
+
+   Archive feedback for this change is saved locally. Please also submit the
+   **external agent feedback form** so we can track quality issues, hallucinations,
+   and unexpected behavior across operators:
+
+   **Change:** <change-name>
+   **Jira:** <jira_key from inputs/jira.yaml, or "n/a">
+
+   **[Submit Agent Feedback Here](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing)**
+
+   Include your Jira key, a brief description of any problems, and what worked well.
+   ```
+
+   If the user says they already submitted the form, acknowledge and close — do not
+   block or re-prompt. The form is best-effort; step 5 telemetry feedback remains mandatory.
+
 **Output On Success**
 
 ```
@@ -205,6 +231,11 @@ Archive a completed change in the experimental workflow.
   *(omit this line entirely if step 5b was skipped — no E2E run for this change)*
 
 All artifacts complete. All tasks complete.
+
+---
+
+**Also submit the external agent feedback form:**
+https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing
 ```
 
 **Output On Success (No Delta Specs)**
@@ -225,6 +256,11 @@ All artifacts complete. All tasks complete.
   *(omit this line entirely if step 5b was skipped — no E2E run for this change)*
 
 All artifacts complete. All tasks complete.
+
+---
+
+**Also submit the external agent feedback form:**
+https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing
 ```
 
 **Output On Success With Warnings**
@@ -250,6 +286,11 @@ All artifacts complete. All tasks complete.
 - Delta spec sync was skipped (user chose to skip)
 
 Review the archive if this was not intentional.
+
+---
+
+**Also submit the external agent feedback form:**
+https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing
 ```
 
 **Output When Metrics Are Incomplete (telemetry hook failed before the move)**
@@ -321,3 +362,4 @@ Target archive directory already exists.
 - **When step 5b applies, it is just as mandatory as step 5.** Do NOT archive a change that ran E2E without successfully running the `on-qe-archive-feedback` telemetry hook — `qe-metrics.json` would remain `qe_report_status.complete: false`.
 - **The `on-qe-archive-feedback` telemetry hook MUST run before step 6 moves the change directory** (same reasoning as `on-archive-feedback`) — it writes into the live `openspec/changes/<name>/telemetry/` path.
 - **If a change has multiple E2E runs (e.g. one per phase in phase-iterative mode), step 5b still asks only once, at final archive** — covering the QE effort as a whole, not per-phase.
+- **Step 8 (external agent feedback form) MUST always be shown after a successful archive** — link: https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing — separate from step 5 in-chat feedback; display even when archive completed with warnings.

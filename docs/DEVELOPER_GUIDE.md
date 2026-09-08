@@ -407,6 +407,9 @@ Run when development is complete (and `/opsx-e2e` has run, if applicable).
    ```
    openspec/changes/archive/YYYY-MM-DD-<change-name>/
    ```
+5. **External agent feedback form** — at the end, the agent prompts you to submit the
+   shared spreadsheet (quality issues, hallucinations, what worked well):
+   [Submit Agent Feedback Here](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing)
 
 ### Files written at archive
 

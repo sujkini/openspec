@@ -4,7 +4,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 > **New developer?** Start with **[Developer Guide](docs/DEVELOPER_GUIDE.md)** — step-by-step setup, repo URLs, MCP, commands, metrics, and archive/publish flow.
 
-> **After completing a change (and E2E, if applicable), run `/opsx-archive` to capture your feedback and time savings.** This is the single, mandatory place all feedback is collected — `/opsx-apply` and `/opsx-e2e` never prompt for it. Run `/opsx-e2e` *before* archiving if this change needs E2E coverage; once archived, the change moves out of the live directory. See [Telemetry & Metrics](#telemetry--metrics).
+> **After completing a change (and E2E, if applicable), run `/opsx-archive` to capture your feedback and time savings.** This is the single, mandatory place all feedback is collected — `/opsx-apply` and `/opsx-e2e` never prompt for it. Run `/opsx-e2e` *before* archiving if this change needs E2E coverage; once archived, the change moves out of the live directory. **`/opsx-archive` also prompts you at the end to submit the [external agent feedback form](#feedback-mechanism).** See [Telemetry & Metrics](#telemetry--metrics).
 
 ---
 
@@ -437,6 +437,11 @@ and finished: `run.started_at_display` / `run.archived_at_display` in
 `metrics-report.json`, and `qe_started_at_display` / `qe_completed_at_display`
 in `qe-metrics.json` (the latter spans the earliest `/opsx-e2e` run to the
 latest, since phase-iterative changes may run E2E once per phase).
+
+After archive completes, **`/opsx-archive` always prompts you to submit the
+[external agent feedback form](#feedback-mechanism)** (Google Sheet) — in
+addition to the in-chat questions above. Use it to report quality issues,
+hallucinations, or unexpected agent behavior.
 
 The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
 `metrics-report.json` for its live view — see `dashboard/README.md` for details.
@@ -947,8 +952,14 @@ The agent cannot access any repository, Jira project, or API the user is not alr
 
 ### Feedback Mechanism
 
-We actively monitor the performance and helpfulness of the OpenSpec agent. If you encounter poor quality output, hallucinations, or unexpected behavior, please report it using our feedback form:
-- **[Submit Agent Feedback Here](https://docs.google.com/document/d/19vAlSNyY-HyG3WrjnpwNs7r1RaDvZGkw7YRZx-WK4sM/edit?usp=sharing)**
+We actively monitor the performance and helpfulness of the OpenSpec agent.
+
+**In-chat (mandatory at `/opsx-archive`):** time saved, satisfaction, story points,
+and optional comments — written to `user-feedback.md` and telemetry.
+
+**External form (prompted at end of `/opsx-archive`):** report poor quality output,
+hallucinations, or unexpected behavior using our shared feedback spreadsheet:
+- **[Submit Agent Feedback Here](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing)**
 
 ### Point of Contact
 
