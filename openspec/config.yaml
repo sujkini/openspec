@@ -29,6 +29,14 @@ flags:
   #   "phase-iterative" — generate and implement tasks one plan phase at a time, optional PR per phase
   task_execution_mode: phase-iterative   # one-shot | phase-iterative
   pr_between_phases: optional            # optional | mandatory | none (phase-iterative only)
+
+  # TOKEN OPTIMIZATION FLAGS (new - reduces costs by 80-90%)
+  # These optimizations work together to minimize LLM API token usage in phase-iterative mode
+  context_bundling:
+    phase_scoped: true               # Extract only Phase N from plan.md (70-80% reduction)
+    filter_assessment: true          # Filter repo-assessment to Phase N target files only
+    prior_tasks_ids_only: true       # Send task IDs from prior phases, not full payloads
+    enable_prompt_caching: true      # Use Anthropic prompt caching (90% discount on cached tokens)
   task_sizing:
     prompt_user: true
     default_min: 2

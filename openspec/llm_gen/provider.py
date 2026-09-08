@@ -166,10 +166,20 @@ class LLMProvider:
             ) from exc
 
         client = anthropic.Anthropic(api_key=self.config.api_key, base_url=self.config.base_url or None)
+
+        # PROMPT CACHING: Mark system prompt as cacheable
+        # Anthropic caches system messages marked with cache_control for 5 minutes
+        # This gives 90% discount on cached tokens (subsequent calls in same Epic)
         kwargs: dict[str, Any] = dict(
             model=model,
             max_tokens=max_tokens,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=[{"role": "user", "content": user}],
         )
         if _accepts_kwarg(client.messages.create, "temperature"):
@@ -183,6 +193,16 @@ class LLMProvider:
         usage = getattr(resp, "usage", None)
         tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
         tokens_out = int(getattr(usage, "output_tokens", 0) or 0)
+
+        # Log cache performance (cache_creation_input_tokens, cache_read_input_tokens)
+        cache_creation = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        if cache_creation > 0 or cache_read > 0:
+            logger.info(
+                f"Prompt cache: created={cache_creation} tokens, read={cache_read} tokens "
+                f"(~{cache_read * 0.9:.0f} tokens saved at 90% discount)"
+            )
+
         return LLMResponse(text=text, tokens_in=tokens_in, tokens_out=tokens_out, model=model)
 
     def _complete_openai(
@@ -274,10 +294,19 @@ class LLMProvider:
             )
 
         client = AnthropicVertex(project_id=self.config.project_id, region=self.config.location)
+
+        # PROMPT CACHING: Mark system prompt as cacheable
+        # Anthropic Vertex also supports prompt caching with same cache_control mechanism
         kwargs: dict[str, Any] = dict(
             model=model,
             max_tokens=max_tokens,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=[{"role": "user", "content": user}],
         )
         if _accepts_kwarg(client.messages.create, "temperature"):
@@ -291,6 +320,16 @@ class LLMProvider:
         usage = getattr(resp, "usage", None)
         tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
         tokens_out = int(getattr(usage, "output_tokens", 0) or 0)
+
+        # Log cache performance
+        cache_creation = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        if cache_creation > 0 or cache_read > 0:
+            logger.info(
+                f"Prompt cache (Vertex): created={cache_creation} tokens, read={cache_read} tokens "
+                f"(~{cache_read * 0.9:.0f} tokens saved at 90% discount)"
+            )
+
         return LLMResponse(text=text, tokens_in=tokens_in, tokens_out=tokens_out, model=model)
 
 

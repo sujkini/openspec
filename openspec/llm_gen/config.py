@@ -31,6 +31,15 @@ _DEFAULT_GENERATION_RUNTIME = {
 
 
 @dataclass
+class ContextBundlingConfig:
+    """Token optimization settings for context bundling."""
+    phase_scoped: bool = True
+    filter_assessment: bool = True
+    prior_tasks_ids_only: bool = True
+    enable_prompt_caching: bool = True
+
+
+@dataclass
 class LLMConfig:
     provider: str = "anthropic"
     model: str = ""
@@ -43,6 +52,11 @@ class LLMConfig:
     max_output_tokens: int = 8000
     temperature: float = 0.2
     max_retries: int = 2
+    context_bundling: ContextBundlingConfig = None
+
+    def __post_init__(self):
+        if self.context_bundling is None:
+            self.context_bundling = ContextBundlingConfig()
 
     def model_for(self, role: str) -> str:
         """``role`` is 'generation' (validation/specs/plan/tasks/feedback) or
@@ -92,6 +106,17 @@ def load_llm_config(repo_root: Path | None = None) -> LLMConfig:
     api_key_env = raw.get("api_key_env") or "OPENSPEC_LLM_API_KEY"
     temperature_raw = raw.get("temperature")
     max_retries_raw = raw.get("max_retries")
+
+    # Load context bundling optimization flags
+    flags = cfg.get("flags", {}) or {}
+    bundling_raw = flags.get("context_bundling", {}) or {}
+    context_bundling = ContextBundlingConfig(
+        phase_scoped=bundling_raw.get("phase_scoped", True),
+        filter_assessment=bundling_raw.get("filter_assessment", True),
+        prior_tasks_ids_only=bundling_raw.get("prior_tasks_ids_only", True),
+        enable_prompt_caching=bundling_raw.get("enable_prompt_caching", True),
+    )
+
     return LLMConfig(
         provider=(raw.get("provider") or "anthropic").lower(),
         model=raw.get("model") or "",
@@ -104,4 +129,5 @@ def load_llm_config(repo_root: Path | None = None) -> LLMConfig:
         max_output_tokens=int(raw.get("max_output_tokens") or 8000),
         temperature=float(temperature_raw) if temperature_raw is not None else 0.2,
         max_retries=int(max_retries_raw) if max_retries_raw is not None else 2,
+        context_bundling=context_bundling,
     )

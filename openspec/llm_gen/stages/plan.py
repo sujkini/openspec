@@ -24,7 +24,12 @@ def _provided(flag: bool) -> str:
     return "PROVIDED" if flag else "NOT_PROVIDED"
 
 
-def _build_user_message(cdir: Path, repo_root: Path, constitution_text: str) -> str:
+def _build_user_message(cdir: Path, repo_root: Path) -> str:
+    """Build user message with DYNAMIC content only (for prompt caching).
+
+    Static content (constitution, template) is now in system prompt and will be
+    cached across calls. This message contains only the change-specific inputs.
+    """
     specs_text, _ = ctx.read_or_not_provided(cdir / "specs.md")
     assessment_text, assessment_ok = ctx.read_or_not_provided(cdir / "repo-assessment.md")
     agents_text, agents_ok = ctx.read_agents_md(repo_root)
@@ -35,14 +40,11 @@ def _build_user_message(cdir: Path, repo_root: Path, constitution_text: str) -> 
             "metadata:",
             f'  feature_name: "{cdir.name}"',
             "  inputs:",
-            "    constitution: PROVIDED",
+            "    constitution: PROVIDED (see system prompt)",
             "    validated_specs: PROVIDED",
             f"    repo_assessment: {_provided(assessment_ok)}",
             f"    agents_md: {_provided(agents_ok)}",
             f"    spec_validator_json: {_provided(validation_ok)}",
-            "",
-            "constitution.md (INPUT — pre-approved; read ALL principles before planning):",
-            constitution_text,
             "",
             "validated_specs.md:",
             specs_text,
@@ -83,8 +85,12 @@ def run(change: str, *, repo_root: Path | None = None, feedback: str | None = No
     if not specs_path.exists() or not specs_path.read_text(encoding="utf-8").strip():
         return {"ok": False, "reason": f"{specs_path} not found — specs.md must be approved before planning"}
 
-    system = ctx.read_template("plan-template.md")
-    user = _build_user_message(cdir, repo_root, constitution_text)
+    # PROMPT CACHING: Put static content (template + constitution) in system prompt
+    # Constitution stays the same across all phases, so Anthropic will cache it
+    system = ctx.read_template("plan-template.md") + "\n\n---\n\n## Constitution (Pre-approved)\n\n" + constitution_text
+
+    # User prompt has only dynamic, change-specific content
+    user = _build_user_message(cdir, repo_root)
     if feedback:
         user += f"\n\nrevision_feedback (address every point; do not regress passing sections):\n{feedback}"
 
