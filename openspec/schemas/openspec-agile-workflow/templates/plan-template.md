@@ -86,6 +86,13 @@ Each phase MUST include these bullets:
 - **Target files:** (only from repo_assessment.md or marked UNVERIFIED + discovery step)
 - **Required capabilities:** (from agents.md OR provisional taxonomy; mark provisional if needed)
 - **Verification hooks:** (unit/integration/e2e/manual; name suites/areas if known from inputs)
+- **Discovery tasks:** (list any "verify/research" tasks that MUST complete before coding tasks in
+  this phase — e.g., "Verify tlsAdherence field exists on APIServer CRD", "Confirm watcher already
+  registered in manager bootstrap". Write "None" if the phase is pure implementation with no
+  prerequisite unknowns.)
+- **Watcher / update mechanism:** (if this phase introduces a controller or reconcile loop that must
+  react to runtime changes: name the watcher, what resource/field it monitors, and what action it
+  takes on change. Write "N/A" if the phase is stateless or does not introduce a new watch.)
 
 ### N/A policy
 Any subsection that does not apply MUST be `N/A` with a one-line reason.
@@ -107,8 +114,17 @@ in addition to the generic guidance in this template.
 Before finalizing, verify:
 - [ ] §0 inputs table complete; AgentRoutingMode matches constitution.md
 - [ ] §1 includes **Repo-grounded reality check** (greenfield / delta / mix) citing repo_assessment
+- [ ] §1.4 Pattern alignment present and non-empty when repo_assessment §13 is present; each
+      deprecated pattern from §13.2 explicitly avoided; config delivery method stated
+- [ ] §1.5 Startup-time vs runtime resolution present; if runtime updates required, a named watcher
+      appears in at least one phase's "Watcher / update mechanism" field
 - [ ] Every P1 user story (US-00x) maps to exactly 1 phase (1:1); phase count == user story count
-- [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities, Verification hooks)
+- [ ] All phases use the full phase template (Goal, Dependencies, Target files, Capabilities,
+      Verification hooks, Discovery tasks, Watcher / update mechanism)
+- [ ] Every phase "Discovery tasks" field is present — either lists specific verify/research tasks
+      or explicitly states "None"
+- [ ] Every phase "Watcher / update mechanism" field is present — either names the watcher or
+      explicitly states "N/A"
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
 - [ ] §5 contains NO standalone e2e-only phases (e2e belongs in §6 only)
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)
@@ -137,6 +153,29 @@ patterns. Include a **Repo-grounded reality check** paragraph cross-referencing 
 repo_assessment.md Key Finding AND §11.1 branch absences to determine whether this is greenfield,
 delta/hardening, or a mix. When repo_assessment states code is absent on the pinned branch, phases
 MUST follow the documented exemplar pattern for the project (see AGENTS.md if provided).
+
+#### §1.4 Pattern alignment (required when repo-assessment §13 is present)
+
+This subsection is MANDATORY when repo_assessment.md contains §13. Omit it (mark N/A with reason)
+only when no §13 data was collected.
+
+- **Dominant pattern chosen:** `<pattern name>` — observed <N> times in merged PRs (from §13.2)
+- **Deprecated patterns avoided:** list patterns from §13.2 marked "Declining" or "AVOID" and
+  confirm they are NOT used in this plan
+- **Divergence justification:** If any design decision diverges from the most-frequent pattern in
+  §13.2, state WHY explicitly. Otherwise write "None — fully aligned with most-common patterns."
+- **Config delivery method:** runtime-conditional (e.g. PersistentPreRunE hook) | static CSV arg |
+  other — justify if NOT using the most-frequent approach observed in similar PRs
+
+#### §1.5 Startup-time vs. runtime resolution
+
+- **Startup-time config required:** Yes / No
+- If Yes: which hook resolves it (e.g. `PersistentPreRunE`, `init()`, manager `Start()`), and
+  what is the retry/timeout window if an upstream resource (CRD field, ConfigMap, API) is
+  temporarily unavailable at startup?
+- **Runtime update mechanism:** does the feature require a watcher/reconciler to react to
+  field changes AFTER the operand is already running? Yes / No — if Yes, name the watcher
+  (this MUST appear in at least one phase's "Watcher / update mechanism" field).
 
 ### § 2. Persistence & state
 

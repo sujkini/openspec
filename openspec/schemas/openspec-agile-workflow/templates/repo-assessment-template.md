@@ -383,6 +383,50 @@ steps in the implementation plan.*
 | Change RBAC | `path/to/rbac/` (NOT the generated bundle) |
 | Add a test | `path/to/test/pattern_to_follow` |
 
+## 13. Similar PR & Pattern Registry
+*Required when a feature spec is provided. Mark N/A for general assessments.*
+*Search the GitHub PR history for PRs whose title/description overlaps this feature spec.
+This section grounds the Planning Agent in real patterns the team has already approved and merged.*
+
+### 13.1 Similar merged PRs
+Search merged PRs for title/description overlap with the current feature spec.
+For each match (up to 3), document:
+- **PR #<number> — <title>** (merged <date>)
+  - **Key conditional logic:** field name + value that gates the feature (and the negative/skip case)
+  - **Critical functions to replicate:** function signatures that MUST be reused or mirrored
+  - **Deprecated patterns avoided:** what this PR explicitly does NOT do and why
+
+*If no similar PRs found: state "No similar merged PRs found — greenfield implementation."*
+
+### 13.2 Pattern frequency table
+List patterns observed across merged PRs that are relevant to this feature:
+
+| Pattern | Frequency in repo | Trend | Recommendation |
+|---|---|---|---|
+| (e.g. `SecurityProfileWatcher`) | 8 uses | Stable | MUST use |
+| (e.g. `ObservedConfig` direct read) | 3 uses | Declining | AVOID — use watcher |
+
+### 13.3 Critical edge cases from merged PRs
+Edge cases that similar PRs explicitly handle and that this feature must also address:
+- Legacy-profile / empty-field no-ops (when field is unset or zero-value)
+- Startup-time vs. runtime resolution split (which config must be resolved before server starts)
+- CSV static-args vs. runtime-conditional-args distinction
+
+*Write "None identified" if no relevant edge cases found.*
+
+### 13.4 Reference functions (must replicate)
+List function signatures extracted from similar merged PRs that are CRITICAL to correctness.
+The Planning Agent MUST ensure the implementation plan includes tasks to replicate these:
+
+```
+// <file path>
+func <FunctionName>(<params>) <return> {
+  // <one-line description of critical behavior>
+}
+```
+
+*Write "None identified" if no reference functions are required.*
+
 ---
 
 ## Quality Checklist (self-check before output — target ≥90%)
@@ -408,6 +452,8 @@ Before finalizing your assessment, verify ALL items pass:
 - [ ] Greenfield vs delta/hardening conclusion is explicit when spec feature is absent on branch
 - [ ] If AGENTS.md provided: all project-specific quality checklist items from its
       Repo-Assessment Stage Hints section are satisfied
+- [ ] **§13 Similar-PR Registry:** When a feature spec is provided, §13.1–§13.4 are populated
+      (or explicitly marked N/A with justification). At least one similar PR searched — never omitted.
 
 ---
 

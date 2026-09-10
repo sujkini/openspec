@@ -123,7 +123,21 @@ If preflight is not printed, the run is non-compliant.
    ```
    Include `--phase <N>` only when task_execution_mode = "phase-iterative" AND artifact is `tasks`.
    Omit `--phase` for one-shot mode and non-task artifacts.
-7. `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
+7. **Pre-flight input validation** (before any LLM call — deterministic, no tools needed):
+
+   ```bash
+   python -m openspec.validators.pre_flight \
+       --artifact "<artifact-id>" \
+       --change "<name>" \
+       [--phase <N>]   # only for tasks in phase-iterative mode
+   ```
+
+   - **If `{"ok": true}`:** proceed to step 7a/7b/7c below.
+   - **If `{"ok": false}`:** STOP immediately. Surface the `reason` and `failures[]` list to
+     the user. Do NOT call `openspec instructions` or attempt generation. Ask the user to fix
+     the missing/corrupt inputs before re-running `/opsx-continue`.
+
+   `openspec instructions <artifact-id> --change "<name>" --json` → create artifact at `outputPath` (**v1**).
    - Generation uses **`{schema_root}/templates/`** (from openspec instructions).
    - **phase-iterative**: pass `phase_scope` and `task_sizing` metadata to the template.
      If Phase N > 1: append new phase tasks to existing tasks.md.
@@ -145,6 +159,21 @@ If preflight is not printed, the run is non-compliant.
    - Emit ONE valid JSON object matching the validation template schema in **one response turn**.
    - Write the result to `outputPath`.
 
+   **7a-gate. Structural validation gate (ONLY when artifact is `validation`)**
+
+   Immediately after writing `validation.json`, **before** step 8 telemetry:
+
+   ```bash
+   python -m openspec.validators.validation_structural --change "<name>"
+   ```
+
+   - **If `ok: true`:** proceed to step 8.
+   - **If `ok: false`:** regenerate `validation.json` using the same single-shot rules (step 7a),
+     passing the `failures[]` list as fix instructions. **Max 2 auto-regeneration attempts.**
+     Re-run the validator after each regeneration.
+   - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
+     evaluation report and approval prompt; do not silently ignore structural violations.
+
    **7b. Single-shot `specs.md` generation (ONLY when artifact is `specs` — cost optimization)**
 
    Use a **same-session, single-turn, no-tools** call:
@@ -160,29 +189,71 @@ If preflight is not printed, the run is non-compliant.
    - Produce the complete `specs.md` in **one response turn**.
    - Write the result to `outputPath`.
 
+   **7b-gate. Structural validation gate (ONLY when artifact is `specs`)**
+
+   Immediately after writing `specs.md`, **before** step 8 telemetry:
+
+   ```bash
+   python -m openspec.validators.specs_structural --change "<name>"
+   ```
+
+   - **If `ok: true`:** proceed to step 8.
+   - **If `ok: false`:** regenerate `specs.md` using the same single-shot rules (step 7b),
+     passing the `failures[]` list as fix instructions. **Max 2 auto-regeneration attempts.**
+     Re-run the validator after each regeneration.
+   - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
+     evaluation report and approval prompt; do not silently ignore structural violations.
+
    **7c. Single-shot `tasks.md` generation (ONLY when artifact is `tasks` — cost optimization)**
 
    `repo-assessment` and `plan` remain **agentic** (tool use allowed). For `validation`,
    `specs`, and `tasks`, use a **same-session, single-turn, no-tools** call:
 
-   **Before generating (load packed bundle — tool reads allowed here only):**
-   1. `openspec instructions tasks --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
-   2. Read every dependency from the change directory: `specs.md`, `plan.md`, `repo-assessment.md`,
-      `validation.json` (if present), `inputs/jira.yaml`
-   3. Read `harness-evals/constitution.md`
-   4. Read `agents.md` from the operator repo root (`./agents.md`)
-   5. Read `{schema_root}/templates/tasks-template.md` (or path from instructions JSON)
-   6. **phase-iterative:** read existing `tasks.md` (prior phases are read-only context),
-      include `phase_scope: N` and `task_sizing` metadata in the user message
-   7. **one-shot:** include `task_sizing` metadata only (no `phase_scope`)
+   **Before generating — load PHASE-SCOPED bundle (tool reads allowed here only):**
 
-   **During generation (FORBIDDEN — no tool calls):**
+   Read the following files. Apply the slicing rules below to keep context under 80k tokens.
+
+   1. `openspec instructions tasks --change "<name>" --json` → `outputPath`, `dependencies`, `rules`, `template`
+   2. **`plan.md` — Phase N section only:** read from the `## Phase N` header to the next `## Phase` header
+      (or end of file). Do NOT include other phases.
+   3. **`specs.md` — Phase N user stories and FRs only:** read only the user story (US-XX) and functional
+      requirements (FR-xxx) referenced by Phase N tasks (from tasks.md §3 User Story column if appending,
+      or from plan.md Phase N User Story field). Do NOT send unrelated user stories.
+   4. **`repo-assessment.md` — target-file and reuse sections only:** read §7 (Change Cascade) and §5
+      (Reusable Assets) sections, plus any §13 (Similar-PR) section. Do NOT send the full architecture
+      narrative (§1–§4) or developer workflow (§8–§9).
+   5. **`harness-evals/constitution.md` — routing table + Phase N task-type sections only:** read the
+      agent routing table (first 10–15 lines) and any sections relevant to Phase N's target files and
+      task types. Do NOT send full constitution unless it is under 3000 tokens total.
+   6. **`agents.md` — Assigned Agents for Phase N only:** read only the agent entries for the agents
+      assigned to Phase N tasks. Do NOT send agent entries for agents not used in this phase.
+   7. **phase-iterative Phase N > 1 — prior tasks.md:** extract task IDs and completion status only
+      (one line per task: `- [x] T-001 — <title>`). Do NOT include §4 payload text from prior phases.
+   8. Read `{schema_root}/templates/tasks-template.md` (or path from instructions JSON)
+   9. Include `phase_scope: N` and `task_sizing` metadata in the user message (phase-iterative)
+      or `task_sizing` metadata only (one-shot, no `phase_scope`)
+
+   **During generation (FORBIDDEN — no tool calls, except between passes as noted):**
    - Do **NOT** use grep, file search, terminal, MCP reads, sub-agents, or any tool that
-     re-fetches repo state. The packed bundle above is the **only** allowed context.
-   - Produce the complete `tasks.md` (§0 through §5) in **one response turn**.
-   - Do **NOT** use multi-pass mode (`pass_mode: skeleton|payloads|orchestration`) unless
-     output is genuinely truncated; prefer single-pass (default).
-   - Write the result to `outputPath` (append with `---` separator when phase-iterative Phase N > 1).
+     re-fetches repo state. The phase-scoped bundle above is the **only** allowed context.
+
+   **Output length rule — single-pass vs two-pass:**
+
+   - **Single-pass** (§0–§5 in one response turn): use when Phase N has **≤ 4 tasks** AND
+     estimated output is **< 8 000 tokens**. Prefer single-pass for small phases — it is faster
+     and cheaper.
+
+   - **Two-pass** (use when Phase N has **> 4 tasks** OR estimated output **≥ 8 000 tokens**):
+     - **Pass 1:** produce §0–§3 + task index only (IDs, titles, Assigned Agent, complexity score)
+       → write as `tasks_draft.md` at the change directory root.
+     - *Between passes (one tool read allowed):* read `tasks_draft.md` to confirm the index before
+       proceeding. No other tool reads are allowed between passes.
+     - **Pass 2:** produce §4 payloads in **batches of 3 tasks** + §5 orchestration table
+       → append to produce the final `tasks.md`.
+     - Batched payload turns stay ≤ 40k tokens each. Continue until all tasks are written.
+
+   - Write the final result to `outputPath` (append with `---` separator when phase-iterative Phase N > 1).
+   - After two-pass generation completes, delete `tasks_draft.md` (it is a temporary scratch file).
 
    **7d. Structural validation gate (ONLY when artifact is `tasks`)**
 
@@ -201,6 +272,22 @@ If preflight is not printed, the run is non-compliant.
 
    This replaces informal LLM self-check with deterministic checks (Fibonacci complexity,
    agent roster, §0 FR/US coverage, §3/§4 parity, DAG vs linear order, no Testing_Agent/e2e tasks).
+
+   **7-plan-gate. Structural validation gate (ONLY when artifact is `plan`)**
+
+   Immediately after the agentic plan.md is written, **before** step 8 telemetry:
+
+   ```bash
+   python -m openspec.validators.plan_structural --change "<name>"
+   ```
+
+   - **If `ok: true`:** proceed to step 8.
+   - **If `ok: false`:** the agent re-runs plan refinement (tool use remains freely allowed —
+     plan stays agentic). Pass the `failures[]` list as fix instructions. **Max 2 auto-refinement
+     attempts.** Re-run the validator after each refinement.
+   - **If still failing after 2 retries:** surface all remaining `failures[]` in the step 9
+     evaluation report and approval prompt; do not silently ignore structural violations.
+
 8. **Telemetry — signal artifact written** (silent, non-blocking; emits `phase_progress` with partial tokens):
    ```bash
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --phase <N>
@@ -389,7 +476,14 @@ Stop after user approval/rejection of the current artifact and completion of any
 - `target_repo` required before repo-assessment — **not** at `/opsx-new`
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
-- **`validation.json`, `specs.md`, and `tasks.md` are single-shot** — For these artifacts, steps 7a/7b/7c forbid tool use during generation; step 7d runs `openspec.validators.tasks_structural` as a hard gate for `tasks` only. `repo-assessment` and `plan` remain agentic.
+- **`validation.json`, `specs.md`, and `tasks.md` are single-shot** — For these artifacts, steps 7a/7b/7c forbid tool use during generation. `repo-assessment` and `plan` remain agentic.
+- **Structural output gates (all artifacts):**
+  - `validation` → step 7a-gate runs `openspec.validators.validation_structural` after writing
+  - `specs` → step 7b-gate runs `openspec.validators.specs_structural` after writing
+  - `tasks` → step 7d runs `openspec.validators.tasks_structural` after writing
+  - `plan` → step 7-plan-gate runs `openspec.validators.plan_structural` after writing (agentic refinement)
+  - All gates: max 2 retries, then surface failures in eval report
+- **Pre-flight always runs first** — `openspec.validators.pre_flight` must return `{"ok": true}` before any LLM generation call (step 7). A `{"ok": false}` result STOPS the workflow immediately and requires user intervention to fix inputs.
 
 ## Batch / Continue-All Telemetry
 

@@ -68,6 +68,16 @@ Follow the output template structure exactly.
   - Edge cases state concrete outcomes (not open questions); resolve singleton/scope ambiguities in FR text.
   - At most 3 [NEEDS CLARIFICATION] markers total; all other gaps become numbered Assumptions (A-001…).
   - Assumptions section is complete — one bullet per unresolved ticket gap or Stage 0 missing_element.
+  - GATING CONDITIONS: Every FR that applies conditionally (contains "when", "if", "only if", "unless",
+    "provided that") MUST state the gating field name and the triggering value IN THE FR TEXT ITSELF.
+    The negative case ("when NOT to apply") must be a separate FR or an explicit sub-clause of the same FR.
+    An FR that is always-on does not require a gating clause.
+  - EDGE CASE COMPLETENESS: The Edge Cases section covers: empty/unset field values, deprecated profile
+    types, transition behavior (e.g. Strict → Legacy mode), and concurrent/conflicting config scenarios.
+    Zero open "what happens?" questions — all resolved with a concrete outcome or marked [NEEDS CLARIFICATION].
+  - SIMILAR-PR ALIGNMENT: If repo-assessment §13.1 lists similar merged PRs, each critical conditional
+    from those PRs is either covered by an FR (with gating clause) or explicitly declared out-of-scope
+    with a justification in the Assumptions section.
 -->
 
 ## User Scenarios & Testing *(mandatory)*

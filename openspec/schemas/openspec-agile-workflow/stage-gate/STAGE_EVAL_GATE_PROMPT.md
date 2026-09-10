@@ -35,6 +35,45 @@ Use existing `/opsx-continue` flow:
 
 Save a copy reference: you will need v1 text for refinement even after overwriting the file.
 
+## Step 1b — Structural pre-checks (run before eval scoring)
+
+These checks are **artifact-type specific** and **deterministic** — no LLM judgment required.
+Any FAIL here short-circuits immediately to the refinement loop (Step 3) **without** running
+eval scoring. Return `{"ok": false, "reason": "<check that failed>"}` on any failure and
+begin refinement targeting only the failing checks.
+
+**For `validation` artifact:**
+- [ ] Output is valid JSON (parseable without error)
+- [ ] Required top-level keys present: `rubric`, `sections`, `status`
+- [ ] No section with an empty `criteria` list (every section must have ≥1 criterion)
+- [ ] `status` value is one of `["pass", "fail", "needs_review"]` — not null or missing
+
+**For `specs` artifact:**
+- [ ] At least one `FR-001`-pattern line (regex: `FR-\d{3}`) present in the document
+- [ ] At least one `US-001`-pattern line (regex: `US-\d{3}`) present in the document
+- [ ] Every FR line containing words "when", "if", "only if", "unless", or "provided that"
+      also contains a field name in backticks — proxy for gating condition being stated
+      (FRs that are unconditional do not require a backtick field reference)
+- [ ] No Acceptance Criteria section left with `TBD`, blank content after `AC:`, or
+      placeholder text like `[expected outcome]`
+- [ ] If repo-assessment §13.1 exists and lists similar PRs: check that the spec does NOT
+      omit those conditionals without an explicit Assumption (A-00x) declaring them out-of-scope
+
+**For `plan` artifact:**
+- [ ] `§1.4` or `Pattern alignment` subsection is present and non-empty
+      (required when repo-assessment §13 was collected; mark N/A only when §13 absent)
+- [ ] `§1.5` or `Startup` subsection is present and non-empty
+- [ ] Every `## Phase` block contains a `Discovery tasks:` field (even if value is "None")
+- [ ] Every `## Phase` block contains a `Watcher` or `update mechanism` field (even if "N/A")
+
+**For `tasks` artifact:**
+- [ ] No task payload is missing its `Acceptance Criteria` section (run `tasks_structural` validator)
+- [ ] At least one task per phase that implements conditional logic (per specs FR gating conditions)
+      has a negative-case or gating test in its Acceptance Criteria
+
+On any FAIL: trigger refinement loop (Step 3) immediately. Pass the full `failures[]` list as
+fix instructions to the refinement context. Do NOT silently proceed to eval scoring.
+
 ## Step 2 — Run stage evals
 
 Load mapping from `artifact-eval-map.yaml`:

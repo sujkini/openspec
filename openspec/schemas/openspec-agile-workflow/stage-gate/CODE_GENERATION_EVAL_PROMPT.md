@@ -11,9 +11,10 @@ Paths below are **relative to the schema root** (`openspec/schemas/openspec-agil
 ```
 1. Execute OAPE command (or manual agent work) in fork cwd
 2. Execute verification commands (go build, go vet, make targets — capture real exit codes)
+   2e. Reference implementation checks (if repo-assessment §13 present — mandatory before eval scoring)
 3. Run code-generation evals (filter by oape_command)
 4. Execute test block (co-generate _test.go for controller tasks; run go test / make test)
-5. IF any eval case OR verification OR test fails → fix code → re-run steps 2–4 (up to 2 refinement passes)
+5. IF any eval case OR verification OR test OR §13 check fails → fix code → re-run steps 2–4 (up to 2 refinement passes)
 6. Present task summary + code eval scorecard + verification results + test results
 7. User approves CODE for this task
 8. ON APPROVE → write task report → mark task [x] → next task
@@ -112,6 +113,53 @@ verification:
 
 If any verification command fails: **do not proceed to evals**. Fix the code first,
 then re-run verification. This counts toward the 2-pass refinement budget.
+
+### 2e. Reference implementation checks (conditional — run when repo-assessment §13 is present)
+
+If `repo-assessment.md` for this change contains a **§13 Similar-PR & Pattern Registry**
+section, perform these additional checks **before** proceeding to eval scoring:
+
+**§13.4 Reference functions:**
+For each function listed in §13.4 (Reference functions must replicate):
+- [ ] An equivalent function (same name or same functional purpose) exists in the generated code
+      or in the files modified by this task. Check with:
+      ```bash
+      rg -n "<FunctionName>" <target-package-path>
+      ```
+- [ ] If the function is NOT present: this is a **CRITICAL** missing component — do not proceed
+      to step 3 eval scoring. Fix the implementation gap first (counts toward 2-pass budget).
+
+**§13.3 Edge cases — watcher component:**
+- [ ] If §13.3 lists a watcher edge case (e.g. "SecurityProfileWatcher must react to runtime changes"):
+      verify a watcher/informer is registered in the generated controller or manager bootstrap.
+      Check with:
+      ```bash
+      rg -n "Watch\|AddEventHandler\|informer" <controller-package>
+      ```
+- [ ] If the watcher is missing: surface as a CRITICAL gap in the eval scorecard.
+
+**§13.2 Pattern compliance — static vs runtime-conditional args:**
+- [ ] Verify that no arguments listed as "runtime-conditional" in §13.2 (Trend: Declining) are
+      generated as static CSV args. Check any new arg-building functions for hardcoded values
+      that should be resolved at runtime.
+
+**Record results:**
+```yaml
+reference_impl_checks:
+  s13_4_functions:
+    - name: "<FunctionName>"
+      found: true | false
+      location: "<file:line>"  # if found
+  s13_3_watcher:
+    required: true | false
+    found: true | false
+  s13_2_static_args_violations: 0  # count of violations found
+  overall_pass: true | false
+```
+
+If `overall_pass: false` on any §13 check: **do NOT auto-approve this task**.
+Surface missing components in the step 7 task summary under "Reference Implementation Gaps"
+and require at least one refinement pass before presenting for user approval.
 
 ### 2d. Duplicate `package` recovery for Go files (mandatory)
 
@@ -402,6 +450,7 @@ Ask (skip if `auto_approve: true` — substitute task_id, task_title, verificati
 ## Guardrails
 
 - **Never** present user approval before running code-generation evals AND verification AND test execution
+- **Never** skip step 2e reference implementation checks when repo-assessment §13 is present — missing §13.4 reference functions are CRITICAL gaps that must be resolved before task approval
 - **Never** advance to the next task without approval (user Approve or auto-approved via `config.yaml → flags.auto_approve`)
 - **Never** report "PASSED" for commands that were not actually executed — capture real exit codes
 - **Always** run `go build` + `go vet` for every task that produces or modifies Go source files
