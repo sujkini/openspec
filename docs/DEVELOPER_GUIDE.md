@@ -1,5 +1,14 @@
 # OpenSpec Developer Guide
 
+> **Every change ends with two commands — don't skip them:**
+>
+> | Step | Command | Required? | When |
+> |---|---|---|---|
+> | 1 | **`/opsx-archive`** | **Mandatory** | After all phases (and `/opsx-e2e`, if applicable). Dev + QE feedback, move to `archive/`, [external form](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing). |
+> | 2 | **`/opsx-publish-metrics [change-name]`** | **Recommended** | After archive. Publish metrics via PR — **not** auto-triggered. |
+>
+> Only `/opsx-archive` collects time-saved and story points — not `/opsx-apply` or `/opsx-e2e`.
+
 A step-by-step guide for developers running a Jira ticket through the OpenSpec
 agile workflow in Cursor. Read this once before your first change; if you use the
 default **phase-iterative** mode, start with
@@ -441,6 +450,28 @@ Key fields in `metrics-report.json`:
 
 ---
 
+## Step 11 — Publish metrics (`/opsx-publish-metrics`)
+
+Run **after** `/opsx-archive` (or when metrics files are complete). This step is easy to
+skip because archive does **not** trigger it automatically.
+
+```
+/opsx-publish-metrics
+/opsx-publish-metrics my-change-name
+```
+
+### What happens
+
+1. Reads `telemetry/metrics-report.json` (and `qe-metrics.json` if E2E ran) from the change
+   directory (live or under `openspec/changes/archive/YYYY-MM-DD-<name>/`).
+2. Forks [open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard) via GitHub MCP.
+3. Opens a PR adding your metrics under `data/open-spec-matrics/operators/<operator>/`.
+
+Requires GitHub MCP (`user-github`) and `credentials.github` in `config.yaml`. Warns if
+metrics are incomplete but does not hard-block publish.
+
+---
+
 ## End-to-end flow (phase-iterative, direct mode)
 
 Each **phase = one user story**. You repeat this block for Phase 1, 2, 3, …
@@ -464,7 +495,9 @@ Configure config.yaml + MCP + credentials
     ↓
 /opsx-continue  →  tasks for Phase 2 (US-02) … repeat apply → PR prompt → e2e --phase 2
     ↓
-/opsx-archive   →  feedback + move to archive/  (once, after all phases)
+/opsx-archive   →  feedback + move to archive/  (once, after all phases) — MANDATORY
+    ↓
+/opsx-publish-metrics  →  PR metrics to cross-operator dashboard — RECOMMENDED (not automatic)
 ```
 
 **Standalone E2E** (no Jira ticket or OpenSpec planning): install OpenSpec, run
@@ -481,7 +514,8 @@ Configure config.yaml + MCP + credentials
 | `/opsx-continue` | Create next planning artifact |
 | `/opsx-apply` | Implement current phase (one user story); PR prompt after each phase |
 | `/opsx-e2e` | Per phase: `--phase N` after that phase's PR; or standalone with `--pr` / `--adr` |
-| `/opsx-archive` | When done — mandatory feedback + archive |
+| `/opsx-archive` | When done — **mandatory** feedback + archive + external form prompt |
+| `/opsx-publish-metrics` | After archive — publish metrics to cross-operator dashboard (not automatic) |
 | `/opsx-explore` | Brainstorm without creating artifacts |
 
 ---

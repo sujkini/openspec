@@ -1,10 +1,15 @@
 # OpenSpec Agile Workflow
 
+> **Every change ends with two commands — don't skip them:**
+>
+> | Step | Command | Required? |
+> |---|---|---|
+> | 1 | **`/opsx-archive`** | **Mandatory** — feedback, archive, [external form](#feedback-mechanism) |
+> | 2 | **`/opsx-publish-metrics [change-name]`** | **Recommended** — publish metrics to dashboard (not automatic after archive) |
+>
+> Run `/opsx-e2e` before `/opsx-archive` if this change needs E2E. Details: [Telemetry & Metrics](#telemetry--metrics).
+
 Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Jira-driven, spec-first development** with AI-assisted planning and implementation. Supports two execution strategies (**phase-iterative** and **one-shot**), two code-generation modes (**ai-helpers** and **direct**), per-phase Jira traceability, and a post-CI E2E test generation pipeline.
-
-> **New developer?** Start with **[Developer Guide](docs/DEVELOPER_GUIDE.md)** — step-by-step setup, repo URLs, MCP, commands, metrics, and archive/publish flow.
-
-> **After completing a change (and E2E, if applicable), run `/opsx-archive` to capture your feedback and time savings.** This is the single, mandatory place all feedback is collected — `/opsx-apply` and `/opsx-e2e` never prompt for it. Run `/opsx-e2e` *before* archiving if this change needs E2E coverage; once archived, the change moves out of the live directory. **`/opsx-archive` also prompts you at the end to submit the [external agent feedback form](#feedback-mechanism).** See [Telemetry & Metrics](#telemetry--metrics).
 
 ---
 
@@ -14,7 +19,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ```bash
 rm -rf /tmp/openspec-workflow
-git clone -b main https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone -b openspec-cost-optimization-2 https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
@@ -25,18 +30,16 @@ This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into y
 ```yaml
 # openspec/config.yaml
 flags:
-  codegen_mode: direct                  # recommended: plain agent implementation
-  task_execution_mode: phase-iterative  # recommended: one phase at a time
-  auto_approve: false                   # recommended: approve each artifact and task yourself
+  codegen_mode: ai-helpers        # or: direct
+  task_execution_mode: phase-iterative  # or: one-shot
+  auto_approve: true              # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
 ```
 
 | Flag | Options | Purpose |
 |------|---------|---------|
-| `codegen_mode` | `direct` / `ai-helpers` | `direct` = agent edits code directly. `ai-helpers` = OAPE commands + code eval gate. |
-| `task_execution_mode` | `phase-iterative` / `one-shot` | `phase-iterative` = one phase at a time with optional PR per phase. |
-| `auto_approve` | `false` / `true` | `false` = you approve each artifact and per-task code. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
-
-See **[Developer Guide](docs/DEVELOPER_GUIDE.md)** for credentials, MCP setup, repo URLs, and the full command flow.
+| `codegen_mode` | `ai-helpers` / `direct` | Code generation strategy |
+| `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
+| `auto_approve` | `true` / `false` | Auto-approve artifacts and per-task code approval. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
 
 ### 3. Add operator documentation
 
@@ -97,7 +100,7 @@ Restart Cursor so slash commands load from `.cursor/commands/`.
 /opsx-new PROJ-123
 ```
 
-### 7. Archive and capture feedback
+### 7. Archive and capture feedback (`/opsx-archive`) — mandatory
 
 After implementation is complete (and `/opsx-e2e` has run, if this change needs E2E coverage), run:
 
@@ -105,7 +108,17 @@ After implementation is complete (and `/opsx-e2e` has run, if this change needs 
 /opsx-archive
 ```
 
-This archives the change and **collects mandatory feedback**: estimated manual hours (time saved), a satisfaction rating, comments, and story points delivered — written to `user-feedback.md` and `metrics-report.json` inside the archived change directory. If this change ran `/opsx-e2e`, it also collects **QE feedback** (QE time saved, QE story points, QE feedback) into `qe-metrics.json` — skipped automatically if E2E was never run. This data is used for continuous monitoring and performance review (MON-01 compliance). See [Telemetry & Metrics](#telemetry--metrics) for details.
+This archives the change and **collects mandatory feedback**: estimated manual hours (time saved), a satisfaction rating, comments, and story points delivered — written to `user-feedback.md` and `metrics-report.json` inside the archived change directory. If this change ran `/opsx-e2e`, it also collects **QE feedback** (QE time saved, QE story points, QE feedback) into `qe-metrics.json` — skipped automatically if E2E was never run. At the end it prompts you to submit the [external agent feedback form](#feedback-mechanism). This data is used for continuous monitoring and performance review (MON-01 compliance). See [Telemetry & Metrics](#telemetry--metrics) for details.
+
+### 8. Publish metrics (`/opsx-publish-metrics`) — recommended
+
+After archive (or once metrics files are complete), publish to the cross-operator dashboard:
+
+```
+/opsx-publish-metrics [change-name]
+```
+
+This is **not** run automatically by `/opsx-archive` — you must invoke it explicitly. It opens a PR to [open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard) with your `metrics-report.json` and `qe-metrics.json` (if E2E ran). See [Publishing metrics](#publishing-metrics-to-the-cross-operator-dashboard) under Telemetry & Metrics.
 
 ---
 
@@ -116,12 +129,12 @@ This archives the change and **collects mandatory feedback**: estimated manual h
 Tasks are executed one phase at a time. After each phase completes:
 - A draft PR is raised scoped to that phase
 - A Jira Story ticket is created for the phase (linked to the epic)
-- The user can trigger `/opsx-e2e --phase N` after the phase PR is raised (or standalone with `--pr` / `--adr`)
+- The user can trigger `/opsx-e2e --phase N` after CI passes
 - `/opsx-continue` generates next-phase tasks
 
 ### One-Shot
 
-All tasks across all phases are executed sequentially in a single run. A single PR is raised at the end covering the entire implementation. Trigger `/opsx-e2e` for the final PR when ready (or run standalone with `--pr` / `--adr`).
+All tasks across all phases are executed sequentially in a single run. A single PR is raised at the end covering the entire implementation. After CI passes, trigger `/opsx-e2e` for the final PR.
 
 ---
 
@@ -139,17 +152,17 @@ E2e coverage is still documented in `plan.md` §6 (Verification matrix) for refe
 
 ---
 
-## E2E Test Generation
+## E2E Test Generation (Post-CI)
 
-Run `/opsx-e2e` **after OpenSpec development** (when a PR exists from `/opsx-apply`) **or standalone** when you already have a PR and/or ADR/EP — no prior OpenSpec workflow required.
+After a phase or final PR is raised and CI passes, trigger the E2E pipeline:
 
 ```
-/opsx-e2e <change-name> --phase N    # after OpenSpec: specific phase
-/opsx-e2e <change-name>              # after OpenSpec: final PR
-/opsx-e2e --pr <URL>                 # standalone: direct PR URL
-/opsx-e2e --adr <path-or-URL>        # standalone: design mode (plan only, no execute/push)
+/opsx-e2e <change-name> --phase N    # phase-iterative: specific phase
+/opsx-e2e <change-name>              # one-shot: final PR
+/opsx-e2e --pr <URL>                 # direct PR URL
+/opsx-e2e --adr <path-or-URL>        # design mode (plan only, no execute/push)
 /opsx-e2e --ep <path-or-URL>         # enhancement proposal (same as ADR)
-/opsx-e2e --pr <URL> --adr <path>    # standalone: combined mode (full pipeline + design context)
+/opsx-e2e --pr <URL> --adr <path>    # combined mode (full pipeline + design context)
 ```
 
 ### Input Modes
@@ -438,13 +451,23 @@ and finished: `run.started_at_display` / `run.archived_at_display` in
 in `qe-metrics.json` (the latter spans the earliest `/opsx-e2e` run to the
 latest, since phase-iterative changes may run E2E once per phase).
 
-After archive completes, **`/opsx-archive` always prompts you to submit the
-[external agent feedback form](#feedback-mechanism)** (Google Sheet) — in
-addition to the in-chat questions above. Use it to report quality issues,
-hallucinations, or unexpected agent behavior.
-
 The dashboard (`./dashboard/start.sh`) polls `openspec/changes/` and reads
 `metrics-report.json` for its live view — see `dashboard/README.md` for details.
+
+### Cost optimization: single-shot `tasks.md`
+
+Only the **`tasks`** artifact uses a same-session, single-turn generation path
+(no tool calls during generation). Validation, specs, repo-assessment, plan, and
+implementation remain agentic. After `tasks.md` is written, a deterministic
+structural validator runs (no LLM):
+
+```bash
+python -m openspec.validators.tasks_structural --change "<name>"
+```
+
+Compare token usage before/after by running the same Jira ticket twice and
+diffing `metrics-report.json` → `global_health.total_tokens_consumed` and the
+`tasks` phase row in `phases[]`.
 
 ### Publishing metrics to the cross-operator dashboard
 
@@ -495,7 +518,7 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
 | `/opsx-continue` | Create next artifact; eval gate; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
-| `/opsx-e2e` | Generate E2E tests (after OpenSpec PR or standalone with `--pr` / `--adr` / `--ep`) |
+| `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-dashboard as a PR |
 | `/opsx-explore` | Explore ideas without creating artifacts |
@@ -547,9 +570,9 @@ flags:
 
 ### Task execution modes
 
-**`phase-iterative`** — Tasks are grouped by plan phase. After each phase completes: a draft PR is raised, a Jira Story ticket is created for the phase, and `/opsx-continue` generates next-phase tasks. E2E tests can be triggered per phase once the phase PR is raised.
+**`phase-iterative`** — Tasks are grouped by plan phase. After each phase completes: a draft PR is raised, a Jira Story ticket is created for the phase, and `/opsx-continue` generates next-phase tasks. E2E tests can be triggered per phase after CI passes.
 
-**`one-shot`** — All tasks execute sequentially across all phases. A single draft PR is raised at the end. E2E tests are triggered once after the final PR is raised.
+**`one-shot`** — All tasks execute sequentially across all phases. A single draft PR is raised at the end. E2E tests are triggered once after the final CI passes.
 
 ---
 
@@ -786,7 +809,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-new` | Write | Start a new change from a Jira ticket key |
 | `/opsx-continue` | Write | Generate next artifact, run eval gate, approve |
 | `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
-| `/opsx-e2e` | Write | Generate E2E tests |
+| `/opsx-e2e` | Write | Generate E2E tests after CI passes |
 | `/opsx-archive` | Write | Archive a completed change |
 | `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-dashboard |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
@@ -952,14 +975,8 @@ The agent cannot access any repository, Jira project, or API the user is not alr
 
 ### Feedback Mechanism
 
-We actively monitor the performance and helpfulness of the OpenSpec agent.
-
-**In-chat (mandatory at `/opsx-archive`):** time saved, satisfaction, story points,
-and optional comments — written to `user-feedback.md` and telemetry.
-
-**External form (prompted at end of `/opsx-archive`):** report poor quality output,
-hallucinations, or unexpected behavior using our shared feedback spreadsheet:
-- **[Submit Agent Feedback Here](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing)**
+We actively monitor the performance and helpfulness of the OpenSpec agent. If you encounter poor quality output, hallucinations, or unexpected behavior, please report it using our feedback form:
+- **[Submit Agent Feedback Here](https://docs.google.com/document/d/19vAlSNyY-HyG3WrjnpwNs7r1RaDvZGkw7YRZx-WK4sM/edit?usp=sharing)**
 
 ### Point of Contact
 
