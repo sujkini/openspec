@@ -12,7 +12,7 @@ Usage: $0 [--no-dashboard] <target-directory>
 Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
   2. Runs 'openspec init' in the target directory
-  3. Copies openspec/, .cursor/, eval-generation/, and dashboard/ into the target
+  3. Copies openspec/, .cursor/, .codex/, .codex-commands-reference/, eval-generation/, scripts/, and dashboard/ into the target
   4. Installs telemetry Python dependencies (pyyaml, tiktoken)
   5. Installs dashboard Python + Node dependencies (if dashboard enabled)
   6. Updates .gitignore
@@ -76,6 +76,27 @@ cp -r "$SCRIPT_DIR/openspec" "$TARGET_DIR/"
 
 echo "==> Copying .cursor/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/.cursor" "$TARGET_DIR/"
+
+echo "==> Copying .codex/ into $TARGET_DIR..."
+if [ -d "$SCRIPT_DIR/.codex" ]; then
+  cp -r "$SCRIPT_DIR/.codex" "$TARGET_DIR/"
+else
+  echo "    Warning: .codex/ not found in source, skipping"
+fi
+
+echo "==> Copying .codex-commands-reference/ into $TARGET_DIR..."
+if [ -d "$SCRIPT_DIR/.codex-commands-reference" ]; then
+  cp -r "$SCRIPT_DIR/.codex-commands-reference" "$TARGET_DIR/"
+else
+  echo "    Warning: .codex-commands-reference/ not found in source, skipping"
+fi
+
+echo "==> Copying scripts/ into $TARGET_DIR..."
+if [ -d "$SCRIPT_DIR/scripts" ]; then
+  cp -r "$SCRIPT_DIR/scripts" "$TARGET_DIR/"
+else
+  echo "    Warning: scripts/ not found in source, skipping"
+fi
 
 echo "==> Copying eval-generation/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/eval-generation" "$TARGET_DIR/"
@@ -174,7 +195,8 @@ echo "Next steps:"
 echo "  1. Place agents.md at your repo root     — define your operator's architecture & agent routing"
 echo "  2. Add docs to harness-evals/harness-docs/ — operator documentation for constitution generation"
 echo "  3. Run /opsx-constitute                   — generates harness-evals/constitution.md from harness-docs"
-echo "  4. Restart Cursor so slash commands load from .cursor/commands/"
+echo "  4. For Cursor:  Restart Cursor so slash commands load from .cursor/commands/"
+echo "     For Codex:   Run ./scripts/install-codex-commands.sh then restart Codex"
 echo "  5. Run /opsx-new <JIRA-KEY> to start your first change"
 if [ "$INSTALL_DASHBOARD" = true ]; then
   echo "  5. (Optional) Start the dashboard:  cd $TARGET_DIR && ./dashboard/start.sh"
