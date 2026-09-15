@@ -15,6 +15,20 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ## Quick Start
 
+### 0. Codex Setup (One-time)
+
+If using **Codex** instead of Cursor, install OpenSpec commands globally:
+
+```bash
+./scripts/install-codex-commands.sh
+```
+
+Then restart Codex. OpenSpec skills are automatically available in `.codex/skills/`.
+
+**Note:** This copies 18 commands to `~/.codex/prompts/`. Use the same commands as Cursor (e.g., `/opsx-new`, `/opsx-explore`, `/opsx-apply`).
+
+---
+
 ### 1. Clone & Install
 
 ```bash
@@ -90,9 +104,11 @@ cd /path/to/your-operator-repo
 
 Installs deps on first run, starts the FastAPI backend (port 8000) and React frontend (port 5173). Open http://localhost:5173. The backend polls `openspec/changes/` for telemetry data written by `/opsx-*` commands. See `dashboard/README.md` for details.
 
-### 5. Restart Cursor
+### 5. Restart Your Editor
 
-Restart Cursor so slash commands load from `.cursor/commands/`.
+**Cursor:** Restart Cursor so slash commands load from `.cursor/commands/`.
+
+**Codex:** If you haven't already, run `./scripts/install-codex-commands.sh` and restart Codex (or skip this if you completed step 0).
 
 ### 6. Run your first change
 
