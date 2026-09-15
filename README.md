@@ -33,7 +33,7 @@ Then restart Codex. OpenSpec skills are automatically available in `.codex/skill
 
 ```bash
 rm -rf /tmp/openspec-workflow
-git clone -b openspec-cost-optimization-2 https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
 /tmp/openspec-workflow/install.sh /path/to/your-operator-repo
 ```
 
