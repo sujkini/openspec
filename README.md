@@ -15,17 +15,105 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 ## Quick Start
 
-### 0. Codex Setup (One-time)
+> **📖 New to OpenSpec?** See the [**USER_GUIDE.md**](USER_GUIDE.md) for detailed step-by-step setup instructions with troubleshooting.
 
-If using **Codex** instead of Cursor, install OpenSpec commands globally:
+---
+
+### 0. Choose Your Editor: Cursor or Codex
+
+**Skip this section if using Cursor.** Choose one:
+
+#### Option A: Using Cursor (No additional setup needed)
+Cursor comes with built-in support for `.cursor/commands/`. Just restart Cursor after step 5 below.
+
+#### Option B: Using Codex (One-time setup)
+
+**Step 1: Install Codex**
+- Option 1a: Install as **VS Code extension** (easiest):
+  1. Open VS Code
+  2. Go to Extensions (Ctrl+Shift+X / Cmd+Shift+X)
+  3. Search for "Codex"
+  4. Click Install
+  5. Restart VS Code
+  
+- Option 1b: Install as **standalone CLI**:
+  ```bash
+  npm install -g @codex/cli
+  ```
+  Then verify: `codex --version`
+
+**Step 2: Configure Codex Agent (API Key & Model Selection)**
+
+When Codex first launches, you'll be prompted to set up your agent:
+
+1. **Enter your OpenAI API key** (you'll receive this separately):
+   ```
+   sk-YOUR_KEY_HERE
+   ```
+
+2. **Choose your model** — select one:
+   - `gpt-5.6-luna` (recommended — latest)
+   - `gpt-4-turbo` (fast and capable)
+   - `gpt-4` (standard)
+
+**Note:** If you prefer to use environment variables instead, add to your shell profile:
+```bash
+export OPENAI_API_KEY="sk-YOUR_KEY_HERE"
+```
+
+**Step 3: Install OpenSpec Commands to Codex**
+After cloning the OpenSpec repo (step 1 below), run:
 
 ```bash
 ./scripts/install-codex-commands.sh
 ```
 
-Then restart Codex. OpenSpec skills are automatically available in `.codex/skills/`.
+This copies 18 OpenSpec commands to `~/.codex/prompts/`. The command will confirm success:
+```
+✅ Successfully installed 18 commands to /Users/you/.codex/prompts
+```
 
-**Note:** This copies 18 commands to `~/.codex/prompts/`. Use the same commands as Cursor (e.g., `/opsx-new`, `/opsx-explore`, `/opsx-apply`).
+**Step 4: Restart Codex**
+Close and reopen VS Code or your Codex editor to load the new commands.
+
+**Done!** You can now use the same commands as Cursor users: `/opsx-new`, `/opsx-explore`, `/opsx-apply`, etc.
+
+---
+
+### 0b. Set Your OpenAI API Key (Both Cursor & Codex)
+
+You will receive the OpenAI API key separately. Set it now:
+
+**Option 1: Using `.env.local` (Recommended)**
+
+```bash
+# Copy the template
+cp .env.example .env.local
+
+# Edit .env.local and add your key
+# OPENAI_API_KEY=sk-YOUR_KEY_HERE
+
+# Load it in your shell
+source .env.local
+```
+
+**Option 2: Set as environment variable**
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc:
+export OPENAI_API_KEY="sk-YOUR_KEY_HERE"
+
+# Reload:
+source ~/.bashrc  # or ~/.zshrc
+```
+
+**Verify it's set:**
+```bash
+echo $OPENAI_API_KEY
+# Should print: sk-... (not empty)
+```
+
+> **⚠️ Never commit your API key to Git.** The `.env.local` file is in `.gitignore` — don't remove it.
 
 ---
 
@@ -106,9 +194,15 @@ Installs deps on first run, starts the FastAPI backend (port 8000) and React fro
 
 ### 5. Restart Your Editor
 
-**Cursor:** Restart Cursor so slash commands load from `.cursor/commands/`.
+**Cursor users:** Restart Cursor so it loads slash commands from `.cursor/commands/`.
 
-**Codex:** If you haven't already, run `./scripts/install-codex-commands.sh` and restart Codex (or skip this if you completed step 0).
+**Codex users:** If you skipped step 0, now run the installation and restart:
+```bash
+./scripts/install-codex-commands.sh
+```
+Then restart Codex to pick up the new commands.
+
+(If you completed step 0, you're already done — skip this.)
 
 ### 6. Run your first change
 
@@ -135,6 +229,36 @@ After archive (or once metrics files are complete), publish to the cross-operato
 ```
 
 This is **not** run automatically by `/opsx-archive` — you must invoke it explicitly. It opens a PR to [open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard) with your `metrics-report.json` and `qe-metrics.json` (if E2E ran). See [Publishing metrics](#publishing-metrics-to-the-cross-operator-dashboard) under Telemetry & Metrics.
+
+### 9. Track & Report API Usage (Optional but Recommended)
+
+To track your OpenAI API token usage and costs, use `ccusage`:
+
+**Start tracking at the beginning of your session:**
+```bash
+npx ccusage@latest session
+```
+
+Keep this terminal tab open while working.
+
+**After your session, get the usage report:**
+```bash
+npx ccusage@latest report
+```
+
+This shows:
+- Total tokens used (input + output)
+- Estimated cost
+- Cost breakdown by model
+
+**Record in feedback sheet** (link will be provided):
+- Change ID
+- Tokens used
+- Estimated cost
+- Session duration
+- Satisfaction rating
+
+This helps track efficiency and optimize API usage costs.
 
 ---
 
