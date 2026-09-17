@@ -1,9 +1,10 @@
 # OpenSpec User Guide
 
-Mandatory Post Run Procedure (After Your Openspec Run)
-Run /opsx-arcive at the end of every run to capture additional metrics.
-Run /opsx-publish-metrics next to create a pr to the metrics Dasboard 
-Add your feedback here: [https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing](url)
+Mandatory Post Run Procedure (After Your Openspec Run):
+
+- Run /opsx-arcive at the end of every run to capture additional metrics.
+- Run /opsx-publish-metrics next to create a pr to the metrics Dasboard 
+- Add your feedback here: [https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing](url)
 
 Complete step-by-step guide for using OpenSpec with either **Cursor** or **Codex**.
 
