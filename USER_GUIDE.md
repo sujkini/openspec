@@ -1,5 +1,10 @@
 # OpenSpec User Guide
 
+Mandatory Post Run Procedure (After Your Openspec Run)
+Run /opsx-arcive at the end of every run to capture additional metrics.
+Run /opsx-publish-metrics next to create a pr to the metrics Dasboard 
+Add your feedback here: [https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing](url)
+
 Complete step-by-step guide for using OpenSpec with either **Cursor** or **Codex**.
 
 ---
@@ -374,8 +379,8 @@ Share your results to the dashboard:
 | `/opsx-continue` | Continue to next phase | `/opsx-continue` |
 | `/opsx-e2e` | Generate E2E tests | `/opsx-e2e` |
 | `/opsx-publish-metrics` | Publish to dashboard | `/opsx-publish-metrics PROJ-123` |
-| `/opsx-cve-analyze` | Analyze security impacts | `/opsx-cve-analyze` |
-| `/api-generate` | Generate API code | `/api-generate` |
+| `/opsx-cve-analyze` | Analyze security impacts | `/opsx-cve-analyze` | (Stand Alone Command)
+
 
 ---
 
@@ -491,6 +496,9 @@ If you encounter issues:
 /opsx-archive           # Archive (mandatory)
 /opsx-publish-metrics   # Share results (optional)
 ```
+
+
+
 
 ---
 
