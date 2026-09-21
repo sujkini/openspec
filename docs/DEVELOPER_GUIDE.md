@@ -464,7 +464,7 @@ skip because archive does **not** trigger it automatically.
 
 1. Reads `telemetry/metrics-report.json` (and `qe-metrics.json` if E2E ran) from the change
    directory (live or under `openspec/changes/archive/YYYY-MM-DD-<name>/`).
-2. Forks [open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard) via GitHub MCP.
+2. Forks [open-spec-mado](https://github.com/anandkuma77/open-spec-mado) via GitHub MCP.
 3. Opens a PR adding your metrics under `data/open-spec-matrics/operators/<operator>/`.
 
 Requires GitHub MCP (`user-github`) and `credentials.github` in `config.yaml`. Warns if
