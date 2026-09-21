@@ -78,7 +78,7 @@ def read_jira_report_fields(change_dir: Path) -> dict[str, str]:
 
     Always returns all four keys (defaulting to ``""`` when Jira metadata is
     unavailable) rather than an empty dict — downstream consumers, notably
-    the open-spec-dashboard repo's ``generate_processed_metrics.py``, do a
+    the open-spec-mado repo's ``generate_processed_metrics.py``, do a
     direct (non-``.get()``) key lookup on ``jira_epic_link``/``jira_task_link``
     and would raise ``KeyError`` if the key were missing entirely.
     """

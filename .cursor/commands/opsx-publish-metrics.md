@@ -2,12 +2,12 @@
 name: /opsx-publish-metrics
 id: opsx-publish-metrics
 category: Workflow
-description: Publish a change's metrics-report.json and qe-metrics.json to the open-spec-dashboard repo as a PR
+description: Publish a change's metrics-report.json and qe-metrics.json to the open-spec-mado repo as a PR
 argument-hint: "[change-name]"
 ---
 
 Publish a change's telemetry (`metrics-report.json` and, if present, `qe-metrics.json`) to
-[anandkuma77/open-spec-dashboard](https://github.com/anandkuma77/open-spec-dashboard) as a pull request:
+[anandkuma77/open-spec-mado](https://github.com/anandkuma77/open-spec-mado) as a pull request:
 fork the repo (if not already forked), branch, push the two files under the correct
 operator folder, and open a PR against `main`.
 
@@ -97,18 +97,18 @@ Only include a row for a file that actually exists (from step 1).
 ### 5. Fork and branch (via the `user-github` MCP server)
 
 1. Call `get_me` to get the authenticated GitHub username (`<fork-owner>`).
-2. Call `fork_repository` with `owner: "anandkuma77"`, `repo: "open-spec-dashboard"`.
+2. Call `fork_repository` with `owner: "anandkuma77"`, `repo: "open-spec-mado"`.
    This is idempotent — if a fork already exists, GitHub returns it rather than erroring.
    **Note:** forks can take a few seconds to become writable after creation; if
    `create_branch` in the next step fails with a "not found" style error immediately
    after a fresh fork, wait briefly and retry once.
-3. Call `create_branch` with `owner: "<fork-owner>"`, `repo: "open-spec-dashboard"`,
+3. Call `create_branch` with `owner: "<fork-owner>"`, `repo: "open-spec-mado"`,
    `branch: "metrics/<jira-key-lowercase>-<YYYYMMDD-HHMM>"`, `from_branch: "main"`.
    (The timestamp suffix avoids branch-name collisions across repeated publishes.)
 
 ### 6. Push the files
 
-Call `push_files` with `owner: "<fork-owner>"`, `repo: "open-spec-dashboard"`,
+Call `push_files` with `owner: "<fork-owner>"`, `repo: "open-spec-mado"`,
 `branch: "<branch from step 5>"`, and a `files` array containing each target path
 from step 4 with its raw JSON content (byte-for-byte from the local file — do NOT
 reformat or re-summarize the JSON).
@@ -119,7 +119,7 @@ are included).
 ### 7. Open the pull request
 
 Call `create_pull_request` with:
-- `owner: "anandkuma77"`, `repo: "open-spec-dashboard"` (the **upstream** repo, not the fork)
+- `owner: "anandkuma77"`, `repo: "open-spec-mado"` (the **upstream** repo, not the fork)
 - `head: "<fork-owner>:<branch from step 5>"`
 - `base: "main"`
 - `title`: `"Add <JIRA_KEY> metrics — <operator>"`
