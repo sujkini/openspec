@@ -185,8 +185,9 @@ class QETelemetryClient:
         self,
         *,
         run_id: str = "",
-        time_saved_pct: int | None = None,
         story_points_delivered: float | None = None,
+        estimated_manual_effort: str = "",
+        satisfaction_rating: int | None = None,
         user_feedback: str = "",
     ) -> None:
         """Record QE feedback collected by ``/opsx-archive`` — NOT during
@@ -195,14 +196,20 @@ class QETelemetryClient:
         exists). ``run_id`` is best-effort — the most recent ``e2e_run_start``
         id, for traceability — since a phase-iterative change may have had
         multiple E2E runs (one per phase) by the time archive collects this.
+
+        The fields mirror the dev workflow's ``archive_feedback`` event so
+        that both reports produce a uniform ``productivity_metrics`` block:
+        story_points_delivered, estimated_manual_effort (bucket),
+        satisfaction_rating (1-5), user_feedback.
         """
         self._write_event({
             "ts": datetime.now(timezone.utc).isoformat(),
             "type": "qe_archive_feedback",
             "change": self._change,
             "run_id": run_id,
-            "time_saved_pct": time_saved_pct,
             "story_points_delivered": story_points_delivered,
+            "estimated_manual_effort": estimated_manual_effort,
+            "satisfaction_rating": satisfaction_rating,
             "user_feedback": user_feedback,
         })
 

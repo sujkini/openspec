@@ -110,8 +110,9 @@ Archive a completed change in the experimental workflow.
    ```markdown
 
    ## QE / E2E Feedback
-   - **Time saved (E2E workflow):** <step 5b Q1 answer>%
-   - **Story points (QE/test coverage):** <step 5b Q2 answer>
+   - **Estimated manual effort:** <step 5b Q1 answer>
+   - **Satisfaction:** <step 5b Q2 answer>
+   - **Story points (QE/test coverage):** <step 5b Q4 answer>
    - **Comments:** <step 5b Q3 answer, or "None">
    ```
 
@@ -135,31 +136,37 @@ Archive a completed change in the experimental workflow.
    ```
 
    - **If `no_e2e`:** Skip this step entirely — do not ask any QE questions, do not create `qe-metrics.json`. Proceed directly to step 6.
-   - **If `e2e_ran`:** This change has at least one `/opsx-e2e` run recorded (possibly more than one, e.g. one per phase). This is now **MANDATORY, NON-SKIPPABLE**, exactly like step 5 — `/opsx-e2e` itself never asks these questions; `/opsx-archive` is the single place they are collected. If the user says "skip", respond: "QE feedback is mandatory for compliance (MON-01) since this change ran E2E. Please answer the three questions to proceed."
+   - **If `e2e_ran`:** This change has at least one `/opsx-e2e` run recorded (possibly more than one, e.g. one per phase). This is now **MANDATORY, NON-SKIPPABLE**, exactly like step 5 — `/opsx-e2e` itself never asks these questions; `/opsx-archive` is the single place they are collected. If the user says "skip", respond: "QE feedback is mandatory for compliance (MON-01) since this change ran E2E. Please answer the four questions to proceed."
 
-   Present the following three questions using the **AskQuestion tool** (all three in a single prompt):
+   Present the following four questions using the **AskQuestion tool** (all four in a single prompt). These are **identical in structure** to the dev workflow questions (step 5) so both reports produce a uniform `productivity_metrics` block:
 
-   **Question 1:** "How much time (%) did the E2E/QE workflow save you compared to writing and executing these tests manually?"
-   - Options: "0–20%", "20–40%", "40–60%", "60–80%", "80–100%"
-   - The user can select "Other" and type an exact number.
+   **Question 1:** "How long would the E2E/QE work have taken without the agent? (estimated manual hours for writing and running these tests)"
+   - Options: "< 2 hours", "2–4 hours", "4–8 hours (1 day)", "8–16 hours (2 days)", "16–40 hours (1 week)", "> 40 hours (1+ weeks)"
 
-   **Question 2:** "How many story points (or effort points) does the QE/test coverage for this ticket represent?" — **MANDATORY, this is the field that determines whether `qe-metrics.json` is considered complete.**
-   - Options: "1", "2", "3", "5", "8", "13", "21+"
-   - The user can select "Other" and type an exact number. Do not accept a blank answer — if the user tries to skip, re-prompt: "QE story points delivered is mandatory. Without it, qe-metrics.json will be marked incomplete."
+   **Question 2:** "How satisfied are you with the E2E/QE workflow? (1 = poor, 5 = excellent)"
+   - Options: "1 — Poor (major issues, significant rework)", "2 — Below average (multiple corrections needed)", "3 — Average (some corrections, acceptable output)", "4 — Good (minor corrections only)", "5 — Excellent (minimal or no corrections)"
 
    **Question 3:** "Any feedback on the E2E/QE workflow? (optional — leave blank if none)"
    - Free text (the user can select "Other" and type a response, or select "No comments")
    - Options: "No comments"
 
+   **Question 4:** "How many story points (or effort points) does the QE/test coverage for this ticket represent?" — **MANDATORY, this is the field that determines whether `qe-metrics.json` is considered complete.**
+   - Options: "1", "2", "3", "5", "8", "13", "21+"
+   - The user can select "Other" and type an exact number. Do not accept a blank answer — if the user tries to skip, re-prompt: "QE story points delivered is mandatory. Without it, qe-metrics.json will be marked incomplete."
+
+   The agent computes `time_saved_hours = estimated_manual_hours - actual_wall_time_hours`
+   automatically from the Q1 bucket midpoint and the QE agent wall time recorded in telemetry
+   (same approach as the dev workflow). No manual time-saved entry needed from the user.
+
    **Telemetry — record QE archive feedback (mandatory when E2E ran, before step 6):**
 
-   Immediately after collecting the three answers, run:
+   Immediately after collecting the four answers, run:
    ```bash
    python -m openspec.telemetry.auto on-qe-archive-feedback --change "<name>" \
-     --time-saved-pct <Q1 answer, integer> --story-points <Q2 answer> \
-     --feedback "<Q3 answer, or empty string if none>"
+     --story-points <Q4 answer> --manual-effort "<Q1 answer>" \
+     --satisfaction <Q2 answer> --comments "<Q3 answer, or empty string if none>"
    ```
-   This writes the `qe_archive_feedback` event to `telemetry/e2e-events.jsonl` and regenerates `qe-metrics.json` with the `qe_feedback` block, `qe_started_at`/`qe_completed_at` (IST), and `qe_report_status.complete: true`. It must run **before** step 6 moves the change directory — the hook writes into the live `openspec/changes/<name>/telemetry/` path, which only exists pre-move. If this command fails, `qe-metrics.json` remains `qe_report_status.complete: false` — flag this to the user before proceeding to step 6.
+   This writes the `qe_archive_feedback` event to `telemetry/e2e-events.jsonl` and regenerates `qe-metrics.json` with the `productivity_metrics` block (including `time_saved_hours` computed from Q1 bucket midpoint minus agent wall time), `qe_started_at`/`qe_completed_at` (IST), and `qe_report_status.complete: true`. It must run **before** step 6 moves the change directory — the hook writes into the live `openspec/changes/<name>/telemetry/` path, which only exists pre-move. If this command fails, `qe-metrics.json` remains `qe_report_status.complete: false` — flag this to the user before proceeding to step 6.
 
 6. **Perform the archive**
 
@@ -227,7 +234,7 @@ Archive a completed change in the experimental workflow.
 **Time Saved:** <productivity_metrics.time_saved_hours> hours (est.)
 **Archived:** <run.archived_at_display, IST>
 **Metrics:** ✓ Complete (metrics-report.json → report_status.complete: true)
-**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q2 answer>, time saved: <Q1 answer>%
+**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q4 answer>, time saved: <productivity_metrics.time_saved_hours>h, satisfaction: <Q2 answer>/5
   *(omit this line entirely if step 5b was skipped — no E2E run for this change)*
 
 All artifacts complete. All tasks complete.
@@ -252,7 +259,7 @@ https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52g
 **Time Saved:** <productivity_metrics.time_saved_hours> hours (est.)
 **Archived:** <run.archived_at_display, IST>
 **Metrics:** ✓ Complete (metrics-report.json → report_status.complete: true)
-**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q2 answer>, time saved: <Q1 answer>%
+**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q4 answer>, time saved: <productivity_metrics.time_saved_hours>h, satisfaction: <Q2 answer>/5
   *(omit this line entirely if step 5b was skipped — no E2E run for this change)*
 
 All artifacts complete. All tasks complete.
@@ -277,7 +284,7 @@ https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52g
 **Time Saved:** <productivity_metrics.time_saved_hours> hours (est.)
 **Archived:** <run.archived_at_display, IST>
 **Metrics:** ✓ Complete (metrics-report.json → report_status.complete: true)
-**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q2 answer>, time saved: <Q1 answer>%
+**QE Metrics:** ✓ Complete (qe-metrics.json → qe_report_status.complete: true) — QE story points: <Q4 answer>, time saved: <productivity_metrics.time_saved_hours>h, satisfaction: <Q2 answer>/5
   *(omit this line entirely if step 5b was skipped — no E2E run for this change)*
 
 **Warnings:**
@@ -327,7 +334,8 @@ telemetry hook did not succeed. Do NOT proceed to step 6 until it succeeds — t
 writes into the live change directory and cannot be run again once archived.
 Retry:
 python -m openspec.telemetry.auto on-qe-archive-feedback --change "<name>" \
-  --time-saved-pct <N> --story-points <N> --feedback "<Q3 answer>"
+  --story-points <N> --manual-effort "<Q1 answer>" \
+  --satisfaction <N> --comments "<Q3 answer>"
 ```
 
 **Output On Error (Archive Exists)**
@@ -359,7 +367,7 @@ Target archive directory already exists.
 - **The `on-archive-feedback` telemetry hook MUST run before step 6 moves the change directory** — it writes into the live `openspec/changes/<name>/telemetry/` path, which only exists pre-move.
 - **Step 5b (QE feedback) is CONDITIONAL, not universal.** Only run it if `openspec/changes/<name>/telemetry/e2e-events.jsonl` exists (i.e. `/opsx-e2e` ran for this change). If it doesn't exist, skip step 5b silently — do not mention QE metrics at all in the output.
 - **`/opsx-e2e` never asks for time-saved, story points, or feedback.** `/opsx-archive` is the single, centralized place both development AND QE feedback are collected — never re-implement a feedback prompt inside `/opsx-e2e`.
-- **When step 5b applies, it is just as mandatory as step 5.** Do NOT archive a change that ran E2E without successfully running the `on-qe-archive-feedback` telemetry hook — `qe-metrics.json` would remain `qe_report_status.complete: false`.
+- **When step 5b applies, it is just as mandatory as step 5.** Do NOT archive a change that ran E2E without successfully running the `on-qe-archive-feedback` telemetry hook — `qe-metrics.json` would remain `qe_report_status.complete: false`. All four QE questions (estimated_manual_effort, satisfaction, feedback, story_points) must be answered — they mirror the dev workflow questions exactly.
 - **The `on-qe-archive-feedback` telemetry hook MUST run before step 6 moves the change directory** (same reasoning as `on-archive-feedback`) — it writes into the live `openspec/changes/<name>/telemetry/` path.
 - **If a change has multiple E2E runs (e.g. one per phase in phase-iterative mode), step 5b still asks only once, at final archive** — covering the QE effort as a whole, not per-phase.
 - **Step 8 (external agent feedback form) MUST always be shown after a successful archive** — link: https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing — separate from step 5 in-chat feedback; display even when archive completed with warnings.

@@ -15,13 +15,16 @@ standalone when you already have a PR and/or ADR/EP — no prior `/opsx-new` wor
 | Input | Mode | Pipeline |
 |-------|------|----------|
 | **PR only** | PR Mode | Full: pre-analysis → plan → consolidation → codegen → execute → push |
-| **ADR or EP only** | Design Mode | Plan-only: pre-analysis → plan → consolidation → codegen → STOP |
+| **ADR or EP only** | Design Mode | pre-analysis → plan → consolidation → codegen → [optional local execute] |
 | **ADR/EP + PR** | Combined Mode | Full pipeline with enriched design context |
 | **Change name** (from `/opsx-apply`) | Change Mode | Resolves PR from `state.yaml`, then runs Full |
 
-**Design Mode** (ADR/EP without PR) generates the test plan and code but does NOT attempt
-execution or push — there is no branch to push to. The developer reviews the plan and code,
-then runs `/opsx-e2e --pr <URL>` later when a PR exists to execute and push.
+**Design Mode** (ADR/EP without PR) generates the test plan and code. After code
+generation, it checks whether the ADR implementation already exists in the target repo
+and offers optional local execution if the user has a cluster with the implementation
+deployed. Push is never available in Design Mode (there is no PR branch to push to).
+The developer reviews the plan and code, then runs `/opsx-e2e --pr <URL>` later when
+a PR exists to execute and push.
 
 **Input**: At least one of: change name, `--pr <URL>`, `--adr <path-or-URL>`, `--ep <path-or-URL>`.
 
@@ -372,37 +375,116 @@ On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo 
 
 ### 7. Stage 5 — Execute, Evaluate, and Push
 
-**Design Mode gate:** If running in **Design Mode** (ADR/EP only, no PR), skip Stage 5
-entirely. Instead, output:
+**Design Mode gate:** If running in **Design Mode** (ADR/EP only, no PR), proceed to
+**Step 6a (Design Mode: Implementation Check & Optional Local Execution)** below.
+Do NOT skip to Step 8 immediately — the user may want to run tests locally.
+
+**PR Mode / Combined Mode:** Skip Step 6a and continue with Stage 5 below.
+
+**Telemetry:** Emit `e2e_stage_start` (stage=5, stage_name="execution") before execution.
+
+#### Step 6a — Design Mode: Implementation Check & Optional Local Execution
+
+This step runs ONLY in **Design Mode** (ADR/EP only, no PR), after Stage 4 code generation
+is approved. It checks whether the ADR implementation exists in the target repo and offers
+optional local test execution.
+
+**Step 6a.1 — Implementation presence check:**
+
+Search the target repo for evidence that the ADR's implementation already exists.
+Look for new CRD types, controller files, API changes, or other code referenced in the
+ADR and/or `e2e-analysis.md`:
+
+1. Check for new/modified controller files matching the ADR scope
+2. Check for new CRD definitions or API types
+3. Check for new test helpers or fixtures
+
+Output a clear status:
+- **"Implementation FOUND:** detected `<files/CRDs/packages>` matching the ADR scope
+  in the target repo at `<repo-path>`."
+- **"Implementation NOT FOUND:** no code matching the ADR scope detected in the target
+  repo. Tests targeting new behaviour will fail if run without the implementation deployed."
+
+**Step 6a.2 — Local execution prompt (HARD GUARDRAIL — must ASK, never assume):**
+
+ASK the user explicitly:
+
+> **"The generated E2E tests are ready. Would you like to run them locally on your cluster?**
+>
+> **Prerequisites for local execution:**
+> - Your cluster must be running and accessible via KUBECONFIG
+> - The operator must be **built and deployed with the ADR implementation**
+> - If the implementation is not deployed, tests targeting new behaviour will be skipped or fail
+>
+> **Implementation status:** [FOUND in repo / NOT FOUND in repo]
+>
+> **Run E2E tests locally? (Yes / No)"**
+
+- **No** → proceed to the Design Mode completion banner and Step 8 (Final Summary):
 
 ```
 ======================================================================
-Design Mode — E2E Pipeline Complete (Plan Only)
+Design Mode — E2E Pipeline Complete (Plan + Code)
 ======================================================================
 Mode:           Design (ADR/EP only — no PR)
 Input:          <ADR/EP title or path>
+Implementation: <FOUND / NOT FOUND> in target repo
 Artifacts:      e2e-analysis.md, test-plan.md, revised-test-plan.md, generated code
 Location:       openspec/changes/<name>/e2e/
+Local tests:    Skipped (user declined)
 
-No PR exists — execution and push are skipped.
+No PR exists — push is not available.
 
 Next steps:
   1. Review the generated test plan and code
   2. When a PR is raised, re-run: /opsx-e2e --pr <URL>
      (the existing plan and code will be reused if still valid)
+  3. To test locally later: re-run /opsx-e2e --adr <path> with your cluster ready
 ======================================================================
 ```
 
-Then proceed directly to Step 8 (Final Summary). Time-saved, story points, and
-feedback are collected later by `/opsx-archive` — not here.
+- **Yes** → run the same cluster readiness gate (Step 5.2), execution (Step 5.3), and
+  evaluation (Step 5.4) flow that PR Mode uses. **Skip the push step (5.6) entirely**
+  since there is no PR branch. After execution, output:
 
-**PR Mode / Combined Mode:** Continue with Stage 5 below.
+```
+======================================================================
+Design Mode — E2E Pipeline Complete (Plan + Code + Local Execution)
+======================================================================
+Mode:           Design (ADR/EP only — no PR)
+Input:          <ADR/EP title or path>
+Implementation: <FOUND / NOT FOUND> in target repo
+Artifacts:      e2e-analysis.md, test-plan.md, revised-test-plan.md, generated code
+Location:       openspec/changes/<name>/e2e/
+Local tests:    <N> run, <M> passed, <K> failed
 
-**Telemetry:** Emit `e2e_stage_start` (stage=5, stage_name="execution") before execution.
+No PR exists — push is not available.
 
-#### Step 5.1 — Local execution prompt
+Next steps:
+  1. Review test results and generated code
+  2. When a PR is raised, re-run: /opsx-e2e --pr <URL> to push
+======================================================================
+```
+
+  Then proceed to Step 8 (Final Summary) with execution results included.
+
+**Telemetry (Step 6a):** If local tests were run, emit the same `e2e_execution`,
+`e2e_bug_found`, and `e2e_bug_verified` events as in Step 5.3/5.4. Run
+`python -m openspec.telemetry.qe_metrics --change <name>` after execution to
+generate accurate metrics from the local run.
+
+Time-saved, story points, and feedback are collected later by `/opsx-archive` — not here.
+
+---
+
+#### Step 5.1 — Local execution prompt (PR Mode / Combined Mode)
+
+**HARD GUARDRAIL — must ASK, never assume:**
 
 ASK: **"Run E2E tests locally on your cluster? (Yes / No)"**
+
+Do NOT auto-execute tests. Do NOT assume the answer. If the user declines, skip
+directly to Step 5.5 (Push / Feedback / Stop).
 
 - **No** → skip to Step 5.5 (final decision: push / feedback / stop).
 - **Yes** → proceed to Step 5.2.
@@ -476,6 +558,22 @@ python -m openspec.telemetry.qe_metrics --change <name>
 ```
 This produces `openspec/changes/<name>/telemetry/qe-metrics.json` with accurate first-pass
 rate, flake rate, and bug count from the real local execution.
+
+**Metrics completeness check (MANDATORY after every local execution):**
+
+After generating `qe-metrics.json`, read it and verify:
+1. `first_pass_rate.tests_executed` is **not null** — if null, the `e2e_execution` event
+   was not emitted correctly. Re-emit from the test output log (`/tmp/opsx-e2e-output.log`)
+   and regenerate.
+2. `first_pass_rate.tests_executed` matches the actual number of tests run (from `make test-e2e` output).
+3. If tests failed: `bugs.found` > 0 — if `first_pass_rate.tests_failed_first_run` > 0 but
+   `bugs.found` is 0, `e2e_bug_found` events were not emitted. Parse failures from the test
+   output log, emit the missing events, and regenerate.
+4. `validation.valid` is `true` — if `false`, inspect `validation.warnings` and fix the
+   inconsistencies before proceeding.
+
+If any check fails, fix the telemetry gap (re-parse `/tmp/opsx-e2e-output.log`, emit missing
+events, regenerate `qe-metrics.json`) before moving to Step 5.4 or 5.5.
 
 If `exit_code == 0` (all tests pass): skip Step 5.4, proceed to Step 5.5.
 If `exit_code != 0` (any test failed): proceed to Step 5.4.
@@ -689,8 +787,29 @@ will ask for them once this change is archived.
   - **Stage 3 (Consolidation):** Reads `test-plan.md` + `config.yaml` only. No operator context.
   - **Stage 4 (Code Generation):** Reads `revised-test-plan.md` + `agents.md` (helpers/style
     sections ONLY) + `qe-e2e/helpers.md` (if present). Does NOT re-read `constitution.md`.
+- **HARD GUARDRAIL — Local execution opt-in:** In Stage 5 (PR/Combined Mode) Step 5.1
+  and Step 6a (Design Mode), you MUST explicitly ASK the user "Run E2E tests locally on
+  your cluster? (Yes / No)" before any cluster interaction. Do NOT assume the answer.
+  Do NOT auto-execute tests. If the user declines, skip directly to Step 5.5 (PR/Combined)
+  or the Design Mode completion banner (Design Mode). In Design Mode, clearly state that
+  the ADR implementation must be built and deployed on the cluster for tests to pass.
+- **HARD GUARDRAIL — QE metrics generation after local execution:** If local tests were
+  executed (user said "Yes" in Step 5.1 or Step 6a.2), you MUST:
+  1. Emit an `e2e_execution` event with accurate `tests_run`, `tests_passed`, `tests_failed`,
+     `exit_code`, and `file_hash` — parsed from the Go test / Ginkgo output
+  2. Emit an `e2e_bug_found` event for EVERY distinct test failure with `test_name` and
+     `failure_message`
+  3. Run `python -m openspec.telemetry.qe_metrics --change <name>` immediately after
+     execution completes
+  4. Read the generated `qe-metrics.json` and verify `first_pass_rate.tests_executed` is
+     not null and `validation.valid` is true — if either check fails, the events were not
+     emitted correctly. STOP, re-parse the test output log, emit missing events, regenerate,
+     and re-verify before proceeding
+  5. Do NOT proceed to Step 5.4, 5.5, or Step 8 with incomplete execution metrics
 - **User approval gate after every stage** — do not advance until approved
-- **Design Mode stops after code generation** — do not attempt execute or push without a PR
+- **Design Mode offers optional local execution after code generation** — check for ADR
+  implementation in the target repo and prompt the user. Push is never available in
+  Design Mode (no PR branch).
 - Never skip the pre-analysis gate — it prevents wasted effort
 - Respect pre-analysis exclusions in all downstream stages
 - Match target repo test style exactly (framework, helpers, constants) — as defined in `agents.md`

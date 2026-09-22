@@ -432,8 +432,9 @@ def _reconstruct_qe_feedback(events: list[dict[str, Any]]) -> dict[str, Any] | N
         return None
 
     return {
-        "time_saved_pct": feedback_ev.get("time_saved_pct"),
         "story_points_delivered": feedback_ev.get("story_points_delivered"),
+        "estimated_manual_effort": feedback_ev.get("estimated_manual_effort", ""),
+        "satisfaction_rating": feedback_ev.get("satisfaction_rating"),
         "user_feedback": feedback_ev.get("user_feedback", ""),
         "captured_at": feedback_ev.get("ts", ""),
         "captured_at_display": _to_ist_display(feedback_ev.get("ts", "")),
@@ -451,13 +452,89 @@ def _compute_qe_report_status(qe_feedback: dict[str, Any] | None) -> dict[str, A
     missing: list[str] = []
     if qe_feedback is None:
         missing.append("qe_feedback")
-        missing.append("qe_feedback.story_points_delivered")
-    elif qe_feedback.get("story_points_delivered") is None:
-        missing.append("qe_feedback.story_points_delivered")
+        missing.append("productivity_metrics.story_points_delivered")
+    else:
+        if qe_feedback.get("story_points_delivered") is None:
+            missing.append("productivity_metrics.story_points_delivered")
 
     return {
         "complete": len(missing) == 0,
         "missing_fields": missing,
+    }
+
+
+# Midpoint (hours) for each estimated-manual-effort bucket — same buckets as
+# the dev workflow (report.py) to keep the questions identical.
+_QE_EFFORT_BUCKET_HOURS: dict[str, float] = {
+    "< 2 hours": 1.0,
+    "2–4 hours": 3.0,
+    "2-4 hours": 3.0,
+    "4–8 hours (1 day)": 6.0,
+    "4-8 hours (1 day)": 6.0,
+    "8–16 hours (2 days)": 12.0,
+    "8-16 hours (2 days)": 12.0,
+    "16–40 hours (1 week)": 28.0,
+    "16-40 hours (1 week)": 28.0,
+    "> 40 hours (1+ weeks)": 48.0,
+}
+
+
+def _effort_bucket_to_hours(bucket: str) -> float | None:
+    """Map an estimated-manual-effort bucket string to its midpoint in hours."""
+    if not bucket:
+        return None
+    if bucket in _QE_EFFORT_BUCKET_HOURS:
+        return _QE_EFFORT_BUCKET_HOURS[bucket]
+    return _QE_EFFORT_BUCKET_HOURS.get(bucket.replace("\u2013", "-"))
+
+
+def _compute_qe_productivity_metrics(
+    qe_feedback: dict[str, Any] | None,
+    cost: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build a ``productivity_metrics`` block for the QE report.
+
+    Mirrors the ``productivity_metrics`` in ``metrics-report.json``
+    (telemetry/report.py) so that downstream consumers (dashboards,
+    ``/opsx-publish-metrics``) can process both reports uniformly.
+
+    Fields (identical shape to the dev report):
+    - ``story_points_delivered``
+    - ``estimated_manual_effort`` (bucket text from the user)
+    - ``estimated_manual_hours`` (midpoint of the bucket)
+    - ``actual_wall_time_hours`` (agent wall time from QE cost telemetry)
+    - ``time_saved_hours`` (estimated_manual_hours - actual_wall_time_hours)
+    - ``satisfaction_rating`` (1-5)
+    - ``comments`` (free-text feedback)
+
+    Populated from the ``qe_archive_feedback`` event (recorded by
+    ``/opsx-archive``) and the QE cost telemetry (wall time from
+    the E2E run stages). Returns ``None`` until ``/opsx-archive``
+    has collected the feedback.
+    """
+    if qe_feedback is None:
+        return None
+
+    estimated_manual_effort = qe_feedback.get("estimated_manual_effort", "") or ""
+    estimated_manual_hours = _effort_bucket_to_hours(estimated_manual_effort)
+
+    agent_wall_time_s = cost.get("wall_time_s", 0.0)
+    actual_wall_time_hours = round(agent_wall_time_s / 3600, 2) if agent_wall_time_s else 0.0
+
+    time_saved_hours = None
+    if estimated_manual_hours is not None:
+        time_saved_hours = round(estimated_manual_hours - actual_wall_time_hours, 2)
+
+    return {
+        "story_points_delivered": qe_feedback.get("story_points_delivered"),
+        "estimated_manual_effort": estimated_manual_effort,
+        "estimated_manual_hours": estimated_manual_hours,
+        "actual_wall_time_hours": actual_wall_time_hours,
+        "time_saved_hours": time_saved_hours,
+        "satisfaction_rating": qe_feedback.get("satisfaction_rating"),
+        "comments": qe_feedback.get("user_feedback", ""),
+        "captured_at": qe_feedback.get("captured_at", ""),
+        "captured_at_display": qe_feedback.get("captured_at_display", ""),
     }
 
 
@@ -476,6 +553,53 @@ def _read_jira_metadata(change_dir: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def _validate_execution_consistency(
+    events: list[dict[str, Any]],
+    first_pass: dict[str, Any],
+    bugs: dict[str, Any],
+) -> dict[str, Any]:
+    """Cross-check execution telemetry for consistency.
+
+    Returns a validation block with ``valid: true/false`` and any warnings.
+    Logged at WARNING level so the calling agent can detect and remediate.
+    """
+    warnings: list[str] = []
+
+    has_execution = any(ev.get("type") == "e2e_execution" for ev in events)
+
+    if has_execution:
+        if first_pass.get("tests_executed") is None:
+            warnings.append(
+                "e2e_execution events exist but first_pass_rate.tests_executed is null — "
+                "the attempt=1 event may be missing or malformed"
+            )
+
+        tests_failed = first_pass.get("tests_failed_first_run")
+        bugs_found = bugs.get("found")
+        if tests_failed is not None and bugs_found is not None:
+            if tests_failed > 0 and bugs_found == 0:
+                warnings.append(
+                    f"first_pass_rate reports {tests_failed} failed tests but "
+                    f"bugs.found is 0 — e2e_bug_found events were not emitted"
+                )
+    else:
+        run_ends = [ev for ev in events if ev.get("type") == "e2e_run_end"]
+        for re_ev in run_ends:
+            if re_ev.get("status") in ("passed", "failed_approved"):
+                warnings.append(
+                    f"e2e_run_end status is '{re_ev.get('status')}' but no "
+                    "e2e_execution events found — execution metrics will be empty"
+                )
+
+    for w in warnings:
+        logger.warning("QE metrics validation: %s", w)
+
+    return {
+        "valid": len(warnings) == 0,
+        "warnings": warnings,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +630,9 @@ def generate_qe_report(change: str) -> Path:
     cost = compute_cost_metrics(events)
     run_window = _reconstruct_qe_run_window(events)
     qe_feedback = _reconstruct_qe_feedback(events)
+    qe_productivity = _compute_qe_productivity_metrics(qe_feedback, cost)
     qe_report_status = _compute_qe_report_status(qe_feedback)
+    validation = _validate_execution_consistency(events, first_pass, bugs)
 
     report: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -525,7 +651,9 @@ def generate_qe_report(change: str) -> Path:
         "triage_accuracy": triage,
         "cost": cost,
         "qe_feedback": qe_feedback,
+        "productivity_metrics": qe_productivity,
         "qe_report_status": qe_report_status,
+        "validation": validation,
     }
 
     report_path = change_dir / "telemetry" / "qe-metrics.json"

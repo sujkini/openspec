@@ -937,9 +937,10 @@ def on_qe_archive_feedback(args: argparse.Namespace) -> None:
     client = QETelemetryClient(args.change)
     client.record_archive_feedback(
         run_id=_latest_e2e_run_id(args.change),
-        time_saved_pct=getattr(args, "time_saved_pct", None),
         story_points_delivered=story_points,
-        user_feedback=getattr(args, "feedback", "") or "",
+        estimated_manual_effort=getattr(args, "manual_effort", "") or "",
+        satisfaction_rating=getattr(args, "satisfaction", None),
+        user_feedback=getattr(args, "comments", "") or "",
     )
     _out({"ok": True, "story_points_delivered": story_points})
     _regenerate_qe_report(args.change)
@@ -1054,10 +1055,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="QE story points delivered (mandatory when this change had an E2E run)",
     )
     qaf.add_argument(
-        "--time-saved-pct", type=int, default=None,
-        help="Estimated time (%%) saved by the E2E/QE workflow vs. writing/executing tests manually",
+        "--manual-effort", default="",
+        help="Estimated manual-effort bucket, e.g. '4-8 hours (1 day)' — same buckets as dev workflow",
     )
-    qaf.add_argument("--feedback", default="", help="Free-text feedback on the E2E/QE workflow")
+    qaf.add_argument("--satisfaction", type=int, default=None, help="Satisfaction rating 1-5")
+    qaf.add_argument("--comments", default="", help="Free-text feedback on the E2E/QE workflow")
 
     rp = sub.add_parser("report", help="Regenerate metrics-report.json")
     rp.add_argument("--change", required=True)
