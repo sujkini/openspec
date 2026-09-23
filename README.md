@@ -17,16 +17,34 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 
 > **📖 New to OpenSpec?** See the [**USER_GUIDE.md**](USER_GUIDE.md) for detailed step-by-step setup instructions with troubleshooting.
 
+### Install (one command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
+```
+
+This sets up everything for both **Cursor** and **Codex** in one go:
+- OpenSpec workflow files, Cursor commands, Codex skills
+- Codex slash commands installed globally to `~/.codex/prompts/`
+- OpenSpec CLI, telemetry dependencies, dashboard
+
+**After install:** restart Cursor or Codex/VS Code so commands load, then skip to [Configure execution mode](#2-configure-execution-mode-openspecconfigyaml).
+
+Use `--no-dashboard` to skip the observability dashboard:
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --no-dashboard /path/to/your-operator-repo
+```
+
 ---
 
 ### 0. Choose Your Editor: Cursor or Codex
 
-**Skip this section if using Cursor.** Choose one:
+| Editor | What you need |
+|--------|--------------|
+| **Cursor** | Nothing extra — commands load from `.cursor/commands/` automatically |
+| **Codex (VS Code)** | Install the Codex extension or CLI, configure your API key and model |
 
-#### Option A: Using Cursor (No additional setup needed)
-Cursor comes with built-in support for `.cursor/commands/`. Just restart Cursor after step 5 below.
-
-#### Option B: Using Codex (One-time setup)
+#### Codex Setup (skip if using Cursor)
 
 **Step 1: Install Codex**
 - Option 1a: Install as **VS Code extension** (easiest):
@@ -35,21 +53,24 @@ Cursor comes with built-in support for `.cursor/commands/`. Just restart Cursor 
   3. Search for "Codex"
   4. Click Install
   5. Restart VS Code
-  
+
 - Option 1b: Install as **standalone CLI**:
-  ```bash
-  npm install -g @codex/cli
-  ```
-  Then verify: `codex --version`
+
+```bash
+npm install -g @codex/cli
+```
+
+Then verify: `codex --version`
 
 **Step 2: Configure Codex Agent (API Key & Model Selection)**
 
 When Codex first launches, you'll be prompted to set up your agent:
 
 1. **Enter your OpenAI API key** (you'll receive this separately):
-   ```
-   sk-YOUR_KEY_HERE
-   ```
+
+```
+sk-YOUR_KEY_HERE
+```
 
 2. **Choose your model** — select one:
    - `gpt-5.6-luna` (recommended — latest)
@@ -57,24 +78,13 @@ When Codex first launches, you'll be prompted to set up your agent:
    - `gpt-4` (standard)
 
 **Note:** If you prefer to use environment variables instead, add to your shell profile:
+
 ```bash
 export OPENAI_API_KEY="sk-YOUR_KEY_HERE"
 ```
 
-**Step 3: Install OpenSpec Commands to Codex**
-After cloning the OpenSpec repo (step 1 below), run:
-
-```bash
-./scripts/install-codex-commands.sh
-```
-
-This copies 18 OpenSpec commands to `~/.codex/prompts/`. The command will confirm success:
-```
-✅ Successfully installed 18 commands to /Users/you/.codex/prompts
-```
-
-**Step 4: Restart Codex**
-Close and reopen VS Code or your Codex editor to load the new commands.
+**Step 3: Restart Codex**
+Close and reopen VS Code or your Codex editor. Commands and skills are already installed by the one-liner above.
 
 **Done!** You can now use the same commands as Cursor users: `/opsx-new`, `/opsx-explore`, `/opsx-apply`, etc.
 
@@ -117,15 +127,13 @@ echo $OPENAI_API_KEY
 
 ---
 
-### 1. Clone & Install
+### 1. Install
+
+If you haven't already run the one-liner above:
 
 ```bash
-rm -rf /tmp/openspec-workflow
-git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
-/tmp/openspec-workflow/install.sh /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
 ```
-
-This copies `openspec/`, `.cursor/`, `eval-generation/`, and `dashboard/` into your project, installs the OpenSpec CLI, and sets up dependencies. Use `--no-dashboard` to skip the dashboard.
 
 ### 2. Configure execution mode (`openspec/config.yaml`)
 

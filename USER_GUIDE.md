@@ -1,9 +1,19 @@
 # OpenSpec User Guide
 
+## Quick Install (one command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your/project
+```
+
+This single command sets up everything for both **Cursor** and **Codex** — workflow files, commands, skills, and dependencies. Just restart your editor after install and run `/opsx-new <JIRA-KEY>` to start.
+
+---
+
 Mandatory Post Run Procedure (After Your Openspec Run):
 
-- Run /opsx-arcive at the end of every run to capture additional metrics.
-- Run /opsx-publish-metrics next to create a pr to the metrics Dasboard 
+- Run /opsx-archive at the end of every run to capture additional metrics.
+- Run /opsx-publish-metrics next to create a PR to the metrics Dashboard
 - Add your feedback here: [https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing](url)
 
 Complete step-by-step guide for using OpenSpec with either **Cursor** or **Codex**.
