@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# One-liner installer for OpenSpec.
+# One-liner installer for OpenSpec (works for both Cursor and Codex).
 #
-# Cursor:  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/project
-# Codex:   curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/project
+# Usage:  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/project
 #
-# All flags are forwarded to install.sh (e.g. --no-dashboard, --codex).
+# All flags are forwarded to install.sh (e.g. --no-dashboard).
 
 set -euo pipefail
 

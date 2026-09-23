@@ -39,18 +39,10 @@ You'll use **either Cursor or Codex** — pick one:
 
 ## Step 1: Install OpenSpec (one command)
 
-Run **one command** in your terminal and you're ready to go.
-
-**For Cursor users:**
+Run **one command** in your terminal — it sets up everything for both Cursor **and** Codex:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your/project
-```
-
-**For Codex users** (also installs slash commands globally):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/your/project
 ```
 
 **Skip the dashboard** (optional):
@@ -59,14 +51,14 @@ curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh 
 curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --no-dashboard /path/to/your/project
 ```
 
-This installs:
+This single command installs:
 - `openspec/` — OpenSpec workflow files
-- `.cursor/` — Cursor commands and skills
+- `.cursor/` — Cursor commands and skills (loaded automatically on restart)
 - `.codex/` — Codex skills and setup script
-- `scripts/` — Codex command installer and helpers
+- Codex slash commands installed globally to `~/.codex/prompts/`
+- `scripts/` — Helper scripts
 - `eval-generation/` — Evaluation generation workflows
 - `dashboard/` — Metrics dashboard (unless `--no-dashboard`)
-- *(with `--codex`)* Codex slash commands installed globally to `~/.codex/prompts/`
 
 **Expected output:**
 ```
@@ -77,6 +69,7 @@ This installs:
 ==> Copying .cursor/ into /path/to/your/project...
 ==> Copying .codex/ into /path/to/your/project...
 ==> Copying scripts/ into /path/to/your/project...
+==> Installing Codex slash commands globally...
 === Installation complete ===
 ```
 
@@ -106,13 +99,7 @@ Codex can run inside Cursor as an extension. Follow these steps:
 
 **Step 3: Codex Commands**
 
-If you installed with `--codex` in Step 1, Codex commands are already installed globally. Skip to Step 4.
-
-If you used the Cursor install (without `--codex`), install them now:
-```bash
-cd /path/to/your/project
-./scripts/install-codex-commands.sh
-```
+Codex commands are already installed globally by Step 1. Nothing extra to do.
 
 **Step 4: Restart Cursor**
 Close and reopen Cursor completely to load the new Codex commands.
@@ -167,15 +154,9 @@ codex --version  # verify installation
 4. Choose a model (e.g., `gpt-5.6-luna`, `gpt-4-turbo`, or `gpt-4`)
 5. Complete the setup
 
-**Step C: Install OpenSpec Commands**
+**Step C: OpenSpec Commands**
 
-If you installed with `--codex` in Step 1, commands are already installed globally. Skip to Step D.
-
-Otherwise, install them manually:
-```bash
-cd /path/to/your/project
-./scripts/install-codex-commands.sh
-```
+Codex commands are already installed globally by Step 1. Nothing extra to do.
 
 **Step D: Track Token Usage (Important for Feedback)**
 
@@ -466,8 +447,7 @@ If you encounter issues:
 
 - [ ] Ran the one-liner install (`curl ... | bash -s -- /path/to/project`)
 - [ ] Set `OPENAI_API_KEY` environment variable
-- [ ] **Cursor users:** Restarted Cursor
-- [ ] **Codex users:** Used `--codex` flag (or ran `./scripts/install-codex-commands.sh`) and restarted Codex
+- [ ] Restarted Cursor or Codex/VS Code
 - [ ] Verified commands work: `/opsx-new TEST-001`
 
 ### First Change Workflow

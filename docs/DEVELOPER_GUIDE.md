@@ -39,16 +39,10 @@ Optional but recommended:
 
 ## Step 1 — Install OpenSpec into your operator repo
 
-Run **one command** from any machine with network access:
+Run **one command** from any machine with network access — works for both Cursor and Codex:
 
-**Cursor users:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
-```
-
-**Codex users** (also installs slash commands globally to `~/.codex/prompts/`):
-```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/your-operator-repo
 ```
 
 What the installer does:
@@ -58,8 +52,8 @@ What the installer does:
 3. Runs `openspec init` in your operator repo
 4. Copies `openspec/`, `.cursor/`, `.codex/`, `eval-generation/`, and `scripts/` into the repo
 5. Installs Python deps for telemetry (`pyyaml`, `tiktoken`)
-6. Updates `.gitignore` (excludes ephemeral `openspec/changes/` working data)
-7. *(with `--codex`)* Installs Codex slash commands globally
+6. Installs Codex slash commands globally to `~/.codex/prompts/`
+7. Updates `.gitignore` (excludes ephemeral `openspec/changes/` working data)
 
 **Restart Cursor** (or Codex/VS Code) after install so slash commands appear.
 
