@@ -37,31 +37,42 @@ You'll use **either Cursor or Codex** — pick one:
 
 ---
 
-## Step 1: Clone OpenSpec
+## Step 1: Install OpenSpec (one command)
 
-Both Cursor and Codex users start here:
+Run **one command** in your terminal and you're ready to go.
+
+**For Cursor users:**
 
 ```bash
-# Navigate to your project
-cd /path/to/your/project
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your/project
+```
 
-# Clone OpenSpec
-rm -rf /tmp/openspec-workflow
-git clone https://github.com/sujkini/openspec.git /tmp/openspec-workflow
+**For Codex users** (also installs slash commands globally):
 
-# Run the installer
-/tmp/openspec-workflow/install.sh /path/to/your/project
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/your/project
+```
+
+**Skip the dashboard** (optional):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --no-dashboard /path/to/your/project
 ```
 
 This installs:
 - `openspec/` — OpenSpec workflow files
 - `.cursor/` — Cursor commands and skills
 - `.codex/` — Codex skills and setup script
-- `scripts/install-codex-commands.sh` — Codex command installer
-- `dashboard/` — Metrics dashboard (optional)
+- `scripts/` — Codex command installer and helpers
+- `eval-generation/` — Evaluation generation workflows
+- `dashboard/` — Metrics dashboard (unless `--no-dashboard`)
+- *(with `--codex`)* Codex slash commands installed globally to `~/.codex/prompts/`
 
 **Expected output:**
 ```
+==> Downloading OpenSpec from https://github.com/sujkini/openspec.git (main)...
+==> Running installer...
+==> Installing OpenSpec CLI...
 ==> Copying openspec/ into /path/to/your/project...
 ==> Copying .cursor/ into /path/to/your/project...
 ==> Copying .codex/ into /path/to/your/project...
@@ -93,25 +104,14 @@ Codex can run inside Cursor as an extension. Follow these steps:
 3. Choose a model (e.g., `gpt-5.6-luna`, `gpt-4-turbo`, or `gpt-4`)
 4. Complete the setup
 
-**Step 3: Run Codex Command Installation Script**
+**Step 3: Codex Commands**
 
-(You've already cloned and installed OpenSpec in Step 1. Now just install the commands.)
+If you installed with `--codex` in Step 1, Codex commands are already installed globally. Skip to Step 4.
 
-In your terminal:
+If you used the Cursor install (without `--codex`), install them now:
 ```bash
 cd /path/to/your/project
 ./scripts/install-codex-commands.sh
-```
-
-**Expected output:**
-```
-✅ Successfully installed 18 commands to /Users/you/.codex/prompts
-📋 Installed commands:
-opsx-new
-opsx-explore
-... (and 16 more)
-
-🚀 Restart Codex to pick up the new commands
 ```
 
 **Step 4: Restart Cursor**
@@ -169,26 +169,12 @@ codex --version  # verify installation
 
 **Step C: Install OpenSpec Commands**
 
-(You've already cloned and installed OpenSpec in Step 1. Now just install the commands.)
+If you installed with `--codex` in Step 1, commands are already installed globally. Skip to Step D.
 
-Navigate to your project and run:
-
+Otherwise, install them manually:
 ```bash
+cd /path/to/your/project
 ./scripts/install-codex-commands.sh
-```
-
-**Expected output:**
-```
-📦 Installing OpenSpec Codex commands...
-✅ Successfully installed 18 commands to /Users/you/.codex/prompts
-
-📋 Installed commands:
-opsx-new
-opsx-explore
-opsx-apply
-... (and 15 more)
-
-🚀 Restart Codex to pick up the new commands
 ```
 
 **Step D: Track Token Usage (Important for Feedback)**
@@ -478,13 +464,10 @@ If you encounter issues:
 
 ### Setup Checklist
 
-- [ ] Cloned OpenSpec repo and ran `install.sh`
+- [ ] Ran the one-liner install (`curl ... | bash -s -- /path/to/project`)
 - [ ] Set `OPENAI_API_KEY` environment variable
 - [ ] **Cursor users:** Restarted Cursor
-- [ ] **Codex users:** 
-  - [ ] Installed Codex (VS Code extension or CLI)
-  - [ ] Ran `./scripts/install-codex-commands.sh`
-  - [ ] Restarted Codex
+- [ ] **Codex users:** Used `--codex` flag (or ran `./scripts/install-codex-commands.sh`) and restarted Codex
 - [ ] Verified commands work: `/opsx-new TEST-001`
 
 ### First Change Workflow
@@ -503,4 +486,4 @@ If you encounter issues:
 
 ---
 
-**Last Updated:** 2026-09-16
+**Last Updated:** 2026-09-23

@@ -39,23 +39,29 @@ Optional but recommended:
 
 ## Step 1 — Install OpenSpec into your operator repo
 
-From any machine with network access:
+Run **one command** from any machine with network access:
 
+**Cursor users:**
 ```bash
-rm -rf /tmp/openspec-workflow
-git clone -b main https://github.com/sujkini/openspec.git /tmp/openspec-workflow
-/tmp/openspec-workflow/install.sh /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
 ```
 
-What `install.sh` does:
+**Codex users** (also installs slash commands globally to `~/.codex/prompts/`):
+```bash
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/your-operator-repo
+```
 
-1. Installs the OpenSpec CLI (`npm`)
-2. Runs `openspec init` in your operator repo
-3. Copies `openspec/`, `.cursor/`, and `eval-generation/` into the repo
-4. Installs Python deps for telemetry (`pyyaml`, `tiktoken`)
-5. Updates `.gitignore` (excludes ephemeral `openspec/changes/` working data)
+What the installer does:
 
-**Restart Cursor** after install so slash commands appear.
+1. Clones the OpenSpec repo (shallow, auto-cleaned up)
+2. Installs the OpenSpec CLI (`npm`)
+3. Runs `openspec init` in your operator repo
+4. Copies `openspec/`, `.cursor/`, `.codex/`, `eval-generation/`, and `scripts/` into the repo
+5. Installs Python deps for telemetry (`pyyaml`, `tiktoken`)
+6. Updates `.gitignore` (excludes ephemeral `openspec/changes/` working data)
+7. *(with `--codex`)* Installs Codex slash commands globally
+
+**Restart Cursor** (or Codex/VS Code) after install so slash commands appear.
 
 ---
 
@@ -477,7 +483,7 @@ metrics are incomplete but does not hard-block publish.
 Each **phase = one user story**. You repeat this block for Phase 1, 2, 3, …
 
 ```
-Install (install.sh)
+Install (curl ... | bash -s -- /path/to/repo)
     ↓
 Configure config.yaml + MCP + credentials
     ↓
@@ -524,7 +530,7 @@ Configure config.yaml + MCP + credentials
 
 | Problem | Fix |
 |---|---|
-| Slash commands not found | Restart Cursor after `install.sh` |
+| Slash commands not found | Restart Cursor/Codex after install |
 | Jira ticket not fetched | Check Jira MCP + `credentials.jira` in `config.yaml` |
 | "target_repo not set" | Provide URL at `/opsx-new` or edit `inputs/jira.yaml` |
 | "fork_repo_url not set" | Provide at `/opsx-apply`, or use working-folder mode |

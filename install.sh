@@ -4,10 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 INSTALL_DASHBOARD=true
+INSTALL_CODEX=false
 
 usage() {
   cat <<EOF
-Usage: $0 [--no-dashboard] <target-directory>
+Usage: $0 [--codex] [--no-dashboard] <target-directory>
 
 Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
@@ -16,21 +17,25 @@ Installs OpenSpec workflow into the specified project directory:
   4. Installs telemetry Python dependencies (pyyaml, tiktoken)
   5. Installs dashboard Python + Node dependencies (if dashboard enabled)
   6. Updates .gitignore
+  7. (--codex) Installs Codex slash commands globally to ~/.codex/prompts/
 
 Options:
+  --codex          Also install Codex slash commands globally (runs scripts/install-codex-commands.sh)
   --no-dashboard   Skip copying and installing the observability dashboard
 
-Prerequisites:
-  git clone -b main https://github.com/sujkini/openspec.git /tmp/openspec-workflow
-
-Then run:
-  /tmp/openspec-workflow/install.sh /path/to/your-project
+One-liner install (recommended):
+  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/project
+  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --codex /path/to/project
 EOF
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --codex)
+      INSTALL_CODEX=true
+      shift
+      ;;
     --no-dashboard)
       INSTALL_DASHBOARD=false
       shift
@@ -151,6 +156,20 @@ else
   fi
 fi
 
+# ─── Codex commands ───
+
+if [ "$INSTALL_CODEX" = true ]; then
+  CODEX_INSTALLER="$TARGET_DIR/scripts/install-codex-commands.sh"
+  if [ -f "$CODEX_INSTALLER" ]; then
+    echo "==> Installing Codex slash commands globally..."
+    bash "$CODEX_INSTALLER" && \
+      echo "    Codex commands installed to ~/.codex/prompts/" || \
+      echo "    Warning: Codex command install failed. Run manually: ./scripts/install-codex-commands.sh"
+  else
+    echo "    Warning: scripts/install-codex-commands.sh not found, skipping Codex commands"
+  fi
+fi
+
 echo "==> Updating .gitignore..."
 GITIGNORE="$TARGET_DIR/.gitignore"
 touch "$GITIGNORE"
@@ -195,8 +214,12 @@ echo "Next steps:"
 echo "  1. Place agents.md at your repo root     — define your operator's architecture & agent routing"
 echo "  2. Add docs to harness-evals/harness-docs/ — operator documentation for constitution generation"
 echo "  3. Run /opsx-constitute                   — generates harness-evals/constitution.md from harness-docs"
-echo "  4. For Cursor:  Restart Cursor so slash commands load from .cursor/commands/"
-echo "     For Codex:   Run ./scripts/install-codex-commands.sh then restart Codex"
+if [ "$INSTALL_CODEX" = true ]; then
+  echo "  4. Restart Codex/VS Code to pick up the new commands"
+else
+  echo "  4. For Cursor:  Restart Cursor so slash commands load from .cursor/commands/"
+  echo "     For Codex:   Re-run with --codex flag, or: ./scripts/install-codex-commands.sh && restart Codex"
+fi
 echo "  5. Run /opsx-new <JIRA-KEY> to start your first change"
 if [ "$INSTALL_DASHBOARD" = true ]; then
   echo "  5. (Optional) Start the dashboard:  cd $TARGET_DIR && ./dashboard/start.sh"
