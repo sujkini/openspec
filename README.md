@@ -86,7 +86,7 @@ export OPENAI_API_KEY="sk-YOUR_KEY_HERE"
 **Step 3: Restart Codex**
 Close and reopen VS Code or your Codex editor. Commands and skills are already installed by the one-liner above.
 
-**Done!** You can now use the same commands as Cursor users: `/opsx-new`, `/opsx-explore`, `/opsx-apply`, etc.
+**Done!** You can now use the same commands as Cursor users: `/opsx-new`, `/opsx-continue`, `/opsx-apply`, etc.
 
 ---
 
@@ -275,9 +275,9 @@ This helps track efficiency and optimize API usage costs.
 ### Phase-Iterative (default)
 
 Tasks are executed one phase at a time. After each phase completes:
-- A draft PR is raised scoped to that phase
+- A PR is raised scoped to that phase
 - A Jira Story ticket is created for the phase (linked to the epic)
-- The user can trigger `/opsx-e2e --phase N` after CI passes
+- The user can trigger `/opsx-e2e --phase N` to generate E2E tests
 - `/opsx-continue` generates next-phase tasks
 
 ### One-Shot
@@ -644,15 +644,15 @@ Use when your Cursor workspace IS the operator repo.
 
 When prompted for target repo, tell the agent: **"use this as the working directory"**
 - Code changes happen directly in your working directory
-- No fork URL needed, no draft PR
+- No fork URL needed, no PR to upstream
 
-### Mode B: Fork mode (draft PR)
+### Mode B: Fork mode (auto-fork + PR)
 
 When prompted, provide:
 - **Target repo URL** — before repo-assessment
 - **Fork repo URL** — before `/opsx-apply`
 
-The agent clones your fork, implements task-by-task, and opens a draft PR.
+The agent automatically forks the target repo, implements task-by-task, and opens a PR from the fork to upstream.
 
 ---
 
@@ -666,10 +666,9 @@ The agent clones your fork, implements task-by-task, and opens a draft PR.
 | `/opsx-new PROJ-123` | Start a change from a Jira key |
 | `/opsx-continue` | Create next artifact; eval gate; approval |
 | `/opsx-apply` | Implement tasks — one at a time, approval after each |
-| `/opsx-e2e` | Generate E2E tests for a phase/final PR after CI passes |
+| `/opsx-e2e` | Generate E2E tests for a phase/final PR |
 | `/opsx-archive` | Archive a completed change |
 | `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-mado as a PR |
-| `/opsx-explore` | Explore ideas without creating artifacts |
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
 
@@ -718,9 +717,9 @@ flags:
 
 ### Task execution modes
 
-**`phase-iterative`** — Tasks are grouped by plan phase. After each phase completes: a draft PR is raised, a Jira Story ticket is created for the phase, and `/opsx-continue` generates next-phase tasks. E2E tests can be triggered per phase after CI passes.
+**`phase-iterative`** — Tasks are grouped by plan phase. After each phase completes: a PR is raised (fork → upstream), a Jira Story ticket is created for the phase, and `/opsx-continue` generates next-phase tasks. E2E tests can be triggered per phase.
 
-**`one-shot`** — All tasks execute sequentially across all phases. A single draft PR is raised at the end. E2E tests are triggered once after the final CI passes.
+**`one-shot`** — All tasks execute sequentially across all phases. A single PR is raised at the end (fork → upstream). E2E tests are triggered once after implementation is complete.
 
 ---
 
@@ -936,7 +935,7 @@ This section outlines the operational boundaries, limitations, safety mechanisms
 The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kubernetes/OpenShift operator repositories. It operates within the Cursor IDE or Cursor CLI on the developer's local workstation.
 
 - **Role:** AI-assisted software engineer that plans, implements, and tests operator code changes under strict human oversight.
-- **Goals:** Validate Jira specifications, generate phased implementation plans, produce and verify code task-by-task, raise draft PRs, and create Jira traceability tickets.
+- **Goals:** Validate Jira specifications, generate phased implementation plans, produce and verify code task-by-task, raise PRs (fork → upstream), and create Jira traceability tickets.
 - **Operational context:** Runs locally in the developer's terminal or IDE session. Never deployed as a hosted service. All actions are scoped to the local workspace, the user's GitHub fork, and authorized Jira/GitHub APIs.
 
 ### Limitations
@@ -957,11 +956,10 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-new` | Write | Start a new change from a Jira ticket key |
 | `/opsx-continue` | Write | Generate next artifact, run eval gate, approve |
 | `/opsx-apply` | Write | Implement tasks one at a time with per-task approval |
-| `/opsx-e2e` | Write | Generate E2E tests after CI passes |
+| `/opsx-e2e` | Write | Generate E2E tests from a PR or ADR |
 | `/opsx-archive` | Write | Archive a completed change |
 | `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-mado |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
-| `/opsx-explore` | Read | Explore ideas without creating artifacts |
 
 **OAPE Commands (ai-helpers mode only, during `/opsx-apply`):**
 
@@ -982,7 +980,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | Integration | Operations | Credentials |
 |-------------|------------|-------------|
 | Jira MCP | Read tickets, create Stories under Epic | `config.yaml → credentials.jira` (user's PAT) |
-| GitHub MCP | Read repos, create draft PRs | `config.yaml → credentials.github` (user's PAT) |
+| GitHub MCP | Read repos, auto-fork, create PRs | `config.yaml → credentials.github` (user's PAT) |
 
 **Data Sources:**
 
@@ -1030,7 +1028,7 @@ user-invoked command (never triggered autonomously by another command).
 
 - **First run:** Set `auto_approve: false` in `config.yaml` to review each artifact and task individually. Switch to `true` once comfortable with the workflow.
 - **Working-folder mode:** When your Cursor workspace IS the operator repo, tell the agent "use this as the working directory" when prompted for target repo. This avoids fork overhead and is faster for iteration.
-- **Fork mode:** Use when you want the agent to raise a draft PR to the upstream repository. Provide fork URL before `/opsx-apply`.
+- **Fork mode:** The agent automatically forks the target repo and raises a PR to upstream. No manual fork URL needed.
 - **Code generation mode:** Start with `codegen_mode: direct` for simple or few-file changes. Use `ai-helpers` for complex multi-package work that benefits from design bundles and code eval scoring.
 - **agents.md quality matters:** The agent relies heavily on `agents.md` for code patterns, test exemplars, and package routing. Invest time in making it detailed and accurate.
 - **Run `/eval-loop` after features:** After completing a feature, feed its history into `/eval-loop` to generate eval cases that improve quality for future runs.
@@ -1045,7 +1043,7 @@ The OpenSpec workflow enforces multi-layered human oversight:
 1. **Artifact approval:** Each artifact (validation, specs, plan, tasks) is evaluated against stage evals, refined if needed, and presented for explicit user approval before the next stage begins.
 2. **Task approval:** Each code task is verified (build, test, eval gate) and presented for approval. When `auto_approve` is `false`, the agent yields after every task. When `true`, tasks auto-approve after passing verification but phase/PR/Jira gates still require human input.
 3. **Phase approval:** After all tasks in a phase complete, the agent always prompts: "Phase {N} development complete. Approve the phase implementation?" This gate is never auto-approved.
-4. **PR creation:** The agent always asks: "Would you like to raise a draft PR to the upstream repo?" The user can decline. All PRs are created as drafts requiring normal upstream review and merge.
+4. **PR creation:** The agent always asks: "Would you like to raise a PR to the upstream repo?" The user can decline. All PRs are created from the auto-forked repo to upstream, requiring normal review and merge.
 5. **Jira Story creation:** The agent always asks before creating Jira Stories. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
 6. **Override recording:** If a user approves a task despite failing eval cases, the decision and eval results are recorded in `implementation/task-reports/<task-id>.md` for audit purposes.
 7. **Rejection handling:** When a user rejects with feedback, the agent re-runs only the current task/artifact. Up to 3 rejection rounds are allowed before the workflow halts.
@@ -1069,7 +1067,7 @@ Both mechanisms function independently of the agent's logic and cannot be bypass
 | Undo the last commit | `git reset HEAD~1` in the fork |
 | Undo an entire phase | `git reset --hard <commit-before-phase>` in the fork |
 | Remove all generated artifacts for a change | Delete `openspec/changes/<name>/` directory |
-| Close a draft PR | `gh pr close <URL>` or close via GitHub UI |
+| Close a PR | `gh pr close <URL>` or close via GitHub UI |
 | Delete the fork feature branch | `git push origin --delete <branch>` |
 
 The agent never merges to protected branches. All PRs are created as drafts and require human merge through the normal upstream review process.
@@ -1113,7 +1111,7 @@ The agent cannot access any repository, Jira project, or API the user is not alr
 |-------|-------|-----|
 | "constitution.md required" | Missing `harness-evals/constitution.md` | Run `/opsx-constitute` or place the file manually |
 | "target_repo not set" | Missing repo URL before repo-assessment | Provide the URL when prompted; it persists to `inputs/jira.yaml` |
-| "fork_repo_url not set" | Missing fork URL before `/opsx-apply` | Provide fork URL, or say "use this as the working directory" |
+| "fork failed" | Auto-fork of target repo failed | Check GitHub MCP auth and permissions, ensure you have fork rights on the target repo |
 | Jira Story creation skipped | Input ticket is not an Epic, or Jira credentials empty | Fill `credentials.jira` in `config.yaml` and use an Epic ticket |
 | Eval scoring skipped | No eval file at `harness-evals/evals/<stage>_eval.yaml` | Add evals via `/eval-loop` or place YAML files manually |
 | Agent stuck or in infinite loop | LLM context issue or tool execution hang | Press `Ctrl+C` (CLI) or Stop button (IDE), then re-run the command |

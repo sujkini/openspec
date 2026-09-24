@@ -13,7 +13,6 @@ Start a new change for the **openspec-agile-workflow** pipeline.
 |-------|--------------------------|-----------------|------|
 | **Jira ticket key or URL** | **YES** | — | Always the first input |
 | **Target GitHub repo URL** | **YES** | — | Asked during `/opsx-new` if not provided inline |
-| **Fork GitHub repo URL** | No | **YES** | Before `/opsx-apply` (skip in working-folder mode) |
 | **Change name** (kebab-case) | No | — | Optional; defaults to lowercase ticket slug (`PROJ-123` → `proj-123`) |
 | **AGENTS.md** | No | No | Optional |
 

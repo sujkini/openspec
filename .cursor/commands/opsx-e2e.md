@@ -228,7 +228,7 @@ If no change name exists (Design Mode without prior `/opsx-new`):
 - Derive a name from the ADR/EP title (kebab-case)
 - Create `openspec/changes/<name>/e2e/` for artifacts
 
-All E2E artifacts are written here: `e2e-analysis.md`, `test-plan.md`, `revised-test-plan.md`, generated code.
+All E2E artifacts are written here: `e2e-analysis.md`, `test-plan.md`, generated code.
 
 ### 3. Stage 1 — Pre-Analysis
 
@@ -316,41 +316,16 @@ On approval, emit `e2e_stage_end` with `tokens_in` (e2e-analysis.md + generic qe
 Sections 1-5 + PR diff token count), `tokens_out` (test-plan.md token count), `duration_s`,
 and `refinement_rounds`.
 
-### 5. Stage 3 — Consolidation (Config-Driven)
-
-Apply Section 12 of `test-plan-generation.md` (Revised Plan Consolidation).
-
-**Inputs:**
-- Approved `test-plan.md` (from stage 2)
-- `openspec/config.yaml → qe.max_test_cases` (hard limit)
-
-**Process:**
-1. Read `config.yaml` for `qe.max_test_cases`
-   - If not set → ASK: "How many consolidated journeys? Enter a number (e.g. 5–8):"
-   - Use response as the limit
-2. Apply consolidation rules (create journeys, eliminate redundancy, enforce limit)
-3. Write `openspec/changes/<name>/e2e/revised-test-plan.md`
-
-**Approval gate:**
-- Present revised plan (journey count, merged tests, dropped requirements if any)
-- STOP and wait for user approval
-- On reject → adjust consolidation
-- On approve → proceed to Stage 4
-
-**Telemetry:** Emit `e2e_stage_start` (stage=3, stage_name="consolidation") before processing.
-On approval, emit `e2e_stage_end` with `tokens_in` (test-plan.md token count),
-`tokens_out` (revised-test-plan.md token count), `duration_s`, and `refinement_rounds`.
-
-### 6. Stage 4 — Code Generation
+### 5. Stage 3 — Code Generation
 
 Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 
 **Inputs (TARGETED — code-level context only):**
-- Approved `revised-test-plan.md` (from stage 3)
+- Approved `test-plan.md` (from stage 2)
 - `agents.md` — **helpers/style/framework sections ONLY** (for generating compilable code
   that follows the operator's coding conventions). Do NOT re-read the full architecture
   sections — use the embedded operator context from `e2e-analysis.md` (carried through
-  `revised-test-plan.md`) for scoping.
+  `test-plan.md`) for scoping.
 - `qe-e2e/helpers.md` (if found in step 0c — operator-specific test builder function signatures)
 - Target repo `test/e2e/` patterns (auto-discovered: framework, helpers, constants)
 
@@ -367,21 +342,21 @@ Apply Section 13 of `test-plan-generation.md` (Journey Code Generation).
 - Present generated code summary (file path, journey count, framework, helpers used)
 - STOP and wait for user approval
 - On reject → revise code
-- On approve → proceed to Stage 5
+- On approve → proceed to Stage 4
 
-**Telemetry:** Emit `e2e_stage_start` (stage=4, stage_name="code_generation") before processing.
-On approval, emit `e2e_stage_end` with `tokens_in` (revised-test-plan.md + repo patterns token count),
+**Telemetry:** Emit `e2e_stage_start` (stage=3, stage_name="code_generation") before processing.
+On approval, emit `e2e_stage_end` with `tokens_in` (test-plan.md + repo patterns token count),
 `tokens_out` (sum of all generated *_test.go file token counts), `duration_s`, and `refinement_rounds`.
 
-### 7. Stage 5 — Execute, Evaluate, and Push
+### 6. Stage 4 — Execute, Evaluate, and Push
 
 **Design Mode gate:** If running in **Design Mode** (ADR/EP only, no PR), proceed to
 **Step 6a (Design Mode: Implementation Check & Optional Local Execution)** below.
 Do NOT skip to Step 8 immediately — the user may want to run tests locally.
 
-**PR Mode / Combined Mode:** Skip Step 6a and continue with Stage 5 below.
+**PR Mode / Combined Mode:** Skip Step 6a and continue with Stage 4 below.
 
-**Telemetry:** Emit `e2e_stage_start` (stage=5, stage_name="execution") before execution.
+**Telemetry:** Emit `e2e_stage_start` (stage=4, stage_name="execution") before execution.
 
 #### Step 6a — Design Mode: Implementation Check & Optional Local Execution
 
@@ -429,7 +404,7 @@ Design Mode — E2E Pipeline Complete (Plan + Code)
 Mode:           Design (ADR/EP only — no PR)
 Input:          <ADR/EP title or path>
 Implementation: <FOUND / NOT FOUND> in target repo
-Artifacts:      e2e-analysis.md, test-plan.md, revised-test-plan.md, generated code
+Artifacts:      e2e-analysis.md, test-plan.md, generated code
 Location:       openspec/changes/<name>/e2e/
 Local tests:    Skipped (user declined)
 
@@ -454,7 +429,7 @@ Design Mode — E2E Pipeline Complete (Plan + Code + Local Execution)
 Mode:           Design (ADR/EP only — no PR)
 Input:          <ADR/EP title or path>
 Implementation: <FOUND / NOT FOUND> in target repo
-Artifacts:      e2e-analysis.md, test-plan.md, revised-test-plan.md, generated code
+Artifacts:      e2e-analysis.md, test-plan.md, generated code
 Location:       openspec/changes/<name>/e2e/
 Local tests:    <N> run, <M> passed, <K> failed
 
@@ -702,11 +677,11 @@ No separate PR is created — the existing development PR receives the E2E commi
 
 1. Write E2E summary to `openspec/changes/<name>/e2e/e2e-summary.md`.
 
-**Telemetry (Stage 5 close):**
+**Telemetry (Stage 4 close):**
 - Emit `e2e_stage_end` with `tokens_in`, `tokens_out`, `duration_s`.
 - Emit `e2e_run_end` with status (`passed`, `failed_approved`, `not_executed`).
 
-### 8. Final Summary
+### 7. Final Summary
 
 ```
 ## E2E Generation Complete: <change-name>
@@ -733,7 +708,6 @@ No separate PR is created — the existing development PR receives the E2E commi
 |-------|----------|------|
 | Pre-analysis | e2e-analysis.md | openspec/changes/<name>/e2e/ |
 | Test plan | test-plan.md | openspec/changes/<name>/e2e/ |
-| Revised plan | revised-test-plan.md | openspec/changes/<name>/e2e/ |
 | Generated code | <file>_test.go | openspec/changes/<name>/e2e/generated/ |
 | Evaluation report | e2e-evaluation-report.md | openspec/changes/<name>/e2e/ (PR/Combined only) |
 | QE Metrics | qe-metrics.json | openspec/changes/<name>/telemetry/ |
@@ -784,10 +758,9 @@ will ask for them once this change is archived.
     `e2e-analysis.md` with an embedded "Operator Context" section.
   - **Stage 2 (Test Plan):** Reads `e2e-analysis.md` + generic QE rules only. Does NOT
     re-read `agents.md` or `constitution.md`.
-  - **Stage 3 (Consolidation):** Reads `test-plan.md` + `config.yaml` only. No operator context.
-  - **Stage 4 (Code Generation):** Reads `revised-test-plan.md` + `agents.md` (helpers/style
+  - **Stage 3 (Code Generation):** Reads `test-plan.md` + `agents.md` (helpers/style
     sections ONLY) + `qe-e2e/helpers.md` (if present). Does NOT re-read `constitution.md`.
-- **HARD GUARDRAIL — Local execution opt-in:** In Stage 5 (PR/Combined Mode) Step 5.1
+- **HARD GUARDRAIL — Local execution opt-in:** In Stage 4 (PR/Combined Mode) Step 5.1
   and Step 6a (Design Mode), you MUST explicitly ASK the user "Run E2E tests locally on
   your cluster? (Yes / No)" before any cluster interaction. Do NOT assume the answer.
   Do NOT auto-execute tests. If the user declines, skip directly to Step 5.5 (PR/Combined)

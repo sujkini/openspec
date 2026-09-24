@@ -88,7 +88,7 @@ credentials:
     api_token: ""                           # Jira PAT — never commit the real token
   github:
     upstream_repo_url: ""   # e.g. https://github.com/openshift/my-operator
-    fork_repo_url: ""       # e.g. https://github.com/you/my-operator-fork
+    fork_repo_url: ""       # auto-created during /opsx-apply (usually leave empty)
     token: ""               # GitHub PAT (cross-repo PR creation)
   cluster:
     kubeconfig_path: ""     # absolute path — required for local E2E test execution
@@ -110,7 +110,7 @@ each phase in `plan.md`.
 | **`tasks.md`** | Generated for **one phase only** — not all phases at once |
 | **`/opsx-apply`** | Implements that phase's tasks, then stops |
 | **Jira Story prompt** | After you approve Phase N `tasks.md`, if you pasted an **Epic** at `/opsx-new`, the agent asks whether to **create a Jira Story** for that phase under the Epic (see below) |
-| **PR prompt** | After Phase N implementation is approved, the agent **always asks** whether to raise a **draft PR** for that phase — it is **never** raised automatically |
+| **PR prompt** | After Phase N implementation is approved, the agent **always asks** whether to raise a **PR** (fork → upstream) for that phase — it is **never** raised automatically |
 | **`/opsx-e2e --phase N`** | Generates E2E tests for **that phase's user story and PR** — run once per phase, not once for the whole Epic |
 
 ### Typical loop (repeat for Phase 1, 2, 3, …)
@@ -120,8 +120,8 @@ each phase in `plan.md`.
        ↓  you approve tasks.md
        ↓  [Epic input only] agent asks: "Create Jira Story [US-01] … under CM-800? (Yes / No)"
 /opsx-apply      →  implement Phase 1 tasks (approve each task)
-       ↓  agent asks: "Phase 1 approved. Raise a draft PR? (Yes / No)"
-       ↓  you say Yes → draft PR opened for Phase 1 only
+       ↓  agent asks: "Phase 1 approved. Raise a PR? (Yes / No)"
+       ↓  you say Yes → PR opened for Phase 1 only (fork → upstream)
 /opsx-e2e my-change --phase 1
        ↓
 /opsx-continue   →  tasks for Phase 2 (User Story US-02) … repeat
@@ -172,7 +172,7 @@ throughout the workflow for ticket metadata.
 1. Enable the **GitHub** MCP server (`user-github` or equivalent).
 2. Authenticate with a PAT that can read repos, push branches, and open PRs.
 
-Used by: `/opsx-apply` (draft PRs), `/opsx-e2e` (read PR diff and CI).
+Used by: `/opsx-apply` (auto-fork + PRs), `/opsx-e2e` (read PR diff).
 
 **If MCP is unavailable:** `/opsx-new` can still run — paste ticket text into
 `openspec/changes/<name>/inputs/jira-spec.md` manually when prompted.
@@ -223,7 +223,7 @@ cp openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.m
 | URL | When collected | Stored in |
 |---|---|---|
 | **Target repo** (upstream code you assess/implement against) | `/opsx-new` | `openspec/changes/<name>/inputs/jira.yaml` → `target_repo` |
-| **Fork repo** (your fork for code + draft PR) | `/opsx-apply` (or set early in `config.yaml`) | `credentials.github.fork_repo_url` and/or `inputs/jira.yaml` |
+| **Fork repo** (auto-created from target repo) | `/opsx-apply` (automatic) | `credentials.github.fork_repo_url` (auto-populated) |
 
 You can also pre-fill both in `openspec/config.yaml → credentials.github`:
 
@@ -231,7 +231,7 @@ You can also pre-fill both in `openspec/config.yaml → credentials.github`:
 credentials:
   github:
     upstream_repo_url: "https://github.com/openshift/my-operator"
-    fork_repo_url: "https://github.com/you/my-operator-fork"
+    fork_repo_url: ""   # auto-created during /opsx-apply
 ```
 
 **Working-folder mode:** if your Cursor workspace *is* the operator repo, say
@@ -298,9 +298,9 @@ Implements **one phase** (one user story) at a time in phase-iterative mode.
    - Writes `implementation-report.md` and optionally `deviation-observed.md`
    - Asks you to **approve the phase implementation**
 5. **PR prompt (every phase, never automatic):** after phase approval, the agent asks:
-   > *"Phase {N} approved. Would you like to raise a draft PR to the upstream repo?
+   > *"Phase {N} approved. Would you like to raise a PR to the upstream repo?
    > (Yes / No, continue to Phase {N+1})"*
-   - **Yes** → opens a **draft PR scoped to this phase only** (fork → upstream)
+   - **Yes** → opens a **PR scoped to this phase only** (fork → upstream)
    - **No** → skip PR and continue to the next phase's planning
 
 Each phase gets its **own PR** (when you say Yes). That is why E2E runs **per phase**
@@ -309,8 +309,7 @@ E2E targets the Phase 2 PR, and so on.
 
 ### Fork URL
 
-If `fork_repo_url` is not set, the agent asks before cloning. Provide your fork URL
-or use working-folder mode.
+The agent automatically forks the target repo during `/opsx-apply`. No manual fork URL needed.
 
 After the phase PR is raised (or skipped), you can run **`/opsx-e2e my-change --phase N`**
 for that phase — or run E2E later via standalone mode (see Step 8).
@@ -490,7 +489,7 @@ Configure config.yaml + MCP + credentials
     ↓  [Epic] "Create Jira Story [US-01] …?"  (Yes / No)
 /opsx-apply     →  implement Phase 1 tasks (approve each task)
     ↓  approve phase
-    ↓  "Raise draft PR for Phase 1?"  (Yes / No)  ← prompted every phase, never automatic
+    ↓  "Raise PR for Phase 1?"  (Yes / No)  ← prompted every phase, never automatic
 /opsx-e2e my-change --phase 1              ← E2E for Phase 1 PR / user story
     ↓
 /opsx-continue  →  tasks for Phase 2 (US-02) … repeat apply → PR prompt → e2e --phase 2
@@ -527,7 +526,7 @@ Configure config.yaml + MCP + credentials
 | Slash commands not found | Restart Cursor/Codex after install |
 | Jira ticket not fetched | Check Jira MCP + `credentials.jira` in `config.yaml` |
 | "target_repo not set" | Provide URL at `/opsx-new` or edit `inputs/jira.yaml` |
-| "fork_repo_url not set" | Provide at `/opsx-apply`, or use working-folder mode |
+| "fork failed" | Check GitHub MCP auth and permissions for auto-fork |
 | No Jira Story created | Input must be an **Epic**; Story/Task/Bug skips Story creation |
 | Story creation skipped | Fill `credentials.jira.base_url` and `api_token` |
 | `/opsx-e2e` blocked | Ensure `agents.md` + `harness-evals/constitution.md` exist |
