@@ -12,10 +12,11 @@ Read `config.yaml → flags.auto_approve` at the start of every invocation.
 > **When `auto_approve` is `false`:** ONE task per invocation.
 > After presenting a task for approval, YIELD and wait for the user to approve/reject.
 >
-> **When `auto_approve` is `true` (default behaviour):** Auto-approve each task after eval/verification,
+> **When `auto_approve` is `true` (default behaviour):** At phase boundary, auto-trigger `/opsx-continue` to generate next-phase tasks.
+> Auto-approve each task after eval/verification,
 > immediately proceed to the next task within the same invocation. Continue until all
 > tasks in the current phase (phase-iterative) or all tasks (one-shot) are complete.
-> At phase boundary, auto-trigger `/opsx-continue` to generate next-phase tasks.
+
 
 **Mode**: Read `codegen_mode` from `openspec/config.yaml` → `flags.codegen_mode`:
 - `ai-helpers` — OAPE command routing + code-generation eval gate
