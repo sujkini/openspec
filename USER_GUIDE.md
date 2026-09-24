@@ -43,11 +43,12 @@ That's it. You're ready.
 
 | Step | Command | What it does |
 |------|---------|-------------|
+| 0 | `/opsx-doctor` | Health check — verifies prerequisites (Python, CLI, credentials, constitution) |
 | 1 | `/opsx-new <JIRA-KEY>` or `/opsx-new <JIRA-LINK>` | Starts a new change from a Jira ticket key or link |
 | 2 | `/opsx-continue` | Moves through each stage (validation > specs > repo-assessment > plan > tasks) |
 | 3 | `/opsx-apply` | Implements the code after tasks are generated |
 
-You will be prompted to approve at each stage before moving to the next. After code implementation, you will be prompted to raise a PR.
+With `auto_approve: false` (default), you will be prompted to approve at each stage. With `auto_approve: true`, all gates are auto-approved except PR creation — the workflow runs hands-free until it needs a PR decision.
 
 ### QE (E2E Tests)
 
@@ -70,12 +71,15 @@ After test generation, you will be prompted to raise a PR.
 
 ## Troubleshooting
 
+Run `/opsx-doctor` first — it checks all prerequisites and tells you what is missing.
+
 | Problem | Fix |
 |---------|-----|
 | Commands not showing up | Restart Cursor or VS Code |
 | API key not working | Run `echo $OPENAI_API_KEY` — if empty, set it and reload your shell |
 | Codex commands missing | Run `ls ~/.codex/prompts/opsx-*.md` — if empty, re-run the install command |
 | Cursor commands missing | Run `ls .cursor/commands/opsx-*.md` — if empty, re-run the install command |
+| Interrupted session | Re-run `/opsx-apply` — crash recovery detects in-flight state and offers resume/skip/rollback |
 
 ---
 

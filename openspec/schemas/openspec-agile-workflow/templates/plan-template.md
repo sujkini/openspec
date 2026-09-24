@@ -26,6 +26,9 @@ If inputs conflict:
 ## Hard boundaries (non-negotiable)
 - Do NOT write code, patches, or diffs.
 - Do NOT create Jira tickets, checklists with assignees, sprint plans, or granular "tasks".
+- Do NOT create phases for E2E testing. /opsx-e2e handles E2E separately. Plan phases must
+  contain implementation deliverables (code, APIs, controllers, webhooks, manifests). Pure
+  E2E/test-only phases are prohibited — E2E coverage belongs in §6 Verification matrix only.
 - Do NOT invent file paths, APIs, ports, feature gates, or behaviors not evidenced by the inputs.
 - If repo_assessment.md indicates partial tooling / low confidence, include explicit verification
   prerequisites rather than guessing.

@@ -12,7 +12,7 @@ Usage: $0 [--no-dashboard] <target-directory>
 Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
   2. Runs 'openspec init' in the target directory
-  3. Copies openspec/, .cursor/, .codex/, .codex-commands-reference/, eval-generation/, scripts/, and dashboard/ into the target
+  3. Copies openspec/, .cursor/, eval-generation/, scripts/, and dashboard/ into the target
   4. Installs telemetry Python dependencies (pyyaml, tiktoken)
   5. Installs dashboard Python + Node dependencies (if dashboard enabled)
   6. Installs Codex slash commands globally to ~/.codex/prompts/
@@ -74,20 +74,6 @@ cp -r "$SCRIPT_DIR/openspec" "$TARGET_DIR/"
 
 echo "==> Copying .cursor/ into $TARGET_DIR..."
 cp -r "$SCRIPT_DIR/.cursor" "$TARGET_DIR/"
-
-echo "==> Copying .codex/ into $TARGET_DIR..."
-if [ -d "$SCRIPT_DIR/.codex" ]; then
-  cp -r "$SCRIPT_DIR/.codex" "$TARGET_DIR/"
-else
-  echo "    Warning: .codex/ not found in source, skipping"
-fi
-
-echo "==> Copying .codex-commands-reference/ into $TARGET_DIR..."
-if [ -d "$SCRIPT_DIR/.codex-commands-reference" ]; then
-  cp -r "$SCRIPT_DIR/.codex-commands-reference" "$TARGET_DIR/"
-else
-  echo "    Warning: .codex-commands-reference/ not found in source, skipping"
-fi
 
 echo "==> Copying scripts/ into $TARGET_DIR..."
 if [ -d "$SCRIPT_DIR/scripts" ]; then
@@ -153,10 +139,10 @@ fi
 
 CODEX_INSTALLER="$TARGET_DIR/scripts/install-codex-commands.sh"
 if [ -f "$CODEX_INSTALLER" ]; then
-  echo "==> Installing Codex slash commands globally..."
+  echo "==> Installing Codex commands + skills (single-source from .cursor/)..."
   bash "$CODEX_INSTALLER" && \
-    echo "    Codex commands installed to ~/.codex/prompts/" || \
-    echo "    Warning: Codex command install failed. Run manually: ./scripts/install-codex-commands.sh"
+    echo "    Codex commands and skills installed." || \
+    echo "    Warning: Codex install failed. Run manually: ./scripts/install-codex-commands.sh"
 else
   echo "    Warning: scripts/install-codex-commands.sh not found, skipping Codex commands"
 fi

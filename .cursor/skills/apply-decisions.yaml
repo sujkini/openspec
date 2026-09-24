@@ -1,0 +1,36 @@
+decisions:
+  - state: IDLE
+    action: pick_next_task
+    skill: apply-execute-task/SKILL.md
+    description: Select next pending task and execute it
+
+  - state: EXECUTING_TASK
+    action: resume_task
+    skill: apply-execute-task/SKILL.md
+    description: Resume from crash — re-run current task (delegate to opsx-recovery first)
+
+  - state: RUNNING_TESTS
+    action: resume_task
+    skill: apply-execute-task/SKILL.md
+    description: Resume from crash during verification (delegate to opsx-recovery first)
+
+  - state: EVAL_GATE
+    action: resume_task
+    skill: apply-ai-helpers/SKILL.md
+    description: Resume from crash during eval gate (delegate to opsx-recovery first)
+
+  - state: AWAITING_APPROVAL
+    action: handle_approval
+    skill: null
+    description: Read user response (approve/reject) and handle inline
+
+  - state: PHASE_COMPLETE
+    action: phase_boundary
+    skill: apply-phase-boundary/SKILL.md
+    description: Phase approval gate, PR prompt, advance to next phase
+
+  - state: COMPLETE
+    action: suggest_archive
+    skill: null
+    stop: true
+    description: Announce done, suggest /opsx-archive

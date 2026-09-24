@@ -142,14 +142,14 @@ curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh 
 flags:
   codegen_mode: ai-helpers        # or: direct
   task_execution_mode: phase-iterative  # or: one-shot
-  auto_approve: true              # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
+  auto_approve: true              # auto-approve all gates except PR creation
 ```
 
 | Flag | Options | Purpose |
 |------|---------|---------|
 | `codegen_mode` | `ai-helpers` / `direct` | Code generation strategy |
 | `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised |
-| `auto_approve` | `true` / `false` | Auto-approve artifacts and per-task code approval. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
+| `auto_approve` | `true` / `false` | Auto-approve all gates except PR creation. When `false`, every approval is prompted. |
 
 ### 3. Add operator documentation
 
@@ -274,15 +274,15 @@ This helps track efficiency and optimize API usage costs.
 
 ### Phase-Iterative (default)
 
-Tasks are executed one phase at a time. After each phase completes:
-- A PR is raised scoped to that phase
-- A Jira Story ticket is created for the phase (linked to the epic)
-- The user can trigger `/opsx-e2e --phase N` to generate E2E tests
+Tasks are executed one phase at a time. Plan never generates E2E-only phases. After each phase completes:
+- Phase approval gate (auto-approved when `auto_approve: true`)
+- PR prompt (always prompted — never auto-approved)
+- Jira Story created (auto when `auto_approve: true`, prompted when `false`)
 - `/opsx-continue` generates next-phase tasks
 
 ### One-Shot
 
-All tasks across all phases are executed sequentially in a single run. A single PR is raised at the end covering the entire implementation. After CI passes, trigger `/opsx-e2e` for the final PR.
+All tasks across all phases are executed sequentially in a single run. A single PR is raised at the end covering the entire implementation.
 
 ---
 
@@ -705,7 +705,7 @@ flags:
 |------|---------|--------------|
 | `codegen_mode` | `ai-helpers` | Code generation strategy: `ai-helpers` (OAPE commands + code eval gate) or `direct` (plain agent, no OAPE, no eval gate) |
 | `task_execution_mode` | `phase-iterative` | `phase-iterative`: one phase at a time with per-phase PRs and Jira tickets. `one-shot`: all tasks in one run, single PR |
-| `auto_approve` | `true` | Auto-approve artifacts (`/opsx-continue`) and per-task code approval (`/opsx-apply`). Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
+| `auto_approve` | `true` | Auto-approve all gates except PR creation. Set to `false` for per-artifact and per-task human approval. |
 | `max_feedback_rounds` | `3` | Max rejection + refinement loops per artifact before halting |
 | `exit_on_all_tasks_complete` | `true` | Auto-exit implementation when all tasks marked `[x]` |
 
@@ -959,6 +959,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-e2e` | Write | Generate E2E tests from a PR or ADR |
 | `/opsx-archive` | Write | Archive a completed change |
 | `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-mado |
+| `/opsx-doctor` | Read | Verify environment prerequisites (Python, CLI, credentials, constitution) |
 | `/opsx-constitute` | Write | Generate constitution.md from harness-docs |
 
 **OAPE Commands (ai-helpers mode only, during `/opsx-apply`):**
@@ -1004,10 +1005,14 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 - Mark tasks complete and advance to the next task
 
 **Actions requiring human approval (never auto-approved):**
-- Phase implementation approval — always prompted after all phase tasks complete
 - PR creation to upstream repository — always prompted; user can decline
-- Jira Story creation — always prompted; only offered when input ticket is an Epic with configured credentials
 - Specs rejection — always requires explicit user action
+
+**Actions auto-approved with `auto_approve: true` (prompted when `false`):**
+- Artifact approval (validation, specs, repo-assessment, plan, tasks)
+- Per-task code approval during implementation
+- Phase implementation approval
+- Jira Story creation (when input is an Epic with credentials)
 
 **Prohibited actions:**
 - Push to protected branches or merge to main/master
@@ -1022,7 +1027,7 @@ the operator working directory/fork. It only ever writes the two local telemetry
 `anandkuma77/open-spec-mado`, and only as a PR — it never merges. It is a standalone,
 user-invoked command (never triggered autonomously by another command).
 - Launch background sub-agents during `/opsx-apply` or `/opsx-continue`
-- Auto-approve phase gates, PR creation, or Jira ticket creation regardless of configuration
+- Auto-approve PR creation regardless of configuration
 
 ### Best Practices
 
@@ -1041,10 +1046,10 @@ user-invoked command (never triggered autonomously by another command).
 The OpenSpec workflow enforces multi-layered human oversight:
 
 1. **Artifact approval:** Each artifact (validation, specs, plan, tasks) is evaluated against stage evals, refined if needed, and presented for explicit user approval before the next stage begins.
-2. **Task approval:** Each code task is verified (build, test, eval gate) and presented for approval. When `auto_approve` is `false`, the agent yields after every task. When `true`, tasks auto-approve after passing verification but phase/PR/Jira gates still require human input.
-3. **Phase approval:** After all tasks in a phase complete, the agent always prompts: "Phase {N} development complete. Approve the phase implementation?" This gate is never auto-approved.
-4. **PR creation:** The agent always asks: "Would you like to raise a PR to the upstream repo?" The user can decline. All PRs are created from the auto-forked repo to upstream, requiring normal review and merge.
-5. **Jira Story creation:** The agent always asks before creating Jira Stories. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
+2. **Task approval:** Each code task is verified (build, test, eval gate) and presented for approval. When `auto_approve` is `false`, the agent yields after every task. When `true`, tasks auto-approve after passing verification.
+3. **Phase approval:** After all tasks in a phase complete, the agent prompts for phase approval. When `auto_approve` is `true`, this is auto-approved.
+4. **PR creation:** The agent always asks: "Would you like to raise a PR to the upstream repo?" This is NEVER auto-approved. The user can decline. All PRs are created from the auto-forked repo to upstream, requiring normal review and merge.
+5. **Jira Story creation:** When `auto_approve` is `true`, Stories are auto-created. When `false`, the agent prompts. Skipped entirely if the input ticket is not an Epic or if Jira credentials are not configured.
 6. **Override recording:** If a user approves a task despite failing eval cases, the decision and eval results are recorded in `implementation/task-reports/<task-id>.md` for audit purposes.
 7. **Rejection handling:** When a user rejects with feedback, the agent re-runs only the current task/artifact. Up to 3 rejection rounds are allowed before the workflow halts.
 

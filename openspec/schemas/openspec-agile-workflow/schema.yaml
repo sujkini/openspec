@@ -157,9 +157,11 @@ jira_metadata:
 # ---------------------------------------------------------------------------
 e2e_exclusion:
   description: >-
-    E2e phases and e2e tasks are discarded from OAPE planning, task generation,
-    code generation, and Jira sync. E2e coverage remains in plan.md §6
-    Verification matrix for human/SME reference only — it is out of OAPE scope.
+    E2E phases are prohibited at plan generation time (plan-template.md hard
+    boundary). E2E tasks that slip through task generation are skipped during
+    /opsx-apply. E2E coverage remains in plan.md §6 Verification matrix for
+    human/SME reference only — it is out of OAPE scope. /opsx-e2e handles all
+    E2E test generation separately.
   task_criteria:
     ref: e2e_task.when_any
     when_any:
@@ -168,22 +170,11 @@ e2e_exclusion:
       - Target file(s) under test/ (e2e, ginkgo, or *_test.go integration/e2e paths)
       - Task Title or Objective contains "e2e" or "end-to-end" (case-insensitive)
       - OAPE command would be e2e (now handled by /opsx-e2e)
-  phase_criteria:
-    when_any:
-      - Phase heading or Goal contains "e2e", "end-to-end", or "E2E"
-      - Verification hooks are e2e/cluster-only with no unit/integration deliverables
-      - All tasks in the phase would match task_criteria
-      - Phase matches typical trailing pattern (e2e + CI, e2e tests, cluster verification)
-  state_tracking:
-    stored_in: openspec/changes/<change>/implementation/state.yaml
-    field: discarded_e2e_phases
-    type: "array of integer"
   applies_to:
-    - plan artifact (§5 MUST NOT emit standalone e2e-only phases)
     - tasks artifact (do NOT generate e2e tasks in §3/§4)
     - opsx-apply (skip guard — if e2e task slips through, mark SKIPPED_E2E)
     - phases_jira_sync (non-e2e phases only)
-    - e2e_workflow (e2e tests generated from excluded phases via /opsx-e2e post-CI)
+    - e2e_workflow (e2e tests generated via /opsx-e2e post-CI)
 
 # ---------------------------------------------------------------------------
 # e2e_workflow — post-CI E2E test generation pipeline (triggered by /opsx-e2e)
@@ -506,20 +497,20 @@ task_sizing:
 # ---------------------------------------------------------------------------
 # task_execution_mode — one-shot vs phase-iterative task generation/implementation
 # ---------------------------------------------------------------------------
-# auto_approve — skip artifact and per-task approval prompts (phase/PR/Jira gates are NEVER auto-approved)
+# auto_approve — auto-approve all gates except PR creation
 # ---------------------------------------------------------------------------
 auto_approve:
   description: >-
-    When true, artifact approval and per-task code approval are auto-approved
-    without prompting. Phase implementation approval, PR creation, and Jira
-    Jira Story creation are NEVER auto-approved regardless of this flag.
+    When true, all approval gates are auto-approved except PR creation.
     Applies to:
       - /opsx-continue: artifact approval (specs, repo-assessment,
         plan, tasks). The agent loops through all ready artifacts automatically
         using batch telemetry.
-      - /opsx-apply: per-task code approval during implementation. The agent
-        auto-approves each task after eval/verification and immediately proceeds
-        to the next task. At phase boundary, auto-triggers /opsx-continue.
+      - /opsx-continue: Jira Story creation (auto-created when Epic input).
+      - /opsx-apply: per-task code approval during implementation.
+      - /opsx-apply: phase implementation approval (auto-approved).
+      - /opsx-apply: at phase boundary, auto-triggers /opsx-continue for
+        next phase tasks.
     Evals still run and artifacts/code are still refined — only the user prompt
     is skipped. auto_approve only auto-approves, never auto-rejects.
     Exception: specs rejection (exit_on_reject) still requires explicit user action.
@@ -528,10 +519,10 @@ auto_approve:
   affects:
     - user_approval_feedback_gate.approval_prompt (artifact-level in /opsx-continue)
     - code_generation_eval_gate.task_approval_prompt (task-level in /opsx-apply)
+    - phase implementation approval gate in /opsx-apply
+    - phases_jira_sync Jira Story creation prompt
   never_auto_approved:
-    - phases_jira_sync Jira Phase creation prompt (always prompted)
-    - phase boundary PR prompt in /opsx-apply (always prompted)
-    - implementation approval gate in /opsx-apply (always prompted)
+    - PR creation prompt in /opsx-apply (always prompted)
     - user_approval_feedback_gate.exit_on_reject.specs (rejection is always explicit)
 
 # ---------------------------------------------------------------------------
@@ -572,18 +563,17 @@ task_execution_mode:
         stored_in: openspec/changes/<change>/implementation/state.yaml
         fields:
           current_plan_phase: integer
-          total_plan_phases: "integer — count of NON-e2e plan phases only"
+          total_plan_phases: "integer — count of plan phases"
           completed_phases: "array of integer"
-          discarded_e2e_phases: "array of integer — e2e phases excluded from OAPE loop"
           phase_pr_urls: "map of phase_number to url"
       flow: >-
-        plan.md approved → classify phases (discard e2e-only) →
+        plan.md approved →
         generate tasks for Phase 1 → eval gate → user approval →
         Jira ticket for Phase 1 → /opsx-apply Phase 1 tasks (task-by-task) →
         phase complete → optional PR →
         generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
         Jira ticket for Phase 2 → /opsx-apply Phase 2 tasks →
-        ... repeat for all non-e2e phases →
+        ... repeat for all phases →
         final implementation-report.md → archive
       phase_boundary:
         on_all_phase_tasks_complete:

@@ -1,34 +1,43 @@
 #!/bin/bash
-# Install OpenSpec Codex commands to global ~/.codex/prompts/
+# Install OpenSpec Codex commands and skills — single-source from .cursor/
 # Usage: ./scripts/install-codex-commands.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SOURCE_DIR="$PROJECT_ROOT/.codex-commands-reference"
-DEST_DIR="$HOME/.codex/prompts"
+COMMANDS_SOURCE="$PROJECT_ROOT/.cursor/commands"
+SKILLS_SOURCE="$PROJECT_ROOT/.cursor/skills"
+COMMANDS_DEST="$HOME/.codex/prompts"
+SKILLS_DEST="$PROJECT_ROOT/.codex/skills"
 
-echo "📦 Installing OpenSpec Codex commands..."
-echo "  Source: $SOURCE_DIR"
-echo "  Destination: $DEST_DIR"
+echo "Installing OpenSpec Codex commands (single-source from .cursor/)..."
 
-# Create destination directory if it doesn't exist
-mkdir -p "$DEST_DIR"
+# --- Commands ---
+mkdir -p "$COMMANDS_DEST"
 
-# Copy all command files
-if [ -d "$SOURCE_DIR" ]; then
-    cp "$SOURCE_DIR"/*.md "$DEST_DIR/" || {
-        echo "❌ Error: Could not copy command files"
+if [ -d "$COMMANDS_SOURCE" ]; then
+    cp "$COMMANDS_SOURCE"/*.md "$COMMANDS_DEST/" || {
+        echo "Error: Could not copy command files"
         exit 1
     }
-    echo "✅ Successfully installed $(ls $SOURCE_DIR/*.md | wc -l) commands to $DEST_DIR"
-    echo ""
-    echo "📋 Installed commands:"
-    ls -1 "$SOURCE_DIR"/*.md | xargs -n1 basename | sort
-    echo ""
-    echo "🚀 Restart Codex to pick up the new commands"
+    CMD_COUNT=$(ls "$COMMANDS_SOURCE"/*.md 2>/dev/null | wc -l)
+    echo "  Installed $CMD_COUNT commands to $COMMANDS_DEST"
 else
-    echo "❌ Error: Source directory not found: $SOURCE_DIR"
+    echo "Error: Source directory not found: $COMMANDS_SOURCE"
     exit 1
 fi
+
+# --- Skills ---
+if [ -d "$SKILLS_SOURCE" ]; then
+    mkdir -p "$SKILLS_DEST"
+    cp -r "$SKILLS_SOURCE"/* "$SKILLS_DEST/" || {
+        echo "Warning: Could not copy skills"
+    }
+    SKILL_COUNT=$(find "$SKILLS_SOURCE" -name "SKILL.md" 2>/dev/null | wc -l)
+    echo "  Installed $SKILL_COUNT skills to $SKILLS_DEST"
+else
+    echo "  Warning: No skills found at $SKILLS_SOURCE"
+fi
+
+echo "  Restart Codex to pick up the new commands"

@@ -50,9 +50,9 @@ What the installer does:
 1. Clones the OpenSpec repo (shallow, auto-cleaned up)
 2. Installs the OpenSpec CLI (`npm`)
 3. Runs `openspec init` in your operator repo
-4. Copies `openspec/`, `.cursor/`, `.codex/`, `eval-generation/`, and `scripts/` into the repo
+4. Copies `openspec/`, `.cursor/`, `eval-generation/`, and `scripts/` into the repo
 5. Installs Python deps for telemetry (`pyyaml`, `tiktoken`)
-6. Installs Codex slash commands globally to `~/.codex/prompts/`
+6. Installs Codex commands + skills (single-source from `.cursor/`)
 7. Updates `.gitignore` (excludes ephemeral `openspec/changes/` working data)
 
 **Restart Cursor** (or Codex/VS Code) after install so slash commands appear.
@@ -76,7 +76,7 @@ flags:
 |---|---|---|
 | `codegen_mode` | `direct` | Agent edits files directly. Use `ai-helpers` only if your team uses OAPE commands. |
 | `task_execution_mode` | `phase-iterative` | Plan phases map 1:1 to user stories; tasks and PRs are per phase. |
-| `auto_approve` | `false` | You are prompted to approve every artifact (`/opsx-continue`) and every task's code (`/opsx-apply`). Phase approval, PR creation, and Jira Story creation are **never** auto-approved regardless of this flag. |
+| `auto_approve` | `false` | You are prompted to approve every artifact, task, phase, and Jira Story. Set to `true` for hands-free operation — everything auto-approved except PR creation prompts. |
 
 Fill credentials before implementation or E2E:
 
@@ -102,28 +102,26 @@ With the default **`phase-iterative`** setting, OpenSpec does **not** implement 
 Epic in one go. It works **one user story at a time**, and you repeat the same cycle for
 each phase in `plan.md`.
 
-### Core idea: one phase = one user story = one PR = optional E2E
+### Core idea: one phase = one user story = one PR
 
 | Concept | What it means for you |
 |---|---|
-| **Phase** | One slice of work in `plan.md` — labeled **User Story US-01**, **US-02**, etc. |
+| **Phase** | One slice of work in `plan.md` — labeled **User Story US-01**, **US-02**, etc. Plan never contains E2E-only phases. |
 | **`tasks.md`** | Generated for **one phase only** — not all phases at once |
 | **`/opsx-apply`** | Implements that phase's tasks, then stops |
-| **Jira Story prompt** | After you approve Phase N `tasks.md`, if you pasted an **Epic** at `/opsx-new`, the agent asks whether to **create a Jira Story** for that phase under the Epic (see below) |
-| **PR prompt** | After Phase N implementation is approved, the agent **always asks** whether to raise a **PR** (fork → upstream) for that phase — it is **never** raised automatically |
-| **`/opsx-e2e --phase N`** | Generates E2E tests for **that phase's user story and PR** — run once per phase, not once for the whole Epic |
+| **Jira Story** | After you approve Phase N `tasks.md`, if input is an **Epic**, Story is created (auto with `auto_approve: true`, prompted with `false`) |
+| **PR prompt** | After Phase N implementation, the agent **always asks** whether to raise a **PR** — this is the only prompt that is **never** auto-approved |
 
 ### Typical loop (repeat for Phase 1, 2, 3, …)
 
 ```
 /opsx-continue   →  tasks for Phase 1 (User Story US-01)
-       ↓  you approve tasks.md
-       ↓  [Epic input only] agent asks: "Create Jira Story [US-01] … under CM-800? (Yes / No)"
-/opsx-apply      →  implement Phase 1 tasks (approve each task)
-       ↓  agent asks: "Phase 1 approved. Raise a PR? (Yes / No)"
+       ↓  approve tasks.md (auto if auto_approve: true)
+       ↓  [Epic input only] Jira Story created (auto if auto_approve: true, prompted if false)
+/opsx-apply      →  implement Phase 1 tasks (approve each task — auto if auto_approve: true)
+       ↓  approve phase (auto if auto_approve: true)
+       ↓  "Raise PR for Phase 1?" (ALWAYS prompted — never auto-approved)
        ↓  you say Yes → PR opened for Phase 1 only (fork → upstream)
-/opsx-e2e my-change --phase 1
-       ↓
 /opsx-continue   →  tasks for Phase 2 (User Story US-02) … repeat
 ```
 
@@ -476,6 +474,8 @@ metrics are incomplete but does not hard-block publish.
 Each **phase = one user story**. You repeat this block for Phase 1, 2, 3, …
 
 ```
+/opsx-doctor                               ← verify prerequisites
+    ↓
 Install (curl ... | bash -s -- /path/to/repo)
     ↓
 Configure config.yaml + MCP + credentials
@@ -485,14 +485,15 @@ Configure config.yaml + MCP + credentials
 /opsx-new <EPIC-KEY> [target-repo-url]     ← Epic with no Stories yet is OK
     ↓
 /opsx-continue  →  validation → specs → repo-assessment → plan → tasks (Phase 1 / US-01)
-    ↓  approve tasks.md
-    ↓  [Epic] "Create Jira Story [US-01] …?"  (Yes / No)
-/opsx-apply     →  implement Phase 1 tasks (approve each task)
-    ↓  approve phase
-    ↓  "Raise PR for Phase 1?"  (Yes / No)  ← prompted every phase, never automatic
-/opsx-e2e my-change --phase 1              ← E2E for Phase 1 PR / user story
+    ↓  approve tasks.md (auto if auto_approve: true)
+    ↓  [Epic] Jira Story created (auto if auto_approve: true)
+/opsx-apply     →  implement Phase 1 tasks
+    ↓  approve phase (auto if auto_approve: true)
+    ↓  "Raise PR for Phase 1?"  (ALWAYS prompted — never automatic)
     ↓
-/opsx-continue  →  tasks for Phase 2 (US-02) … repeat apply → PR prompt → e2e --phase 2
+/opsx-continue  →  tasks for Phase 2 (US-02) … repeat apply → PR prompt
+    ↓
+/opsx-e2e my-change                        ← E2E tests (optional, after all phases or per phase)
     ↓
 /opsx-archive   →  feedback + move to archive/  (once, after all phases) — MANDATORY
     ↓
@@ -508,6 +509,7 @@ Configure config.yaml + MCP + credentials
 
 | Command | When to run |
 |---|---|
+| `/opsx-doctor` | First — verify prerequisites (Python, CLI, credentials, constitution) |
 | `/opsx-constitute` | Once — generate constitution |
 | `/opsx-new <JIRA>` | Start a new change |
 | `/opsx-continue` | Create next planning artifact |
@@ -531,5 +533,6 @@ Configure config.yaml + MCP + credentials
 | Story creation skipped | Fill `credentials.jira.base_url` and `api_token` |
 | `/opsx-e2e` blocked | Ensure `agents.md` + `harness-evals/constitution.md` exist |
 | Metrics incomplete at archive | Answer all mandatory questions (story points required) |
+| Session interrupted/crashed | Re-run `/opsx-apply` — crash recovery detects in-flight state and offers resume/skip/rollback |
 
 For full reference material, see [README.md](../README.md).

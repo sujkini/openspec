@@ -19,7 +19,7 @@ flags:
   #   "direct"     — plain agent implementation (reads context files, applies FILE OPERATIONS
   #                  directly, no OAPE commands, no code eval gate)
   codegen_mode: direct
-  auto_approve: false             # false = prompt for artifact + per-task code approval (/opsx-apply). Phase approval, PR creation, and Jira creation are NEVER auto-approved.
+  auto_approve: false             # true = auto-approve all gates except PR creation. false = prompt for every approval.
   max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
   exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
   generate_evaluation_reports: true # Generate <artifact>_evaluation_report.md alongside each artifact

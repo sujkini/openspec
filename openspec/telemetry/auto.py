@@ -13,6 +13,9 @@ Usage:
     python -m openspec.telemetry.auto on-phase-complete --change cm-830 --phase 1 --stage 5
     python -m openspec.telemetry.auto sync --change cm-830
     python -m openspec.telemetry.auto report --change cm-830
+    python -m openspec.telemetry.auto state-get --change cm-830
+    python -m openspec.telemetry.auto state-next --change cm-830
+    python -m openspec.telemetry.auto state-transition --change cm-830 --to EXECUTING_TASK --task T1_1
 """
 from __future__ import annotations
 
@@ -953,6 +956,192 @@ def report_cmd(args: argparse.Namespace) -> None:
     _out({"ok": True, "path": str(path)})
 
 
+# ---------------------------------------------------------------------------
+# State CLI helpers — deterministic state queries for agent skills
+# ---------------------------------------------------------------------------
+
+_IMPL_STATE_FILE = "implementation/state.yaml"
+
+_VALID_STATES = frozenset({
+    "IDLE", "EXECUTING_TASK", "RUNNING_TESTS", "EVAL_GATE",
+    "AWAITING_APPROVAL", "PHASE_COMPLETE", "COMPLETE",
+})
+
+_LEGAL_TRANSITIONS: dict[str, set[str]] = {
+    "IDLE": {"EXECUTING_TASK", "COMPLETE"},
+    "EXECUTING_TASK": {"RUNNING_TESTS", "AWAITING_APPROVAL", "IDLE"},
+    "RUNNING_TESTS": {"EVAL_GATE", "AWAITING_APPROVAL", "IDLE"},
+    "EVAL_GATE": {"AWAITING_APPROVAL", "EXECUTING_TASK", "IDLE"},
+    "AWAITING_APPROVAL": {"IDLE", "EXECUTING_TASK", "PHASE_COMPLETE", "COMPLETE"},
+    "PHASE_COMPLETE": {"IDLE", "COMPLETE"},
+    "COMPLETE": set(),
+}
+
+
+def _impl_state_path(change: str) -> Path:
+    return CHANGES_DIR / change / _IMPL_STATE_FILE
+
+
+def _load_impl_state(change: str) -> dict[str, Any]:
+    import yaml  # type: ignore[import-untyped]
+    p = _impl_state_path(change)
+    if not p.exists():
+        return {}
+    return yaml.safe_load(p.read_text()) or {}
+
+
+def _save_impl_state(change: str, data: dict[str, Any]) -> None:
+    import yaml  # type: ignore[import-untyped]
+    from datetime import datetime, timezone
+    p = _impl_state_path(change)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    machine = data.setdefault("machine", {})
+    machine["last_transition"] = datetime.now(timezone.utc).isoformat()
+    p.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+
+
+def _count_tasks(change: str) -> int:
+    """Count tasks in tasks.md by looking for task header patterns."""
+    tasks_path = CHANGES_DIR / change / "tasks.md"
+    if not tasks_path.exists():
+        return 0
+    import re
+    content = tasks_path.read_text()
+    return len(re.findall(r"^###\s+Task\s+", content, re.MULTILINE))
+
+
+def state_get(args: argparse.Namespace) -> None:
+    """Return current implementation state as JSON."""
+    data = _load_impl_state(args.change)
+    if not data:
+        _out({"error": "state.yaml not found", "change": args.change})
+        return
+    machine = data.get("machine", {})
+    completed = data.get("completed", [])
+    _out({
+        "state": machine.get("state", "IDLE"),
+        "current_task_id": machine.get("current_task_id"),
+        "current_task_index": machine.get("current_task_index", 0),
+        "total_tasks": machine.get("total_tasks", 0),
+        "current_plan_phase": machine.get("current_plan_phase", 1),
+        "completed_count": len(completed),
+        "last_transition": machine.get("last_transition"),
+    })
+
+
+def state_next(args: argparse.Namespace) -> None:
+    """Determine next action based on current state + tasks.md."""
+    data = _load_impl_state(args.change)
+    if not data:
+        _out({"error": "state.yaml not found", "change": args.change})
+        return
+
+    machine = data.get("machine", {})
+    state = machine.get("state", "IDLE")
+    completed = data.get("completed", [])
+    completed_ids = {c.get("task_id") for c in completed}
+    total = machine.get("total_tasks", 0)
+    phase = machine.get("current_plan_phase", 1)
+    total_phases = machine.get("total_plan_phases")
+
+    if state == "COMPLETE":
+        _out({"action": "complete", "task_id": None, "phase": phase, "skill": "apply-complete/SKILL.md"})
+        return
+
+    if state == "AWAITING_APPROVAL":
+        _out({
+            "action": "awaiting_approval",
+            "task_id": machine.get("current_task_id"),
+            "phase": phase,
+            "skill": None,
+        })
+        return
+
+    if state == "PHASE_COMPLETE":
+        _out({
+            "action": "phase_complete",
+            "task_id": None,
+            "phase": phase,
+            "skill": "apply-phase-boundary/SKILL.md",
+        })
+        return
+
+    if state == "IDLE":
+        if len(completed_ids) >= total and total > 0:
+            if total_phases and phase < total_phases:
+                _out({
+                    "action": "phase_complete",
+                    "task_id": None,
+                    "phase": phase,
+                    "skill": "apply-phase-boundary/SKILL.md",
+                })
+            else:
+                _out({
+                    "action": "all_complete",
+                    "task_id": None,
+                    "phase": phase,
+                    "skill": "apply-complete/SKILL.md",
+                })
+            return
+
+        import re
+        tasks_path = CHANGES_DIR / args.change / "tasks.md"
+        next_task_id = None
+        if tasks_path.exists():
+            for m in re.finditer(r"^###\s+Task\s+(T\d+_\d+)", tasks_path.read_text(), re.MULTILINE):
+                tid = m.group(1)
+                if tid not in completed_ids:
+                    next_task_id = tid
+                    break
+
+        _out({
+            "action": "execute_task",
+            "task_id": next_task_id,
+            "phase": phase,
+            "skill": "apply-execute-task/SKILL.md",
+        })
+        return
+
+    _out({
+        "action": "resume",
+        "task_id": machine.get("current_task_id"),
+        "phase": phase,
+        "skill": "apply-execute-task/SKILL.md",
+    })
+
+
+def state_transition(args: argparse.Namespace) -> None:
+    """Validate and perform a state transition in state.yaml."""
+    target = args.to
+    if target not in _VALID_STATES:
+        _out({"error": f"Invalid state: {target}", "valid": sorted(_VALID_STATES)})
+        return
+
+    data = _load_impl_state(args.change)
+    if not data:
+        _out({"error": "state.yaml not found", "change": args.change})
+        return
+
+    machine = data.setdefault("machine", {})
+    current = machine.get("state", "IDLE")
+
+    legal = _LEGAL_TRANSITIONS.get(current, set())
+    if target not in legal:
+        _out({
+            "error": f"Illegal transition: {current} -> {target}",
+            "current": current,
+            "legal_targets": sorted(legal),
+        })
+        return
+
+    machine["state"] = target
+    if args.task:
+        machine["current_task_id"] = args.task
+
+    _save_impl_state(args.change, data)
+    _out({"ok": True, "from": current, "to": target, "task_id": args.task})
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="openspec-telemetry",
@@ -1064,6 +1253,17 @@ def build_parser() -> argparse.ArgumentParser:
     rp = sub.add_parser("report", help="Regenerate metrics-report.json")
     rp.add_argument("--change", required=True)
 
+    sg = sub.add_parser("state-get", help="Return current implementation state as JSON")
+    sg.add_argument("--change", required=True)
+
+    sn = sub.add_parser("state-next", help="Determine next action based on current state")
+    sn.add_argument("--change", required=True)
+
+    st = sub.add_parser("state-transition", help="Validate and perform a state transition")
+    st.add_argument("--change", required=True)
+    st.add_argument("--to", required=True, help="Target state")
+    st.add_argument("--task", default=None, help="Task ID to set as current_task_id")
+
     return p
 
 
@@ -1082,6 +1282,9 @@ _DISPATCH = {
     "on-archive-feedback": on_archive_feedback,
     "on-qe-archive-feedback": on_qe_archive_feedback,
     "report": report_cmd,
+    "state-get": state_get,
+    "state-next": state_next,
+    "state-transition": state_transition,
 }
 
 
