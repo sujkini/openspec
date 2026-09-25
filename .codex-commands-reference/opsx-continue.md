@@ -33,20 +33,21 @@ Preflight:
   task_execution_mode: {phase-iterative|one-shot}
   jira_issuetype: {value from jira.yaml}
   jira_creds_configured: {true|false}
+  local_clone_path: {from jira.yaml or N/A}
   mode: {auto-loop all artifacts | one artifact per invocation}
 ```
 
 If preflight is not printed, the run is non-compliant.
 
 4. **Resolve repo target before repo-assessment**:
-   - If the next ready artifact is `repo-assessment` and
-     `target_repo` is absent or empty in `jira.yaml`:
-     - Ask the user once: "Provide the URL of the target GitHub repository
-       (e.g. https://github.com/org/repo)."
-     - Persist `target_repo` to `inputs/jira.yaml`.
-     - Verify the repository is accessible before creating repo-assessment.
+   - If the next ready artifact is `repo-assessment`:
+     - Read `target_repo`, `local_clone_path` from `jira.yaml` (set at `/opsx-new`).
+     - If `target_repo` is absent → ask once, persist, then continue.
+     - Analyze the repository from `local_clone_path` when present (local tree,
+       git metadata, `agents.md`). Fall back to GitHub MCP / remote fetch only if
+       the local clone is inaccessible.
      - **Do not** create repo-assessment until `target_repo` is recorded.
-   - For earlier artifacts (`validation`, `specs`), `target_repo` is not required.
+   - For earlier artifacts (`validation`, `specs`), repo paths are not required.
 
 4b. **Constitution check before planning** (ONLY when next ready artifact is `plan`):
     - Read `harness-evals/constitution.md`.
@@ -314,7 +315,7 @@ Stop after user approval/rejection of the current artifact and completion of any
 - Do not skip user approval (unless `config.yaml → flags.auto_approve` is `true`)
 - Do not refine **templates** during eval gate — refine the **change artifact** only
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
-- `target_repo` required before repo-assessment — **not** at `/opsx-new`
+- `target_repo` and `local_clone_path` set at `/opsx-new`; required before repo-assessment
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 

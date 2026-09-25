@@ -319,90 +319,72 @@ target_repo:
   description: >-
     Upstream GitHub repository URL used for repo-assessment, plan, and tasks.
     Distinct from fork_repo_url (user's fork for implementation).
-  collected_at: repo-understanding
+  collected_at: opsx-new
   stored_in: openspec/changes/<change>/inputs/jira.yaml
   field: target_repo
-  not_required_at:
-    - opsx-new
   when_missing: >-
-    Before creating repo-assessment.md (Repo Understanding stage / artifact
-    repo-assessment), read inputs/jira.yaml.
-
-    **Working-folder mode** (see schema working_folder_repo): If
-    use_working_folder_as_repo is true, or the user directs using the working
-    folder as the repo, activate working_folder_repo — use the current project
-    checkout for assessment; derive target_repo from `git remote get-url origin`
-    when possible; do not ask for a separate GitHub URL or clone.
-
-    **Default mode:** If target_repo is absent or empty, ask the user once:
-    "Provide the URL of the target GitHub repository (e.g.
-    https://github.com/org/repo)." Persist target_repo to inputs/jira.yaml.
-    Do not start repo-assessment until the URL is recorded.
-    Verify the repository is accessible (clone, fetch, or GitHub MCP) before
-    writing repo-assessment.md.
+    At /opsx-new, ask the user once: "Provide the URL of the target GitHub
+    repository (e.g. https://github.com/org/repo)." Persist target_repo to
+    inputs/jira.yaml before repo setup (see schema repo_setup).
+    Before creating repo-assessment.md, verify target_repo is recorded and the
+    repository is accessible (local clone at local_clone_path, fetch, or GitHub MCP).
   usage: >-
-    Reference only for planning and assessment. Implementation OAPE commands and
-    edits apply to fork_repo_url (/opsx:apply), not target_repo, unless the user
-    explicitly directs otherwise or working_folder_repo mode is active (see
-    working_folder_repo).
+    Upstream reference for planning and PR targets. Implementation OAPE commands
+    and edits apply to local_clone_path (fork checkout on feature_branch), not
+    target_repo directly.
 
 # ---------------------------------------------------------------------------
-# working_folder_repo — local checkout mode (user-directed)
+# repo_setup — fork, clone, feature branch at /opsx-new
 # ---------------------------------------------------------------------------
-working_folder_repo:
+repo_setup:
   description: >-
-    When the user explicitly directs using the current working folder as the
-    repository, treat the local project checkout as both the assessment target
-    and the implementation workspace. Skip fork setup, separate clones, and draft
-    PR workflow.
+    At /opsx-new, after target_repo is recorded, prepare the implementation
+    workspace: fork upstream on GitHub, clone (or reuse an existing fork checkout),
+    and create a feature branch. All code edits happen in local_clone_path on
+    feature_branch. There is no working-folder mode.
+  collected_at: opsx-new
   stored_in: openspec/changes/<change>/inputs/jira.yaml
-  field: use_working_folder_as_repo
-  active_when: >-
-    use_working_folder_as_repo is true in inputs/jira.yaml, OR the user states
-    during any stage that the working folder / current directory / this checkout
-    should be used as the repo (e.g. "use the working folder as the repo",
-    "use this folder", "local checkout mode", "no fork", "don't create a draft PR").
-  on_user_directive:
-    - Set use_working_folder_as_repo: true in inputs/jira.yaml
-    - Record working_folder_path as the absolute path to the project root (cwd
-      containing openspec/changes/<change>/)
-    - If target_repo is empty, derive from `git remote get-url origin` in cwd when
-      available; persist to target_repo for reference only
-    - Do not ask for fork_repo_url; leave fork_repo_url absent
+  required_fields:
+    - target_repo
+    - fork_repo_url
+    - local_clone_path
+    - feature_branch
+  local_clone_path:
+    field: local_clone_path
+    when_missing: >-
+      Ask once: "Where should the fork be cloned? (absolute path, e.g.
+      /home/you/code/my-operator-fork)". If a valid fork checkout already exists
+      at that path, reuse it instead of cloning again.
+  decision_tree:
+    reuse_when: >-
+      local_clone_path exists, is a git repository, `git remote get-url origin`
+      points to the user's fork (NOT upstream target_repo), and the fork is
+      verified as a fork of target_repo (GitHub MCP or `gh repo view`).
+    reuse_steps:
+      - cd local_clone_path
+      - Checkout default branch (main or master) and pull latest from origin
+      - Create and checkout feature_branch (see fork_repo.feature_branch)
+      - Record fork_repo_url from origin URL
+    fork_clone_when: >-
+      Reuse validation fails OR local_clone_path does not exist OR path is not a
+      git repo OR origin is upstream (not user's fork).
+    fork_clone_steps:
+      - Fork target_repo into the user's GitHub account via GitHub MCP (skip if fork exists)
+      - git clone fork_repo_url local_clone_path
+      - Create and checkout feature_branch
+  validation:
+    - origin must NOT be the upstream target_repo URL (do not implement on upstream clone)
+    - fork must be verified as a fork of target_repo
+    - never skip fork workflow or feature branch creation
+  on_complete:
+    - Persist fork_repo_url, local_clone_path, feature_branch, repo_setup_at to jira.yaml
   assessment_and_planning:
     repo_root: >-
-      The current working directory (project root). Use local git metadata, tree,
-      and file contents for repo-assessment, plan, and tasks — do not clone a
-      separate remote checkout for these stages.
-    target_repo_prompt: >-
-      When use_working_folder_as_repo is true, do NOT ask for a GitHub URL before
-      repo-assessment if the cwd is a git repository. Derive target_repo from
-      origin when possible; otherwise record working_folder_path and proceed with
-      local analysis.
+      Use local_clone_path for repo-assessment, plan, and tasks when available
+      (read local tree, git metadata, agents.md). Fall back to GitHub MCP / remote
+      fetch of target_repo only if local_clone_path is inaccessible.
     agents_md: >-
-      Resolve AGENTS.md from the working folder first, then change inputs/.
-  implementation:
-    working_copy: >-
-      Same as working_folder_path / project root. All code edits (OAPE commands
-      in ai-helpers mode, direct FILE OPERATIONS in direct mode) apply in this
-      directory — not a cloned fork.
-    cwd: project root (working folder)
-    skip_fork_setup: true
-    do_not:
-      - Ask for fork_repo_url
-      - Clone a separate fork repository
-      - Create a feature branch unless the user explicitly requests one
-      - Push commits to a remote
-      - Open a draft pull request
-    post_all_tasks: >-
-      Write implementation-report.md and optional deviation-observed.md. Summarize local file
-      changes and git status. Do not push or open a PR. Set PR URL to N/A —
-      working-folder mode.
-  precedence: >-
-    When use_working_folder_as_repo is true, working_folder_repo overrides
-    fork_repo (clone, feature branch, draft_pr) and relaxes target_repo URL
-    collection. Default fork + upstream workflow applies when the field is false
-    or absent and the user has not directed local mode.
+      Resolve agents.md from local_clone_path first, then change inputs/.
 
 # ---------------------------------------------------------------------------
 # stage_eval_gate — stage evals on each artifact (/opsx-continue)
@@ -848,45 +830,28 @@ user_approval_feedback_gate:
 fork_repo:
   description: >-
     User's forked GitHub repository where implementation code is written, committed,
-    pushed, and opened as a draft pull request. Distinct from target_repo (upstream)
-    used for repo-assessment and planning context.
-  collected_at: implementation
+    pushed, and opened as a PR to upstream. Distinct from target_repo (upstream).
+    Setup (fork, clone, feature branch) happens at /opsx-new (see schema repo_setup).
+  collected_at: opsx-new
   stored_in: openspec/changes/<change>/inputs/jira.yaml
-  field: fork_repo_url
-  not_required_at:
-    - opsx-new
-    - opsx-continue
+  fields:
+    fork_repo_url: URL of the user's GitHub fork
+    local_clone_path: Absolute path to the local fork checkout (implementation cwd)
+    feature_branch: Feature branch name for this change
+    repo_setup_at: ISO8601 timestamp when repo setup completed
   when_missing: >-
-    At the start of the Implementation Stage (/opsx:apply), BEFORE any clone
-    activity or OAPE command execution, read inputs/jira.yaml.
-
-    **Working-folder mode** (see schema working_folder_repo): If
-    use_working_folder_as_repo is true, or the user directs using the working
-    folder as the repo, skip fork_repo_url collection entirely. Set working copy
-    to the project root (cwd); do not clone, push, or open a draft PR.
-
-    **Default mode:** If fork_repo_url is absent, ask the user once: "Provide
-    the URL of your forked repository (e.g.
-    https://github.com/<you>/cert-manager-operator)." Persist fork_repo_url to
-    inputs/jira.yaml. Do not start code generation until the URL is recorded and
-    the fork is cloned or verified accessible.
+    At /opsx-new, run repo_setup (see schema repo_setup) BEFORE stopping.
+    At /opsx:apply, if fork_repo_url, local_clone_path, or feature_branch is
+    absent, HALT and tell the user to re-run /opsx-new repo setup or manually
+    complete inputs/jira.yaml — do NOT fork or clone during /opsx:apply.
   working_copy: >-
-    **Default:** Clone or reuse a local checkout of fork_repo_url. All OAPE
-    commands and implementation edits apply to this working copy.
-
-    **Working-folder mode:** Use the project root (working_folder_path in
-    inputs/jira.yaml). All OAPE commands and edits apply in cwd — do not clone
-    fork_repo_url.
-
-    target_repo in inputs/jira.yaml remains the upstream reference from
-    repo-assessment; implementation writes only to the fork unless the user
-    explicitly directs otherwise or working_folder_repo mode is active.
+    local_clone_path in inputs/jira.yaml. All OAPE commands and implementation
+    edits apply in this directory on feature_branch. target_repo remains the
+    upstream reference for PR targets.
   feature_branch:
     when: >-
-      Immediately after fork_repo_url is recorded and the fork is cloned or
-      verified — BEFORE any OAPE command or implementation commits. **Skip when
-      working_folder_repo mode is active** unless the user explicitly requests a
-      feature branch.
+      At /opsx-new during repo_setup — BEFORE stopping. Re-verified at
+      /opsx:apply start (checkout feature_branch if not already on it).
     steps:
       - Checkout the fork's default branch (master or main) and pull latest
       - Create a feature branch from that default branch
@@ -903,9 +868,7 @@ fork_repo:
   draft_pr:
     when: >-
       After Task Creation is complete, all implementation tasks are user-approved,
-      and closing artifacts (implementation-report.md) are written. **Skip
-      entirely when working_folder_repo mode is active** — do not push or open
-      a draft PR.
+      and closing artifacts (implementation-report.md) are written.
     steps:
       - Confirm all commits are on the feature branch created at fork setup
       - Stage and commit any remaining changes with a descriptive message referencing jira_key
@@ -1152,10 +1115,9 @@ workflow:
       next phase. Code generation strategy is determined by config.yaml
       flags.codegen_mode: ai-helpers uses OAPE command routing and code eval
       gate; direct uses plain agent implementation.
-      **Default:** The agent asks for fork_repo_url, clones the fork, and drives
-      tasks task-by-task.
-      **Working-folder mode:** Uses the current project checkout (see schema
-      working_folder_repo) — no fork, no draft PR.
+      Repo setup (fork, clone, feature branch) is completed at /opsx-new (see
+      schema repo_setup). /opsx:apply verifies local_clone_path and drives tasks
+      task-by-task in the fork checkout.
       User approval is required after every task. Closes with
       implementation-report.md and optional deviation-observed.md.
     inputs:
@@ -1166,11 +1128,10 @@ workflow:
       - repo-assessment.md (optional — improves target-file accuracy)
       - agents.md (read from repo root)
       - target repository (upstream reference — inputs/jira.yaml target_repo)
-      - forked repository URL (inputs/jira.yaml fork_repo_url — required in default
-        mode; skip when use_working_folder_as_repo is true)
+      - fork checkout (inputs/jira.yaml local_clone_path, fork_repo_url, feature_branch)
     outputs:
-      - code changes in user's fork (or project working folder in working-folder mode)
-      - draft pull request on fork_repo_url (skipped in working-folder mode)
+      - code changes in local_clone_path (fork on feature_branch)
+      - pull request to upstream target_repo (user-prompted at phase boundary)
       - implementation-report.md
       - deviation-observed.md (optional — only when deviations are logged)
     gate: user_approval_per_task
@@ -1273,14 +1234,12 @@ artifacts:
       - Functional SME context when provided
 
       ## Process
-      0. Resolve repo target (REQUIRED — see schema target_repo and
-         working_folder_repo): read inputs/jira.yaml.
-         - **Working-folder mode:** If use_working_folder_as_repo is true or the
-           user directs using the working folder as the repo, analyze the current
-           project checkout (cwd) — do not clone a separate repository.
-         - **Default mode:** If target_repo is absent or empty, ask the user once,
-           persist to jira.yaml, and verify the repository is accessible. Do not
-           proceed until recorded.
+      0. Resolve repo target (REQUIRED — see schema target_repo, repo_setup):
+         read inputs/jira.yaml.
+         - Use local_clone_path for local tree, git metadata, and agents.md when
+           repo setup completed at /opsx-new.
+         - If target_repo is absent or empty, ask once, persist to jira.yaml.
+         - Verify the repository is accessible before writing repo-assessment.md.
       1. Resolve agents.md: check target repo, then schema inputs/.
          Read it in full — it contains operator-specific architecture and routing.
          If absent, ask the user once to provide it (or proceed PROVISIONAL if declined).
@@ -1575,14 +1534,14 @@ artifacts:
     generates: implementation/design-bundle.md
     template: design-bundle-template.md
     description: >-
-      Task-by-task execution into the fork (or working folder). Mode depends on
+      Task-by-task execution into local_clone_path (fork checkout). Mode depends on
       config.yaml flags.codegen_mode:
         ai-helpers — composed design-bundle.md + /oape:* cursor commands + code eval gate.
         direct — agent reads context files, implements code directly, no OAPE.
       User approval after every task before advancing.
     outputs:
-      - code changes in user's fork (or project working folder when use_working_folder_as_repo)
-      - draft pull request on fork_repo_url (skipped in working-folder mode)
+      - code changes in local_clone_path (fork on feature_branch)
+      - pull request to upstream target_repo (user-prompted)
       - implementation/design-bundle.md (per task, regenerated)
       - implementation/task-reports/<task-id>.md (per approved task)
       - implementation-report.md
@@ -1593,8 +1552,7 @@ artifacts:
         - constitution.md
         - specs.md
         - plan.md
-        - forked repository URL (inputs/jira.yaml fork_repo_url — ask user if missing;
-          **skip when use_working_folder_as_repo is true**)
+        - fork checkout (inputs/jira.yaml fork_repo_url, local_clone_path, feature_branch)
       optional:
         - repo-assessment.md
         - target repository (inputs/jira.yaml target_repo — upstream reference)
@@ -1620,33 +1578,22 @@ artifacts:
       specs.md, plan.md, repo-assessment.md, task §4 payload), implement code
       directly, verify, then **request user approval** before advancing.
 
-      Work in the user's fork working copy, **or the project working folder when
-      use_working_folder_as_repo is true** (see schema working_folder_repo). Push
-      and open draft PR when all tasks are approved and complete — **unless
-      working-folder mode is active** (no push, no draft PR).
+      Work in local_clone_path (fork checkout on feature_branch). Push and open PR
+      to upstream when the user approves at phase boundary or completion.
 
       ## Prerequisites
       Confirm in openspec/changes/<change>/:
       - tasks.md, constitution.md, specs.md, plan.md (approved)
+      - inputs/jira.yaml → fork_repo_url, local_clone_path, feature_branch (from /opsx-new)
       - **ai-helpers mode**: OAPE commands in .cursor/commands/ (api-generate.md, api-implement.md, etc.)
-      - gh, go, git, make available; gh authenticated (gh optional in working-folder mode)
+      - gh, go, git, make available; gh authenticated
 
-      ## Repo / fork setup (REQUIRED — before any code generation)
-      Read inputs/jira.yaml for use_working_folder_as_repo (see schema working_folder_repo).
-
-      **Working-folder mode** (use_working_folder_as_repo true or user directed):
-      1. Set cwd to project root (working folder containing openspec/changes/<change>/).
-      2. Record working_folder_path in jira.yaml if not already set.
-      3. Do NOT ask for fork_repo_url; do NOT clone a fork; do NOT create a feature
-         branch unless the user explicitly requests one.
-      4. All code edits apply in cwd.
-
-      **Default mode:**
-      1. Read inputs/jira.yaml for fork_repo_url (see schema fork_repo).
-      2. If fork_repo_url is absent, ASK once for the fork URL; persist to jira.yaml.
-      3. Clone or verify fork checkout; record jira_key for branch naming.
-      4. Create feature branch (see fork_repo.feature_branch). All work on this branch.
-      5. Set cwd to fork root.
+      ## Repo / fork setup (REQUIRED — completed at /opsx-new)
+      Read inputs/jira.yaml (see schema repo_setup, fork_repo).
+      1. Verify fork_repo_url, local_clone_path, and feature_branch are present.
+         If missing, HALT — tell user to re-run /opsx-new or complete jira.yaml.
+      2. cd local_clone_path; checkout feature_branch (create from default if missing).
+      3. Set cwd to local_clone_path for all code edits.
 
       ## Task and phase parsing
       From tasks.md:
@@ -1777,7 +1724,7 @@ artifacts:
       `- **Task ID**: <description>` — omit when none.
 
       ## Error handling
-      - fork_repo_url missing → halt and ask user (**skip when use_working_folder_as_repo**).
+      - fork_repo_url, local_clone_path, or feature_branch missing → halt; re-run /opsx-new.
       - ai-helpers mode: OAPE precheck failure → report, suggest fix, wait for user.
       - Test failure on a task → report; do not advance to next task without user decision.
       - Duplicate package failure in `.go` file → reset affected file(s) to git `HEAD`,
@@ -1910,11 +1857,8 @@ apply:
     - constitution.md (input — resolved via constitution_md.lookup_order)
     - AGENTS.md
   fork_repo: >-
-    {fork_repo_url from inputs/jira.yaml — ask at stage start if missing in default
-    mode; skip when use_working_folder_as_repo is true — use project cwd instead}
-  working_folder: >-
-    {working_folder_path from inputs/jira.yaml when use_working_folder_as_repo is true}
-  upstream_repo: "{target_repo from inputs/jira.yaml — reference only}"
+    {fork_repo_url, local_clone_path, feature_branch from inputs/jira.yaml — set at /opsx-new}
+  upstream_repo: "{target_repo from inputs/jira.yaml — PR target}"
   tracks: tasks.md
   codegen_mode: "config.yaml → flags.codegen_mode (ai-helpers | direct)"
   oape_routing: "applies when codegen_mode = ai-helpers"
@@ -1925,12 +1869,10 @@ apply:
 
     Entry: /opsx:apply on a change where tasks.md and upstream artifacts are approved.
 
-    FIRST STEP: Read inputs/jira.yaml for use_working_folder_as_repo. Read
-    config.yaml → flags.codegen_mode (default: "direct").
-    - **Working-folder mode:** Set cwd to project root; do not ask for fork_repo_url;
-      do not clone or open draft PR (see schema working_folder_repo).
-    - **Default mode:** Ask for fork_repo_url if missing. Clone fork, create feature
-      branch, set cwd to fork root.
+    FIRST STEP: Read inputs/jira.yaml for local_clone_path and feature_branch.
+    Read config.yaml → flags.codegen_mode (default: "direct").
+    Verify repo setup from /opsx-new (see schema repo_setup). cd local_clone_path,
+    checkout feature_branch. Do NOT fork or clone during /opsx:apply.
 
     FOR EACH pending task in §2 Linear Execution Order (respect §1 Depends On):
 

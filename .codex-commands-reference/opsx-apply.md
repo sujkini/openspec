@@ -12,10 +12,11 @@ Read `config.yaml → flags.auto_approve` at the start of every invocation.
 > **When `auto_approve` is `false`:** ONE task per invocation.
 > After presenting a task for approval, YIELD and wait for the user to approve/reject.
 >
-> **When `auto_approve` is `true` (default behaviour):** Auto-approve each task after eval/verification,
+> **When `auto_approve` is `true` (default behaviour):** At phase boundary, auto-trigger `/opsx-continue` to generate next-phase tasks.
+> Auto-approve each task after eval/verification,
 > immediately proceed to the next task within the same invocation. Continue until all
 > tasks in the current phase (phase-iterative) or all tasks (one-shot) are complete.
-> At phase boundary, auto-trigger `/opsx-continue` to generate next-phase tasks.
+
 
 **Mode**: Read `codegen_mode` from `openspec/config.yaml` → `flags.codegen_mode`:
 - `ai-helpers` — OAPE command routing + code-generation eval gate
@@ -88,6 +89,8 @@ Preflight:
   current_task: {task_id or none}
   jira_issuetype: {Epic|Story|...}
   jira_creds_configured: {true|false}
+  local_clone_path: {from jira.yaml}
+  feature_branch: {from jira.yaml}
   mode: {auto-loop all tasks | one task per invocation}
 ```
 
@@ -181,7 +184,11 @@ On first run (no state.yaml):
 3. Verify prerequisites:
    - **ai-helpers mode**: OAPE commands in `.cursor/commands/`, artifacts approved, gh/go/git/make available
    - **direct mode**: artifacts approved, go/git/make available
-4. Auto-fork setup: read `inputs/jira.yaml` → `target_repo`. Fork the target repo into the user's GitHub account via GitHub MCP (skip if fork already exists). Clone the fork into the user's working directory, create a feature branch.
+4. **Verify repo setup** (completed at `/opsx-new` — see schema `repo_setup`):
+   - Read `inputs/jira.yaml` → `fork_repo_url`, `local_clone_path`, `feature_branch`
+   - If any field is missing → HALT: "Repo setup incomplete. Re-run `/opsx-new` or complete jira.yaml."
+   - `cd local_clone_path`; `git checkout feature_branch` (create from default if missing)
+   - Set implementation cwd to `local_clone_path` — do NOT fork or clone here
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
 7. Initialize `state.yaml` with state: IDLE
@@ -499,7 +506,7 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
 6. If yes:
    ```bash
    # Read upstream from inputs/jira.yaml → target_repo
-   # Fork was created in Step 3.4 (auto-fork) — read fork_owner from the fork
+   # Fork was set up at /opsx-new — read fork_owner from fork_repo_url in jira.yaml
    # Read jira_key from inputs/jira.yaml
    gh pr create \
      --repo <upstream_org/repo> \
@@ -566,7 +573,7 @@ When all **current phase** tasks are marked complete:
 6. If yes: commit, push feature branch, open PR targeting the **upstream** repo scoped to this phase:
    ```bash
    # Read upstream from inputs/jira.yaml → target_repo
-   # Fork was created in Step 3.4 (auto-fork) — read fork_owner from the fork
+   # Fork was set up at /opsx-new — read fork_owner from fork_repo_url in jira.yaml
    # Read phase Jira ticket from inputs/jira.yaml → plan_phases[N].jira_key and plan_phases[N].summary
    gh pr create \
      --repo <upstream_org/repo> \

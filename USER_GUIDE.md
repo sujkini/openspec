@@ -39,15 +39,22 @@ That's it. You're ready.
 
 ### Development
 
-**Input:** an Epic or Task/Story Jira ticket link.
+**Input:** an Epic or Task/Story Jira ticket link, upstream repo URL, and local clone path.
 
 | Step | Command | What it does |
 |------|---------|-------------|
-| 1 | `/opsx-new <JIRA-KEY>` or `/opsx-new <JIRA-LINK>` | Starts a new change from a Jira ticket key or link |
+| 1 | `/opsx-new <JIRA-KEY> <upstream-url> <clone-path>` | Starts a change: forks upstream (or reuses existing fork clone), creates feature branch |
 | 2 | `/opsx-continue` | Moves through each stage (validation > specs > repo-assessment > plan > tasks) |
-| 3 | `/opsx-apply` | Implements the code after tasks are generated |
+| 3 | `/opsx-apply` | Implements code in the fork clone on the feature branch |
 
-You will be prompted to approve at each stage before moving to the next. After code implementation, you will be prompted to raise a PR.
+You will be prompted to approve at each stage before moving to the next. After code implementation, you will be prompted to raise a PR to upstream.
+
+**Example:**
+```
+/opsx-new CM-830 https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
+
+If you already have a fork cloned at the path, OpenSpec reuses it (validates `origin` is your fork, not upstream).
 
 ### QE (E2E Tests)
 
@@ -76,7 +83,9 @@ After test generation, you will be prompted to raise a PR.
 | API key not working | Run `echo $OPENAI_API_KEY` — if empty, set it and reload your shell |
 | Codex commands missing | Run `ls ~/.codex/prompts/opsx-*.md` — if empty, re-run the install command |
 | Cursor commands missing | Run `ls .cursor/commands/opsx-*.md` — if empty, re-run the install command |
+| "Repo setup incomplete" at `/opsx-apply` | Re-run `/opsx-new` or complete `fork_repo_url`, `local_clone_path`, `feature_branch` in `inputs/jira.yaml` |
+| Fork reuse rejected | Ensure `origin` is your fork, not upstream; path must be a fork of the target repo |
 
 ---
 
-**Last Updated:** 2026-09-24
+**Last Updated:** 2026-09-25

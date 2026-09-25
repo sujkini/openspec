@@ -530,7 +530,7 @@ The implementation flow depends on `codegen_mode` in `openspec/config.yaml`:
 **ai-helpers mode** (`codegen_mode: ai-helpers`):
 1. Compose `design-bundle.md` scoped to that task
 2. Resolve one OAPE command (or manual work)
-3. Run in fork working copy (or project cwd in working-folder mode)
+3. Run in local_clone_path (fork checkout on feature_branch)
 4. Verify against acceptance criteria
 5. Run code-generation evals → refine code (max 2 passes)
 6. Present task summary + scorecard → user approval
@@ -636,23 +636,18 @@ re-run its `Generate Processed Metrics` GitHub Action.
 
 ---
 
-## Working Modes
+## Repo setup (single mode)
 
-### Mode A: Working-folder mode (local code changes)
+At `/opsx-new`, provide:
+- **Jira ticket key or URL**
+- **Target repo URL** (upstream)
+- **Local clone path** (where your fork checkout lives)
 
-Use when your Cursor workspace IS the operator repo.
+The agent either **reuses** an existing fork clone at that path or **forks + clones** upstream, then creates a **feature branch**. All implementation edits happen in `local_clone_path`. PRs target upstream when you approve at phase boundary.
 
-When prompted for target repo, tell the agent: **"use this as the working directory"**
-- Code changes happen directly in your working directory
-- No fork URL needed, no PR to upstream
-
-### Mode B: Fork mode (auto-fork + PR)
-
-When prompted, provide:
-- **Target repo URL** — before repo-assessment
-- **Fork repo URL** — before `/opsx-apply`
-
-The agent automatically forks the target repo, implements task-by-task, and opens a PR from the fork to upstream.
+```
+/opsx-new CM-830 https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
 
 ---
 
@@ -822,8 +817,9 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 | [OpenSpec CLI](https://github.com/Fission-AI/OpenSpec) | Installed by `install.sh` |
 | [Cursor](https://cursor.com) | Slash commands load from `.cursor/commands/` |
 | Jira access | Ticket key at `/opsx-new`; spec via MCP or paste |
-| Target GitHub repo | URL before **repo-assessment**; or use working-folder mode |
-| Fork GitHub repo | URL before `/opsx-apply`; skip in working-folder mode |
+| Target GitHub repo (upstream) | URL at `/opsx-new` |
+| Local clone path | Absolute path at `/opsx-new` — fork cloned or reused here |
+| GitHub MCP / `gh` | Fork upstream at `/opsx-new`; PR to upstream at `/opsx-apply` |
 
 ---
 
@@ -980,7 +976,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | Integration | Operations | Credentials |
 |-------------|------------|-------------|
 | Jira MCP | Read tickets, create Stories under Epic | `config.yaml → credentials.jira` (user's PAT) |
-| GitHub MCP | Read repos, auto-fork, create PRs | `config.yaml → credentials.github` (user's PAT) |
+| GitHub MCP | Fork at `/opsx-new`, read repos, create PRs | `config.yaml → credentials.github` (user's PAT) |
 
 **Data Sources:**
 
@@ -1027,8 +1023,8 @@ user-invoked command (never triggered autonomously by another command).
 ### Best Practices
 
 - **First run:** Set `auto_approve: false` in `config.yaml` to review each artifact and task individually. Switch to `true` once comfortable with the workflow.
-- **Working-folder mode:** When your Cursor workspace IS the operator repo, tell the agent "use this as the working directory" when prompted for target repo. This avoids fork overhead and is faster for iteration.
-- **Fork mode:** The agent automatically forks the target repo and raises a PR to upstream. No manual fork URL needed.
+- **Repo setup at `/opsx-new`:** Provide upstream URL + local clone path. The agent forks (or reuses your existing fork clone), creates a feature branch, and records paths in `inputs/jira.yaml`. `/opsx-apply` edits only that clone.
+- **Reuse existing fork:** If you already cloned your fork to the path, OpenSpec validates `origin` is your fork and continues — no second clone.
 - **Code generation mode:** Start with `codegen_mode: direct` for simple or few-file changes. Use `ai-helpers` for complex multi-package work that benefits from design bundles and code eval scoring.
 - **agents.md quality matters:** The agent relies heavily on `agents.md` for code patterns, test exemplars, and package routing. Invest time in making it detailed and accurate.
 - **Run `/eval-loop` after features:** After completing a feature, feed its history into `/eval-loop` to generate eval cases that improve quality for future runs.

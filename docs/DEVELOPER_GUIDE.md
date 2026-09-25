@@ -88,7 +88,7 @@ credentials:
     api_token: ""                           # Jira PAT — never commit the real token
   github:
     upstream_repo_url: ""   # e.g. https://github.com/openshift/my-operator
-    fork_repo_url: ""       # auto-created during /opsx-apply (usually leave empty)
+    fork_repo_url: ""       # auto-created during /opsx-new (usually leave empty)
     token: ""               # GitHub PAT (cross-repo PR creation)
   cluster:
     kubeconfig_path: ""     # absolute path — required for local E2E test execution
@@ -172,7 +172,7 @@ throughout the workflow for ticket metadata.
 1. Enable the **GitHub** MCP server (`user-github` or equivalent).
 2. Authenticate with a PAT that can read repos, push branches, and open PRs.
 
-Used by: `/opsx-apply` (auto-fork + PRs), `/opsx-e2e` (read PR diff).
+Used by: `/opsx-new` (fork + clone), `/opsx-apply` (PRs), `/opsx-e2e` (read PR diff).
 
 **If MCP is unavailable:** `/opsx-new` can still run — paste ticket text into
 `openspec/changes/<name>/inputs/jira-spec.md` manually when prompted.
@@ -206,36 +206,31 @@ cp openspec/openspec/schemas/openspec-agile-workflow/e2e-workflow/qe-behaviour.m
 ```
 /opsx-new CM-830
 /opsx-new CM-830 my-feature-name
-/opsx-new CM-830 my-feature-name https://github.com/org/target-repo
+/opsx-new CM-830 my-feature-name https://github.com/org/target-repo /home/you/code/my-operator-fork
 /opsx-new https://issues.redhat.com/browse/CM-830
 ```
 
 ### What happens
 
 1. Agent shows the Red Hat AI disclosure notice.
-2. Creates `openspec/changes/<name>/` with `inputs/jira.yaml` and `inputs/jira-spec.md`.
-3. Fetches the Jira ticket via Jira MCP (or asks you to paste content).
-4. **Asks for target repo URL** if you did not pass it inline.
-5. Stops — **no planning artifacts yet**.
+2. **Asks for upstream target repo URL** and **local clone path** if not provided inline.
+3. **Repo setup:** forks upstream (or reuses existing fork at clone path), creates feature branch.
+4. Creates `openspec/changes/<name>/` with `inputs/jira.yaml` and `inputs/jira-spec.md`.
+5. Fetches the Jira ticket via Jira MCP (or asks you to paste content).
+6. Stops — **no planning artifacts yet**.
 
-### Where repo URLs are stored
+### Where repo metadata is stored
 
-| URL | When collected | Stored in |
+| Field | When collected | Stored in |
 |---|---|---|
-| **Target repo** (upstream code you assess/implement against) | `/opsx-new` | `openspec/changes/<name>/inputs/jira.yaml` → `target_repo` |
-| **Fork repo** (auto-created from target repo) | `/opsx-apply` (automatic) | `credentials.github.fork_repo_url` (auto-populated) |
+| **target_repo** (upstream) | `/opsx-new` | `inputs/jira.yaml` |
+| **fork_repo_url** | `/opsx-new` (auto-fork) | `inputs/jira.yaml` |
+| **local_clone_path** | `/opsx-new` | `inputs/jira.yaml` |
+| **feature_branch** | `/opsx-new` | `inputs/jira.yaml` |
 
-You can also pre-fill both in `openspec/config.yaml → credentials.github`:
+If a fork clone already exists at `local_clone_path` and `origin` points to your fork (not upstream), OpenSpec reuses it instead of cloning again.
 
-```yaml
-credentials:
-  github:
-    upstream_repo_url: "https://github.com/openshift/my-operator"
-    fork_repo_url: ""   # auto-created during /opsx-apply
-```
-
-**Working-folder mode:** if your Cursor workspace *is* the operator repo, say
-**"use this as the working directory"** when asked — no fork URL needed.
+There is **no working-folder mode** — all code edits happen in `local_clone_path` on `feature_branch`.
 
 ### Jira ticket type — when Stories are created
 
@@ -307,9 +302,10 @@ Each phase gets its **own PR** (when you say Yes). That is why E2E runs **per ph
 with `/opsx-e2e my-change --phase N` — Phase 1 E2E targets the Phase 1 PR, Phase 2
 E2E targets the Phase 2 PR, and so on.
 
-### Fork URL
+### Fork and clone path
 
-The agent automatically forks the target repo during `/opsx-apply`. No manual fork URL needed.
+The agent forks upstream (or reuses your existing fork clone) during `/opsx-new`.
+Provide the local clone path at start — no manual fork URL needed.
 
 After the phase PR is raised (or skipped), you can run **`/opsx-e2e my-change --phase N`**
 for that phase — or run E2E later via standalone mode (see Step 8).
@@ -526,7 +522,8 @@ Configure config.yaml + MCP + credentials
 | Slash commands not found | Restart Cursor/Codex after install |
 | Jira ticket not fetched | Check Jira MCP + `credentials.jira` in `config.yaml` |
 | "target_repo not set" | Provide URL at `/opsx-new` or edit `inputs/jira.yaml` |
-| "fork failed" | Check GitHub MCP auth and permissions for auto-fork |
+| "fork failed" | Check GitHub MCP auth at `/opsx-new`; ensure fork rights on target repo |
+| "Repo setup incomplete" | Re-run `/opsx-new` or fill `fork_repo_url`, `local_clone_path`, `feature_branch` in jira.yaml |
 | No Jira Story created | Input must be an **Epic**; Story/Task/Bug skips Story creation |
 | Story creation skipped | Fill `credentials.jira.base_url` and `api_token` |
 | `/opsx-e2e` blocked | Ensure `agents.md` + `harness-evals/constitution.md` exist |
