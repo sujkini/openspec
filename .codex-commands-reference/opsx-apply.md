@@ -33,19 +33,19 @@ Read `config.yaml → flags.auto_approve` at the start of every invocation.
 ## Architecture: State Machine
 
 ```
-auto_approve=false (default):
+auto_approve=true (default):
+  phase-iterative:
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → PHASE_COMPLETE → auto-trigger /opsx-continue → ...
+  one-shot:
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → COMPLETE
+
+auto_approve=false:
   phase-iterative:
     ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
     direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
   one-shot:
     ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
     direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
-
-auto_approve=true:
-  phase-iterative:
-    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → PHASE_COMPLETE → auto-trigger /opsx-continue → ...
-  one-shot:
-    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → COMPLETE
 ```
 
 **When `auto_approve` is `false`:** The orchestrator reads state, executes ONE task, writes state, and YIELDS.

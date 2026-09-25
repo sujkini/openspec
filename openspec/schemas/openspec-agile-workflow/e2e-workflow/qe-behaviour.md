@@ -49,7 +49,7 @@ Ask yourself: "Would a senior QE engineer say these are redundant?" If yes, dedu
 ## 3a. Operator Deployment Context — Template
 
 > **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. The E2E workflow reads the operator's version at runtime.
-> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+> Fill in operator-specific values below — use your operator's namespace, CR kinds, and quality gates.
 >
 > **Default posture for this workflow:** OpenShift + OLM. Fill Method as OLM unless the operator is truly not OLM-managed.
 
@@ -70,7 +70,7 @@ Fill in the following for your operator:
 ## 3b. Operator Quality Gates — Template
 
 > **This section is a template.** Operator teams fill in a copy at `qe-e2e/qe-behaviour.md` in their operator repository. Define the domain-specific quality gates that E2E tests must cover.
-> See `docs/qe-behaviour-example-ztwim.md` for a complete filled-in example.
+> Fill in operator-specific values below — use your operator's namespace, CR kinds, and quality gates.
 
 Fill in the relevant gate categories for your operator. Remove categories that don't apply.
 
