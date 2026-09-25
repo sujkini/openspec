@@ -39,16 +39,23 @@ That's it. You're ready.
 
 ### Development
 
-**Input:** an Epic or Task/Story Jira ticket link.
+**Input:** an Epic or Task/Story Jira ticket link, upstream repo URL, and local clone path.
 
 | Step | Command | What it does |
 |------|---------|-------------|
 | 0 | `/opsx-doctor` | Health check — verifies prerequisites (Python, CLI, credentials, constitution) |
-| 1 | `/opsx-new <JIRA-KEY>` or `/opsx-new <JIRA-LINK>` | Starts a new change from a Jira ticket key or link |
+| 1 | `/opsx-new <JIRA-KEY> <upstream-url> <clone-path>` | Starts a change: forks upstream (or reuses existing fork clone), creates feature branch |
 | 2 | `/opsx-continue` | Moves through each stage (validation > specs > repo-assessment > plan > tasks) |
-| 3 | `/opsx-apply` | Implements the code after tasks are generated |
+| 3 | `/opsx-apply` | Implements code in the fork clone on the feature branch |
 
 With `auto_approve: false` (default), you will be prompted to approve at each stage. With `auto_approve: true`, all gates are auto-approved except PR creation — the workflow runs hands-free until it needs a PR decision.
+
+**Example:**
+```
+/opsx-new CM-830 https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
+
+If you already have a fork cloned at the path, OpenSpec reuses it (validates `origin` is your fork, not upstream).
 
 ### QE (E2E Tests)
 
@@ -80,7 +87,9 @@ Run `/opsx-doctor` first — it checks all prerequisites and tells you what is m
 | Codex commands missing | Run `ls ~/.codex/prompts/opsx-*.md` — if empty, re-run the install command |
 | Cursor commands missing | Run `ls .cursor/commands/opsx-*.md` — if empty, re-run the install command |
 | Interrupted session | Re-run `/opsx-apply` — crash recovery detects in-flight state and offers resume/skip/rollback |
+| "Repo setup incomplete" at `/opsx-apply` | Re-run `/opsx-new` or complete `fork_repo_url`, `local_clone_path`, `feature_branch` in `inputs/jira.yaml` |
+| Fork reuse rejected | Ensure `origin` is your fork, not upstream; path must be a fork of the target repo |
 
 ---
 
-**Last Updated:** 2026-09-24
+**Last Updated:** 2026-09-25

@@ -12,7 +12,7 @@ from introducing incompatible patterns, ignoring existing conventions, or duplic
 
 ## Inputs (provided in the user message or change context)
 - Repository analysis: directory tree, key file contents, git log, branch, commit
-  (from target repo, working folder, or agent tools — see schema working_folder_repo).
+  (from local_clone_path fork checkout or agent tools — see schema repo_setup).
 - Feature specification (specs.md): the "what" being built.
 - Optional AGENTS.md / agents.md from the target repo or change inputs/: explicit agent
   routing and conventions (see schema agents_md).

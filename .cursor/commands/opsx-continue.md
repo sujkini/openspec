@@ -21,6 +21,16 @@ Run `openspec status --change "<name>" --json`. Pick first artifact with `status
 
 If no artifacts are ready: all done. Output "All artifacts approved. Run `/opsx-apply` to begin implementation."
 
+**Resolve repo target before repo-assessment**:
+- If the next ready artifact is `repo-assessment`:
+  - Read `target_repo`, `local_clone_path` from `jira.yaml` (set at `/opsx-new`).
+  - If `target_repo` is absent → ask once, persist, then continue.
+  - Analyze the repository from `local_clone_path` when present (local tree,
+    git metadata, `agents.md`). Fall back to GitHub MCP / remote fetch only if
+    the local clone is inaccessible.
+  - **Do not** create repo-assessment until `target_repo` is recorded.
+- For earlier artifacts (`validation`, `specs`), repo paths are not required.
+
 ### 3. Pre-generation Checks
 
 **If artifact is `tasks`:**
@@ -68,6 +78,10 @@ validation.json → specs.md → repo-assessment.md → [constitution.md check] 
 - Do not refine **templates** during eval gate — refine the **change artifact** only
 - `target_repo` required before repo-assessment
 - **No background sub-agents**
+- User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
+- `target_repo` and `local_clone_path` set at `/opsx-new`; required before repo-assessment
+- Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
+- **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 
 ## Telemetry
 

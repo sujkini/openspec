@@ -42,6 +42,14 @@ On first run:
 2. `openspec status --change "<name>" --json`
 3. Verify prerequisites (artifacts approved, tools available)
 4. Auto-fork: read `inputs/jira.yaml` → `target_repo`. Fork via GitHub MCP. Clone fork, create feature branch.
+3. Verify prerequisites:
+   - **ai-helpers mode**: OAPE commands in `.cursor/commands/`, artifacts approved, gh/go/git/make available
+   - **direct mode**: artifacts approved, go/git/make available
+4. **Verify repo setup** (completed at `/opsx-new` — see schema `repo_setup`):
+   - Read `inputs/jira.yaml` → `fork_repo_url`, `local_clone_path`, `feature_branch`
+   - If any field is missing → HALT: "Repo setup incomplete. Re-run `/opsx-new` or complete jira.yaml."
+   - `cd local_clone_path`; `git checkout feature_branch` (create from default if missing)
+   - Set implementation cwd to `local_clone_path` — do NOT fork or clone here
 5. Create `implementation/` and `task-reports/` dirs
 6. Parse tasks.md §2 order, set `total_tasks`
 7. Initialize `state.yaml` from template

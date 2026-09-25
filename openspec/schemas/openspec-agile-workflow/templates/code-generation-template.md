@@ -171,7 +171,7 @@ orchestrator handles that step.
 
 | Concern | Where it lives |
 |---------|----------------|
-| Fork/repo setup, feature branch, draft PR | Schema `fork_repo`, `working_folder_repo` |
+| Fork/repo setup, feature branch, PR to upstream | Schema `repo_setup`, `fork_repo` (at `/opsx-new`) |
 | User approval prompt | Schema `apply` instruction |
 | Task report (post-approval) | `templates/implementation-task-report-template.md` |
 | Closing report + checklist | `templates/implementation-report-template.md` |
