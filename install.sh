@@ -12,7 +12,7 @@ Usage: $0 [--no-dashboard] <target-directory>
 Installs OpenSpec workflow into the specified project directory:
   1. Installs the OpenSpec CLI (npm)
   2. Runs 'openspec init' in the target directory
-  3. Copies openspec/, .cursor/, .codex/, .codex-commands-reference/, eval-generation/, scripts/, and dashboard/ into the target
+  3. Copies openspec/, .cursor/, .codex/ (commands from .cursor/commands/), eval-generation/, scripts/, and dashboard/ into the target
   4. Installs telemetry Python dependencies (pyyaml, tiktoken)
   5. Installs dashboard Python + Node dependencies (if dashboard enabled)
   6. Installs Codex slash commands globally to ~/.codex/prompts/
@@ -82,11 +82,12 @@ else
   echo "    Warning: .codex/ not found in source, skipping"
 fi
 
-echo "==> Copying .codex-commands-reference/ into $TARGET_DIR..."
-if [ -d "$SCRIPT_DIR/.codex-commands-reference" ]; then
-  cp -r "$SCRIPT_DIR/.codex-commands-reference" "$TARGET_DIR/"
+echo "==> Copying .cursor/commands/ into .codex/commands/..."
+if [ -d "$SCRIPT_DIR/.cursor/commands" ]; then
+  mkdir -p "$TARGET_DIR/.codex/commands"
+  cp "$SCRIPT_DIR/.cursor/commands/"*.md "$TARGET_DIR/.codex/commands/"
 else
-  echo "    Warning: .codex-commands-reference/ not found in source, skipping"
+  echo "    Warning: .cursor/commands/ not found in source, skipping Codex commands"
 fi
 
 echo "==> Copying scripts/ into $TARGET_DIR..."

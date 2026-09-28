@@ -1,12 +1,12 @@
 #!/bin/bash
-# Install OpenSpec Codex commands to global ~/.codex/prompts/
+# Install OpenSpec Codex commands from .cursor/commands/ to global ~/.codex/prompts/
 # Usage: ./scripts/install-codex-commands.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SOURCE_DIR="$PROJECT_ROOT/.codex-commands-reference"
+SOURCE_DIR="$PROJECT_ROOT/.cursor/commands"
 DEST_DIR="$HOME/.codex/prompts"
 
 echo "📦 Installing OpenSpec Codex commands..."
