@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # One-liner installer for OpenSpec (works for both Cursor and Codex).
 #
-# Usage:  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/project
+# Usage:  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/project
 #
 # All flags are forwarded to install.sh (e.g. --no-dashboard).
 
 set -euo pipefail
 
 REPO_URL="https://github.com/sujkini/openspec.git"
-BRANCH="main"
+BRANCH="openspec-reconfigured"
 CLONE_DIR="$(mktemp -d)"
 
 trap 'rm -rf "$CLONE_DIR"' EXIT

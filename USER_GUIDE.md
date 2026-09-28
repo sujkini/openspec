@@ -5,7 +5,7 @@
 Run this single command in your terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your/project
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/your/project
 ```
 
 This installs everything — workflow files, commands, skills, and dependencies for both Cursor and Codex.

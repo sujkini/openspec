@@ -42,7 +42,7 @@ Optional but recommended:
 Run **one command** from any machine with network access — works for both Cursor and Codex:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/your-operator-repo
 ```
 
 What the installer does:

@@ -20,7 +20,7 @@ Custom [OpenSpec](https://github.com/Fission-AI/OpenSpec) schema for **gated, Ji
 ### Install (one command)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/your-operator-repo
 ```
 
 This sets up everything for both **Cursor** and **Codex** in one go:
@@ -32,7 +32,7 @@ This sets up everything for both **Cursor** and **Codex** in one go:
 
 Use `--no-dashboard` to skip the observability dashboard:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- --no-dashboard /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- --no-dashboard /path/to/your-operator-repo
 ```
 
 ---
@@ -132,7 +132,7 @@ echo $OPENAI_API_KEY
 If you haven't already run the one-liner above:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/your-operator-repo
+curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/your-operator-repo
 ```
 
 ### 2. Configure execution mode (`openspec/config.yaml`)

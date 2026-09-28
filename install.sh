@@ -22,7 +22,7 @@ Options:
   --no-dashboard   Skip copying and installing the observability dashboard
 
 One-liner install (recommended):
-  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/main/bootstrap.sh | bash -s -- /path/to/project
+  curl -fsSL https://raw.githubusercontent.com/sujkini/openspec/openspec-reconfigured/bootstrap.sh | bash -s -- /path/to/project
 EOF
   exit 1
 }
