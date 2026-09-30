@@ -557,15 +557,15 @@ diffing `metrics-report.json` → `global_health.total_tokens_consumed` and the
 ```
 
 Standalone command (not auto-triggered by `/opsx-archive`) that forks
-[anandkuma77/open-spec-mado](https://github.com/anandkuma77/open-spec-mado)
-via the `user-github` MCP server, branches, and opens a PR adding this change's
+[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado)
+via `glab` CLI (or GitLab API), branches, and opens an MR adding this change's
 `metrics-report.json` (and `qe-metrics.json`, if this change ran `/opsx-e2e`) under
 `data/open-spec-matrics/operators/<operator>/`. The operator folder is derived
 automatically from `metrics-report.json → operator_name`. Publishing doesn't require
 `report_status.complete`/`qe_report_status.complete` to be `true` — it warns on
-incomplete data but doesn't block. Note that merging the resulting PR does not
+incomplete data but doesn't block. Note that merging the resulting MR does not
 automatically update the live dashboard; the dashboard repo owner must separately
-re-run its `Generate Processed Metrics` GitHub Action.
+trigger data processing.
 
 ---
 
@@ -598,7 +598,7 @@ The agent either **reuses** an existing fork clone at that path or **forks + clo
 | `/opsx-apply`           | Implement tasks — one at a time, approval after each                    |
 | `/opsx-e2e`             | Generate E2E tests for a phase/final PR                                 |
 | `/opsx-archive`         | Archive a completed change                                              |
-| `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-mado as a PR |
+| `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-mado as an MR |
 
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
@@ -905,7 +905,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-apply`           | Write                                 | Implement tasks one at a time with per-task approval |
 | `/opsx-e2e`             | Write                                 | Generate E2E tests from a PR or ADR                  |
 | `/opsx-archive`         | Write                                 | Archive a completed change                           |
-| `/opsx-publish-metrics` | Write (external repo, via GitHub MCP) | Fork/branch/PR metrics files to open-spec-mado       |
+| `/opsx-publish-metrics` | Write (external repo, via glab/GitLab API) | Fork/branch/MR metrics files to open-spec-mado       |
 | `/opsx-constitute`      | Write                                 | Generate constitution.md from harness-docs           |
 
 
@@ -978,7 +978,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 **Explicit exception — `/opsx-publish-metrics`:** the one command permitted to write outside
 the operator working directory/fork. It only ever writes the two local telemetry JSON files
 (`metrics-report.json`, `qe-metrics.json`) verbatim, only to a fork of
-`anandkuma77/open-spec-mado`, and only as a PR — it never merges. It is a standalone,
+`anankuma/open-spec-mado` on GitLab, and only as an MR — it never merges. It is a standalone,
 user-invoked command (never triggered autonomously by another command).
 
 - Launch background sub-agents during `/opsx-apply` or `/opsx-continue`

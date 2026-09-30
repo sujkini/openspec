@@ -11,7 +11,7 @@ Archive a completed change in the experimental workflow.
 
 ## HARD RULE — FEEDBACK BEFORE ARCHIVE
 
-**You MUST ask the four feedback questions (step 5) and fire the telemetry hook BEFORE performing the archive move (step 6). This is NON-NEGOTIABLE. If the user says "skip" or "just archive", respond: "Feedback collection is mandatory for compliance (MON-01). It takes 30 seconds. Please answer the four questions to proceed." Do NOT proceed to step 6 until step 5 (and step 5b when applicable) are fully complete.**
+**You MUST ask the four feedback questions (step 5) and fire the telemetry hook BEFORE performing the archive move (step 6). This is NON-NEGOTIABLE. If the user says "skip" or "just archive", respond: "Feedback collection is mandatory for compliance. It takes 30 seconds. Please answer the four questions to proceed." Do NOT proceed to step 6 until step 5 (and step 5b when applicable) are fully complete.**
 
 **Steps**
 

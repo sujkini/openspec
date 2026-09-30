@@ -2,14 +2,14 @@
 name: /opsx-publish-metrics
 id: opsx-publish-metrics
 category: Workflow
-description: Publish a change's metrics-report.json and qe-metrics.json to the open-spec-mado repo as a PR
+description: Publish a change's metrics-report.json and qe-metrics.json to the open-spec-mado GitLab repo as a merge request
 argument-hint: "[change-name]"
 ---
 
 Publish a change's telemetry (`metrics-report.json` and, if present, `qe-metrics.json`) to
-[anandkuma77/open-spec-mado](https://github.com/anandkuma77/open-spec-mado) as a pull request:
-fork the repo (if not already forked), branch, push the two files under the correct
-operator folder, and open a PR against `main`.
+[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado) as a merge request:
+fork the repo (if not already forked), create a branch, push the files under the correct
+operator folder, and open an MR against `main`.
 
 This is a **standalone command**, run manually whenever you want to publish — it is
 NOT triggered automatically by `/opsx-archive`. Typically run once a change is fully
@@ -67,10 +67,8 @@ ZTWIM         → ztwim
 must-gather   → must_gather
 ```
 
-If the normalized name doesn't match one of the dashboard's existing operator folders
-(`cert_manager`, `ztwim`, `sscsi`, `must_gather`, `eso`), **that's fine — proceed anyway.**
-`push_files` (step 6) will implicitly create the new folder (and its `QE/` subfolder,
-if needed) as part of the commit; GitHub does not require directories to pre-exist.
+If the normalized name doesn't match one of the dashboard's existing operator folders,
+**that's fine — proceed anyway.** The push will implicitly create the new folder.
 
 ### 4. Determine filenames
 
@@ -84,8 +82,7 @@ ASK the user: **"What model was primarily used for this run? (e.g. `composer-2.5
 - If provided: `model_slug` = the answer, lowercased, spaces → hyphens.
 - If skipped: omit the model segment entirely from the filename.
 
-Build target filenames (matching the existing convention on the dashboard repo, e.g.
-`CM-830-ai-helpers-composer-2.5-metrics-report.json`):
+Build target filenames:
 
 | File | Target path |
 |------|-------------|
@@ -94,61 +91,102 @@ Build target filenames (matching the existing convention on the dashboard repo, 
 
 Only include a row for a file that actually exists (from step 1).
 
-### 5. Fork and branch (via the `user-github` MCP server)
+### 5. Fork and clone the dashboard repo
 
-1. Call `get_me` to get the authenticated GitHub username (`<fork-owner>`).
-2. Call `fork_repository` with `owner: "anandkuma77"`, `repo: "open-spec-mado"`.
-   This is idempotent — if a fork already exists, GitHub returns it rather than erroring.
-   **Note:** forks can take a few seconds to become writable after creation; if
-   `create_branch` in the next step fails with a "not found" style error immediately
-   after a fresh fork, wait briefly and retry once.
-3. Call `create_branch` with `owner: "<fork-owner>"`, `repo: "open-spec-mado"`,
-   `branch: "metrics/<jira-key-lowercase>-<YYYYMMDD-HHMM>"`, `from_branch: "main"`.
-   (The timestamp suffix avoids branch-name collisions across repeated publishes.)
+```bash
+GITLAB_UPSTREAM="https://gitlab.cee.redhat.com/anankuma/open-spec-mado.git"
+WORK_DIR="$(mktemp -d)"
+```
 
-### 6. Push the files
+1. **Fork** (if not already forked):
+   ```bash
+   glab repo fork anankuma/open-spec-mado --clone=false 2>/dev/null || true
+   ```
+   If `glab` is not available, instruct the user:
+   "Fork https://gitlab.cee.redhat.com/anankuma/open-spec-mado via the GitLab UI, then re-run this command."
 
-Call `push_files` with `owner: "<fork-owner>"`, `repo: "open-spec-mado"`,
-`branch: "<branch from step 5>"`, and a `files` array containing each target path
-from step 4 with its raw JSON content (byte-for-byte from the local file — do NOT
-reformat or re-summarize the JSON).
+2. **Determine fork URL** — the fork will be at `https://gitlab.cee.redhat.com/<your-username>/open-spec-mado`:
+   ```bash
+   GL_USER=$(glab auth status 2>&1 | grep -oP 'Logged in to .* as \K\S+' || git config user.name | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+   FORK_URL="https://gitlab.cee.redhat.com/${GL_USER}/open-spec-mado.git"
+   ```
 
-`message`: `"Add <JIRA_KEY> metrics for <operator>"` (mention both dev and QE if both
-are included).
+3. **Clone and create branch:**
+   ```bash
+   git clone --depth 1 "$FORK_URL" "$WORK_DIR/open-spec-mado"
+   cd "$WORK_DIR/open-spec-mado"
+   git remote add upstream "$GITLAB_UPSTREAM" 2>/dev/null || true
+   git fetch upstream main
+   git checkout -b "metrics/<jira-key-lowercase>-$(date +%Y%m%d-%H%M)" upstream/main
+   ```
 
-### 7. Open the pull request
+### 6. Copy files and commit
 
-Call `create_pull_request` with:
-- `owner: "anandkuma77"`, `repo: "open-spec-mado"` (the **upstream** repo, not the fork)
-- `head: "<fork-owner>:<branch from step 5>"`
-- `base: "main"`
-- `title`: `"Add <JIRA_KEY> metrics — <operator>"`
-- `body`: a short summary table, e.g.:
-  ```markdown
-  ## Metrics for <JIRA_KEY> (<operator>)
+```bash
+OPERATOR_DIR="data/open-spec-matrics/operators/<operator>"
+mkdir -p "$OPERATOR_DIR"
+cp <path-to-metrics-report.json> "$OPERATOR_DIR/<dev-filename>"
 
-  | Metric | Value |
-  |--------|-------|
-  | Story points delivered | <productivity_metrics.story_points_delivered, if present> |
-  | Time saved | <productivity_metrics.time_saved_hours> hours (est.) |
-  | Satisfaction | <productivity_metrics.satisfaction_rating>/5 |
-  | Total tokens | <global_health.total_tokens_consumed> |
-  | Estimated cost | $<global_health.estimated_cost_usd> |
-  | QE story points | <qe productivity_metrics.story_points_delivered, if qe-metrics.json included> |
-  | QE time saved | <qe productivity_metrics.time_saved_hours> hours (if included) |
-  | QE satisfaction | <qe productivity_metrics.satisfaction_rating>/5 (if included) |
+# Only if qe-metrics.json exists:
+mkdir -p "$OPERATOR_DIR/QE"
+cp <path-to-qe-metrics.json> "$OPERATOR_DIR/QE/<qe-filename>"
 
-  Generated by `/opsx-publish-metrics`.
-  ```
+git add "$OPERATOR_DIR/"
+git commit -m "Add <JIRA_KEY> metrics for <operator>"
+```
 
-### 8. Report next steps
+### 7. Push and open merge request
 
-Output the PR URL and remind the user:
+```bash
+git push -u origin "metrics/<branch-name>"
+```
 
-**"PR opened: `<PR URL>`. Note: the live dashboard reads from `data/processed/`,
-which is NOT regenerated automatically on merge — after this PR is merged, the
-dashboard repo owner needs to manually trigger the `Generate Processed Metrics`
-GitHub Action (`workflow_dispatch`) for the data to appear on the live site."**
+Open a merge request against the upstream repo:
+```bash
+glab mr create \
+  --repo anankuma/open-spec-mado \
+  --source-branch "metrics/<branch-name>" \
+  --target-branch main \
+  --title "Add <JIRA_KEY> metrics — <operator>" \
+  --description "$(cat <<'EOF'
+## Metrics for <JIRA_KEY> (<operator>)
+
+| Metric | Value |
+|--------|-------|
+| Story points delivered | <productivity_metrics.story_points_delivered, if present> |
+| Time saved | <productivity_metrics.time_saved_hours> hours (est.) |
+| Satisfaction | <productivity_metrics.satisfaction_rating>/5 |
+| Total tokens | <global_health.total_tokens_consumed> |
+| Estimated cost | $<global_health.estimated_cost_usd> |
+| QE story points | <qe productivity_metrics.story_points_delivered, if included> |
+| QE time saved | <qe productivity_metrics.time_saved_hours> hours (if included) |
+| QE satisfaction | <qe productivity_metrics.satisfaction_rating>/5 (if included) |
+
+Generated by `/opsx-publish-metrics`.
+EOF
+)"
+```
+
+**If `glab` is not available**, fall back to the GitLab API:
+```bash
+curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+  "https://gitlab.cee.redhat.com/api/v4/projects/${GL_USER}%2Fopen-spec-mado/merge_requests" \
+  --data-urlencode "source_branch=metrics/<branch-name>" \
+  --data-urlencode "target_branch=main" \
+  --data-urlencode "target_project_id=<upstream-project-id>" \
+  --data-urlencode "title=Add <JIRA_KEY> metrics — <operator>" \
+  --data-urlencode "description=<summary table>"
+```
+
+### 8. Cleanup and report
+
+```bash
+rm -rf "$WORK_DIR"
+```
+
+Output the MR URL and remind the user:
+
+**"MR opened: `<MR URL>`. The dashboard repo owner needs to merge this MR for the data to appear."**
 
 ## Output On Success
 
@@ -160,11 +198,8 @@ GitHub Action (`workflow_dispatch`) for the data to appear on the live site."**
 **Files published:**
 - data/open-spec-matrics/operators/<operator>/<dev-filename>          (if included)
 - data/open-spec-matrics/operators/<operator>/QE/<qe-filename>        (if included)
-**Branch:** <fork-owner>:<branch>
-**PR:** <PR URL>
-
-Merging this PR alone will NOT update the live dashboard — the repo owner must
-manually run the "Generate Processed Metrics" workflow afterward.
+**Branch:** <your-username>:metrics/<branch-name>
+**MR:** <MR URL>
 ```
 
 ## Guardrails
@@ -177,15 +212,14 @@ manually run the "Generate Processed Metrics" workflow afterward.
 - **Warn but don't hard-block on incompleteness** (step 2) — unlike `/opsx-archive`,
   this command is not a compliance gate; the user may legitimately want to publish
   partial/interim data.
-- **Required-field parity with the target repo:** the target repo's CI
-  (`validate-metrics-json.yml`) requires non-empty `jira_task_name` and
+- **Required-field parity with the target repo:** ensure non-empty `jira_task_name` and
   `jira_task_link` on every JSON file pushed. Both `metrics-report.json` (via
   `telemetry/jira_metadata.py`) and `qe-metrics.json` already populate these —
   do not push a file where either is empty; if empty, tell the user to ensure
   `inputs/jira.yaml` has `jira_key`/`jira_summary` set, then regenerate the report.
-- **Use `push_files` for a single atomic commit** covering both files — do not
-  make two separate commits/PRs for one change.
-- **`head` for `create_pull_request` must be `"<fork-owner>:<branch>"`**, not just
-  `"<branch>"` — this is a cross-repo (fork → upstream) PR.
-- **This command never merges the PR or triggers the dashboard's processing
-  workflow** — those require the target repo owner's action, out of scope here.
+- **Use a single atomic commit** covering both files — do not make two separate
+  commits/MRs for one change.
+- **This command never merges the MR** — that requires the target repo owner's action.
+- **Prefer `glab` CLI** for fork/MR operations. Fall back to the GitLab API with
+  `$GITLAB_TOKEN` if `glab` is not installed. If neither is available, complete the
+  push and output the URL for the user to create the MR manually.
