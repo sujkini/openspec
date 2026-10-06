@@ -2,6 +2,11 @@
 *.env
 requirements.env
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
 # ─── Eval generation (local-only, never committed to operator repo) ───
 # The entire eval-generation/ directory is for running /eval-loop locally.
 # After review, manually copy refined templates to openspec/schemas/.../templates/
