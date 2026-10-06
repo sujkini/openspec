@@ -76,7 +76,6 @@ phases:
           - eval-generation/eval-generation-workflow/template-gaps/tasks-gaps.md
           - eval-generation/eval-generation-workflow/template-gaps/code-generation-gaps.md
           - eval-generation/eval-generation-workflow/template-gaps/design-bundle-gaps.md
-          - eval-generation/eval-generation-workflow/template-gaps/implementation-report-gaps.md
           - eval-generation/eval-generation-workflow/template-gaps/implementation-task-report-gaps.md
           - eval-generation/eval-generation-workflow/template-gaps/adrs-gaps.md
           - eval-generation/eval-generation-workflow/template-gaps/agents-gaps.md

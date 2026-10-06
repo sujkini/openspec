@@ -4,7 +4,7 @@ description: >-
   Gated spec-driven workflow: Spec Understanding → Repo Understanding → Planning →
   Task Creation → Implementation. Produces validation.json, specs.md,
   repo-assessment.md, plan.md, tasks.md, and (during implementation)
-  implementation-report.md and optional deviation-observed.md.
+  per-task reports under implementation/task-reports/.
   constitution.md is an INPUT (resolved from target repo or schema inputs/).
   Implementation mode is controlled by config.yaml flags.codegen_mode:
     "ai-helpers" — OAPE command orchestration with code-generation eval gate
@@ -533,7 +533,7 @@ task_execution_mode:
         plan.md approved → "How many total tasks?" →
         generate tasks.md (all phases) → eval gate → user approval →
         /opsx-apply all tasks sequentially →
-        implementation-report.md → push → draft PR → COMPLETE
+        push → draft PR → COMPLETE
       telemetry:
         task_creation: "on-artifact-start/complete --artifact tasks (no --phase)"
         implementation: "on-apply-start, on-task-start/complete per task (no --phase)"
@@ -566,7 +566,7 @@ task_execution_mode:
         generate tasks for Phase 2 (append to tasks.md) → eval gate → user approval →
         Jira ticket for Phase 2 → /opsx-apply Phase 2 tasks →
         ... repeat for all non-e2e phases →
-        final implementation-report.md → archive
+        archive
       phase_boundary:
         on_all_phase_tasks_complete:
           - Present phase summary (tasks completed, files changed, test results)
@@ -577,7 +577,7 @@ task_execution_mode:
           - Update state.yaml: current_plan_phase = N+1
           - >-
             If current_plan_phase > total_plan_phases: all phases done →
-            write implementation-report.md, set COMPLETE
+            set COMPLETE
           - >-
             If phases remain: set state IDLE, tell user to run /opsx-continue
             for Phase N+1 task generation
@@ -867,8 +867,7 @@ fork_repo:
         to the user instead of inventing a second base branch
   draft_pr:
     when: >-
-      After Task Creation is complete, all implementation tasks are user-approved,
-      and closing artifacts (implementation-report.md) are written.
+      After Task Creation is complete and all implementation tasks are user-approved.
     steps:
       - Confirm all commits are on the feature branch created at fork setup
       - Stage and commit any remaining changes with a descriptive message referencing jira_key
@@ -879,7 +878,7 @@ fork_repo:
       implementation commits), base = fork default branch (master or main).
       Do not open PRs against upstream target_repo unless the user explicitly
       requests it. Use GitHub CLI (`gh pr create --draft`) or GitHub MCP.
-      Include the PR URL in the final summary and implementation-report.md.
+      Include the PR URL in the final summary.
 
 # ---------------------------------------------------------------------------
 # oape_routing — OAPE command orchestration for /opsx:apply
@@ -1118,8 +1117,8 @@ workflow:
       Repo setup (fork, clone, feature branch) is completed at /opsx-new (see
       schema repo_setup). /opsx:apply verifies local_clone_path and drives tasks
       task-by-task in the fork checkout.
-      User approval is required after every task. Closes with
-      implementation-report.md and optional deviation-observed.md.
+      User approval is required after every task. Closes when all tasks are
+      approved and per-task reports exist under implementation/task-reports/.
     inputs:
       - tasks.md (required — Task Creation complete)
       - constitution.md (required — read from harness-evals/constitution.md)
@@ -1132,8 +1131,7 @@ workflow:
     outputs:
       - code changes in local_clone_path (fork on feature_branch)
       - pull request to upstream target_repo (user-prompted at phase boundary)
-      - implementation-report.md
-      - deviation-observed.md (optional — only when deviations are logged)
+      - implementation/task-reports/<task-id>.md (per approved task)
     gate: user_approval_per_task
     feedback_gate: user_approval_feedback_gate
 
@@ -1544,8 +1542,6 @@ artifacts:
       - pull request to upstream target_repo (user-prompted)
       - implementation/design-bundle.md (per task, regenerated)
       - implementation/task-reports/<task-id>.md (per approved task)
-      - implementation-report.md
-      - deviation-observed.md (conditional)
     inputs:
       required:
         - tasks.md
@@ -1738,12 +1734,10 @@ artifacts:
 
       **One-shot mode** (all tasks approved):
       0. Verify all tasks in tasks.md §3 are marked `- [x]`.
-      1. Write implementation-report.md aggregating all task-reports/*.md.
-      2. Write deviation-observed.md if any deviations logged.
-      3. **Default mode:** Push and draft PR (see schema fork_repo.draft_pr).
-      4. **Working-folder mode:** skip push/PR; record in implementation-report.md.
-      5. Final summary: tasks, files, tests, deviations; draft PR URL when applicable.
-      6. Set COMPLETE.
+      1. **Default mode:** Push and draft PR (see schema fork_repo.draft_pr).
+      2. **Working-folder mode:** skip push/PR.
+      3. Final summary: tasks, files, tests, deviations; draft PR URL when applicable.
+      4. Set COMPLETE.
 
       **Phase-iterative mode** (all current-phase tasks approved):
       0. Verify all tasks for the current plan phase in §3 are marked `- [x]`.
@@ -1753,8 +1747,7 @@ artifacts:
       3. If yes: commit, push, open draft PR for this phase. Record URL in
          state.yaml → phase_pr_urls. **Working-folder mode:** skip push/PR.
       4. Check if current_plan_phase >= total_plan_phases:
-         - **All phases done:** Write implementation-report.md aggregating all
-           task-reports/. Write deviation-observed.md if any deviations. Set COMPLETE.
+         - **All phases done:** Set COMPLETE.
          - **Phases remain:** Update state.yaml: current_plan_phase = N+1, state = IDLE.
            Tell user: "Run `/opsx-continue` to generate Phase {N+1} tasks."
       5. Final summary when COMPLETE: all phases, tasks, files, tests, deviations;
@@ -1778,70 +1771,6 @@ artifacts:
         ai-helpers mode: Report OAPE precheck or execution failure; do not advance
         until resolved or user directs otherwise.
         direct mode: Report verification or test failure; do not advance until resolved.
-    requires:
-      - tasks
-
-  - id: implementation-report
-    workflow_stage: implementation
-    generates: implementation-report.md
-    template: implementation-report-template.md
-    format: markdown
-    description: >-
-      Post-execution summary written at the end of the Implementation Stage after
-      all tasks are user-approved. Aggregates all task reports into a single
-      cover-sheet with traceability matrix.
-    instruction: |
-      Generate at the end of the Implementation Stage (after all tasks approved).
-
-      ## Sections (required)
-      - **Summary** — one paragraph overview
-      - **Per-Task Reports** — table linking each approved task to
-        `implementation/task-reports/<task-id>.md` with eval score and test status
-      - **Phases Completed** — table: Phase | Tasks | OAPE Commands | Files Changed | Code Eval | Tests | Deviations
-      - **All Files Changed** — grouped by phase (from task reports)
-      - **Code Generation Eval Summary** — aggregate pass/fail across all tasks
-      - **Test Results Summary**
-      - **Traceability Matrix** — map every file touched to US-*, FR-*, SC-*, AC-* IDs from specs.md
-      - **Deviations / ADRs** — if any (otherwise state "None")
-      - **Draft Pull Request** — fork_repo_url, branch name, and PR URL
-
-      Source: read every file under `implementation/task-reports/` written at task approval.
-      Include draft PR details from the post-loop push step.
-    gate:
-      type: informational
-      evaluated_by: agent
-    requires:
-      - tasks
-
-  - id: deviation-observed
-    workflow_stage: implementation
-    generates: deviation-observed.md
-    template: deviation-observed-template.md
-    format: markdown
-    description: >-
-      Deviations Observed — deviation log written only when one or more
-      phases reported DEVIATIONS during implementation.
-    optional: true
-    instruction: |
-      Write deviation-observed.md ONLY when at least one task logged a ## Deviations section in its task report.
-
-      ## Format
-      ```
-      # Architectural Decision Records (Deviations)
-
-      ## <Phase name>
-      <deviation bullets from that phase>
-
-      ---
-
-      ## <Next phase name>
-      ...
-      ```
-
-      Each deviation bullet MUST reference the Task ID and rationale.
-    gate:
-      type: informational
-      evaluated_by: agent
     requires:
       - tasks
 
@@ -1900,5 +1829,5 @@ apply:
          next task.
       6. On reject: incorporate feedback; re-run current task only.
 
-    After all tasks: write implementation-report.md aggregating all task-reports/.
+    After all tasks: present final summary from task-reports/ and set COMPLETE.
     Do not advance to the next task until the user approves the code for the current task.

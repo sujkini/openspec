@@ -173,8 +173,7 @@ orchestrator handles that step.
 |---------|----------------|
 | Fork/repo setup, feature branch, PR to upstream | Schema `repo_setup`, `fork_repo` (at `/opsx-new`) |
 | User approval prompt | Schema `apply` instruction |
-| Task report (post-approval) | `templates/implementation-task-report-template.md` |
-| Closing report + checklist | `templates/implementation-report-template.md` |
+| Task report (post-approval) | `templates/implementation-task-report-template.md` → `implementation/task-reports/<task-id>.md` |
 | Orchestration (task ordering, DAG) | Schema `implementation` artifact instruction |
 
 <!-- [ai-helpers mode — codegen_mode: ai-helpers] -->

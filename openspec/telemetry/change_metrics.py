@@ -158,17 +158,13 @@ def parse_task_ids_from_tasks_md(change_dir: Path) -> list[str]:
 def phase5_should_close(
     change_dir: Path,
     *,
-    close_on: str = "implementation_report",
+    close_on: str = "all_tasks",
 ) -> tuple[bool, str]:
     """Return (should_close, quality_label) for code_generation phase."""
     task_ids = parse_task_ids_from_tasks_md(change_dir)
     reports_dir = change_dir / "implementation" / "task-reports"
     existing = {f.stem for f in reports_dir.glob("*.md")} if reports_dir.exists() else set()
     report_count = len(existing)
-
-    impl_report = change_dir / "implementation-report.md"
-    if impl_report.exists():
-        return True, f"implementation report complete ({report_count} task reports)"
 
     if close_on == "all_tasks" and task_ids and all(tid in existing for tid in task_ids):
         return True, f"{len(task_ids)}/{len(task_ids)} tasks approved"

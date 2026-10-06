@@ -35,7 +35,6 @@ eval-generation/
     │   ├── tasks-gaps.md
     │   ├── code-generation-gaps.md
     │   ├── design-bundle-gaps.md
-    │   ├── implementation-report-gaps.md
     │   ├── implementation-task-report-gaps.md
     │   ├── adrs-gaps.md
     │   ├── spec-gaps.md

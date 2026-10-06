@@ -184,7 +184,7 @@ Apply in this order:
    → **Design Mode** (plan-only pipeline — stops after code generation, no execute/push)
 
 3. **If only a change name and no PR can be resolved:**
-   - Check `state.yaml` for `phase_pr_urls` or implementation-report for PR URL
+   - Check `state.yaml` for `phase_pr_urls` for PR URL
    - If found → treat as PR Mode (or Combined if ADR/EP also given)
    - If not found → ASK: **"No PR found for this change. Provide an ADR, EP, or PR URL
      to proceed, or run `/opsx-apply` first to raise a PR."**

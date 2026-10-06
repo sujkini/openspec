@@ -748,7 +748,7 @@ validation → specs → repo-assessment → [constitution.md required] → plan
 | **Constitution (input)** | `constitution.md` (from `harness-evals/`)      | Non-negotiable guardrails                                 |
 | **Planning**             | `plan.md`                                      | Phased implementation plan (e2e phases excluded)          |
 | **Task creation**        | `tasks.md` + Jira phase ticket                 | Executable task manifest with agents (e2e tasks excluded) |
-| **Implementation**       | code + `implementation-report.md`              | Task-by-task execution with per-task approval             |
+| **Implementation**       | code + `implementation/task-reports/*.md`      | Task-by-task execution with per-task approval             |
 | **E2E (post-CI)**        | `e2e-analysis.md`, `test-plan.md`, `*_test.go` | E2E test generation triggered by `/opsx-e2e`              |
 | **Archive**              | archived change                                | Close out                                                 |
 

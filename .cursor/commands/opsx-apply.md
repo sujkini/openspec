@@ -486,10 +486,7 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```bash
    python -m openspec.telemetry.auto on-apply-complete --change "<name>"
    ```
-2. Write `implementation-report.md` aggregating all `task-reports/*.md`
-3. Write `deviation-observed.md` if any deviations logged
-
-4. **Implementation approval gate (approve / reject with feedback):**
+2. **Implementation approval gate (approve / reject with feedback):**
    - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).
    - ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
      - **On approve:** proceed to step 5 (PR prompt).
@@ -620,8 +617,6 @@ When all **current phase** tasks are marked complete:
        ```bash
        python -m openspec.telemetry.auto on-apply-complete --change "<name>"
        ```
-     - Write `implementation-report.md` aggregating all `task-reports/*.md`
-     - Write `deviation-observed.md` if any deviations logged
      - Present final summary with all phase PR URLs (upstream)
      - Output: **"All implementation complete. PR(s) raised on upstream. Run `/opsx-e2e <change-name>` to generate E2E tests when ready. The generated E2E code will be pushed to the PR branch."**
      - Set state: `COMPLETE`. Write state.yaml.

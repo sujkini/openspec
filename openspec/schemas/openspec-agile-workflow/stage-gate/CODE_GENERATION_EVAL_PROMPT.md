@@ -408,6 +408,6 @@ Ask (skip if `auto_approve: true` — substitute task_id, task_title, verificati
 - **Always** co-generate `_test.go` files for controller logic tasks (`api-implement` modifying `pkg/controller/`)
 - Co-generated test files are **permanent** — committed alongside production code (follow the test exemplar in `agents.md`)
 - Score **code in fork cwd** — not markdown under `openspec/changes/`
-- Task reports accumulate under `implementation/task-reports/` for final `implementation-report.md`
+- Task reports accumulate under `implementation/task-reports/` (one per approved task)
 - Refinement budget: **2 passes total** shared across eval failures, verification failures, and test failures
 - **Never** use append-based shell edits (`>>`, `tee -a`) for source-file refinements

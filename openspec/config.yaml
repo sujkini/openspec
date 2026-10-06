@@ -79,4 +79,4 @@ rules:
     - "Task-by-task execution with per-task approval gate (auto when auto_approve: true; codegen_mode selects OAPE commands or direct agent implementation)"
     - "Every Tier 1 implementation task must co-generate _test.go files and run go test; follow agents.md test exemplar; separate tasks only for e2e tests"
     - "After all phases: prompt user to raise draft PR from fork to upstream (user can decline)"
-    - "Close with implementation-report.md, optional deviation-observed.md"
+    - "Close when all tasks are approved and per-task reports exist under implementation/task-reports/"
