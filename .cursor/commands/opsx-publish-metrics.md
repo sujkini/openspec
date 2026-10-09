@@ -22,6 +22,74 @@ changes (`ls openspec/changes/archive/`) and let the user pick via **AskQuestion
 
 ## Steps
 
+### 0. GitLab authentication (MANDATORY — do not skip)
+
+**This step runs FIRST, before resolving telemetry or touching the dashboard repo.
+Do NOT proceed to step 1 until authentication is verified.**
+
+1. Verify `glab` is installed:
+   ```bash
+   command -v glab
+   ```
+   If missing → STOP: "Install glab first (`dnf install glab` or https://gitlab.com/gitlab-org/cli)."
+
+2. Check existing auth:
+   ```bash
+   glab auth status --hostname gitlab.cee.redhat.com 2>&1
+   ```
+
+3. **If already authenticated** for `gitlab.cee.redhat.com` → skip to step 7 (git protocol).
+
+4. **If NOT authenticated**, STOP and prompt the user (steps 4–6 and 8–9 apply only in this branch):
+
+   ```
+   Before publishing metrics, export your GitLab token in the terminal.
+   Do NOT paste the token in chat.
+
+   export GITLAB_TOKEN='your-legacy-api-access-token'
+
+   Create a Personal Access Token (legacy API access, api scope) at:
+   https://gitlab.cee.redhat.com/-/user_settings/personal_access_tokens
+
+   Reply 'done' when exported.
+   ```
+
+5. **Do NOT proceed** until the user replies `done` or `yes`.
+
+6. Verify the token is set (never echo or log the value):
+   ```bash
+   [ -n "$GITLAB_TOKEN" ] && echo "GITLAB_TOKEN is set" || echo "GITLAB_TOKEN is NOT set"
+   ```
+   If NOT set → STOP: "GITLAB_TOKEN is not set in this shell. Export it in the
+   Cursor integrated terminal and reply 'done' again."
+
+7. **Ask git protocol** (use **AskQuestion**):
+   - **HTTPS (Recommended)** — default for token auth; clone/push via `https://gitlab.cee.redhat.com/...`
+   - **SSH** — clone/push via `git@gitlab.cee.redhat.com:...` (requires SSH key configured)
+
+   Default to **HTTPS** if the user skips or does not choose.
+
+8. Log in non-interactively using the exported token (skip if step 3 already authenticated):
+   ```bash
+   glab auth login \
+     --hostname gitlab.cee.redhat.com \
+     --token "$GITLAB_TOKEN" \
+     --git-protocol <https|ssh>
+   ```
+
+9. Verify login succeeded (always run, even if step 3 was authenticated):
+   ```bash
+   glab auth status --hostname gitlab.cee.redhat.com
+   ```
+   If verification fails → STOP with the error output. Do not continue.
+
+10. Persist the chosen protocol for this run as `GIT_PROTOCOL` (`https` or `ssh`).
+
+**Security guardrails for this step:**
+- NEVER ask the user to paste the token in chat
+- NEVER run `echo $GITLAB_TOKEN` or log the token in command output
+- NEVER commit or write the token to any file
+
 ### 1. Resolve the change and locate its telemetry files
 
 The change may already be archived (moved to `openspec/changes/archive/YYYY-MM-DD-<name>/`)
@@ -105,11 +173,16 @@ WORK_DIR="$(mktemp -d)"
    If `glab` is not available, instruct the user:
    "Fork https://gitlab.cee.redhat.com/anankuma/open-spec-mado via the GitLab UI, then re-run this command."
 
-2. **Determine fork URL** — the fork will be at `https://gitlab.cee.redhat.com/<your-username>/open-spec-mado`:
+2. **Determine fork URL** from `GIT_PROTOCOL` chosen in step 0:
    ```bash
-   GL_USER=$(glab auth status 2>&1 | grep -oP 'Logged in to .* as \K\S+' || git config user.name | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-   FORK_URL="https://gitlab.cee.redhat.com/${GL_USER}/open-spec-mado.git"
+   GL_USER=$(glab auth status --hostname gitlab.cee.redhat.com 2>&1 | grep -oP 'Logged in to .* as \K\S+')
    ```
+   Do NOT fall back to `git config user.name` — if `GL_USER` is empty, STOP (auth broken).
+
+   | `GIT_PROTOCOL` | `FORK_URL` |
+   |----------------|------------|
+   | `https` (default) | `https://gitlab.cee.redhat.com/${GL_USER}/open-spec-mado.git` |
+   | `ssh` | `git@gitlab.cee.redhat.com:${GL_USER}/open-spec-mado.git` |
 
 3. **Clone and create branch:**
    ```bash
@@ -135,15 +208,20 @@ git add "$OPERATOR_DIR/"
 git commit -m "Add <JIRA_KEY> metrics for <operator>"
 ```
 
-### 7. Push and open merge request
+### 7. Push branch (always attempt)
 
 ```bash
 git push -u origin "metrics/<branch-name>"
 ```
 
-Open a merge request against the upstream repo:
+If push fails → STOP with error. Do not attempt MR creation.
+
+### 7b. Open merge request (attempt — degrade gracefully on failure)
+
+Try to open an MR against the upstream repo:
 ```bash
 glab mr create \
+  --hostname gitlab.cee.redhat.com \
   --repo anankuma/open-spec-mado \
   --source-branch "metrics/<branch-name>" \
   --target-branch main \
@@ -167,16 +245,30 @@ EOF
 )"
 ```
 
-**If `glab` is not available**, fall back to the GitLab API:
+**If MR creation fails** (auth, permissions, cross-project, or any `glab` error):
+- Do NOT fail the whole command — the branch push (step 7) is the critical part
+- Output partial success:
+
+```
+## Metrics Published (MR manual step required)
+
+Branch pushed: https://gitlab.cee.redhat.com/<GL_USER>/open-spec-mado/-/tree/metrics/<branch-name>
+
+MR could not be created automatically (<error summary>).
+Create the MR manually:
+https://gitlab.cee.redhat.com/anankuma/open-spec-mado/-/merge_requests/new?merge_request%5Bsource_branch%5D=metrics/<branch-name>&merge_request%5Btarget_branch%5D=main
+```
+
+Fall back to GitLab API only if `glab mr create` fails and `$GITLAB_TOKEN` is set:
 ```bash
 curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
   "https://gitlab.cee.redhat.com/api/v4/projects/${GL_USER}%2Fopen-spec-mado/merge_requests" \
   --data-urlencode "source_branch=metrics/<branch-name>" \
   --data-urlencode "target_branch=main" \
-  --data-urlencode "target_project_id=<upstream-project-id>" \
   --data-urlencode "title=Add <JIRA_KEY> metrics — <operator>" \
   --data-urlencode "description=<summary table>"
 ```
+If API also fails → keep the manual MR URL from above.
 
 ### 8. Cleanup and report
 
@@ -202,8 +294,27 @@ Output the MR URL and remind the user:
 **MR:** <MR URL>
 ```
 
+## Output On Partial Success (branch pushed, MR manual)
+
+```
+## Metrics Published (MR manual step required)
+
+**Change:** <change-name>
+**Operator:** <operator folder>
+**Files published:**
+- data/open-spec-matrics/operators/<operator>/<dev-filename>          (if included)
+- data/open-spec-matrics/operators/<operator>/QE/<qe-filename>        (if included)
+**Branch:** https://gitlab.cee.redhat.com/<GL_USER>/open-spec-mado/-/tree/metrics/<branch-name>
+**MR:** Create manually — see link above
+```
+
 ## Guardrails
 
+- **Step 0 (GitLab auth) is mandatory** — do not fork, clone, push, or open an MR
+  until `glab auth status --hostname gitlab.cee.redhat.com` succeeds.
+- **Never ask the user to paste `GITLAB_TOKEN` in chat** — export in terminal only.
+- **Never echo, log, or write `GITLAB_TOKEN`** to any file or command output.
+- **Default git protocol is HTTPS** — use SSH only when the user explicitly chooses it in step 0.
 - **Never invent metrics.** Only publish the raw JSON exactly as written by
   `telemetry/report.py` / `telemetry/qe_metrics.py` — do not summarize, reformat,
   round, or edit values before pushing.
@@ -220,6 +331,7 @@ Output the MR URL and remind the user:
 - **Use a single atomic commit** covering both files — do not make two separate
   commits/MRs for one change.
 - **This command never merges the MR** — that requires the target repo owner's action.
-- **Prefer `glab` CLI** for fork/MR operations. Fall back to the GitLab API with
-  `$GITLAB_TOKEN` if `glab` is not installed. If neither is available, complete the
-  push and output the URL for the user to create the MR manually.
+- **Prefer `glab` CLI** for fork/MR operations. If MR creation fails after a
+  successful push, output the manual MR URL — do not discard the pushed branch.
+- **If `glab` is not installed**, STOP at step 0 and tell the user to install glab
+  (`dnf install glab` or https://gitlab.com/gitlab-org/cli).
