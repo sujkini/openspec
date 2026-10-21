@@ -5,7 +5,7 @@ category: Workflow
 description: Continue agile-workflow change - create next artifact, eval gate, refine, approve (OPSX)
 ---
 
-Continue working on a change by creating the **next** artifact, then **eval → refine artifact → approval**. When `config.yaml → flags.auto_approve` is `true`, auto-loops through **all** remaining artifacts without prompting (see "Auto-approve loop" section). When `false`, processes one artifact per invocation.
+Continue working on a change by creating the **next** artifact, then **eval → refine artifact → approval**. When `config.yaml → flags.auto_approve` is `true`, auto-loops through **all** remaining artifacts without prompting, then auto-invokes `/opsx-apply` (see "Auto-approve loop" section). When `false`, processes one artifact per invocation.
 
 **Input**: Optional change name after `/opsx-continue` (e.g. `/opsx-continue cm-830`).
 
@@ -90,8 +90,11 @@ If preflight is not printed, the run is non-compliant.
       - No state.yaml phase tracking needed at this stage.
 
 5c. **Task sizing prompt** (ONLY when next ready artifact is `tasks`):
-    - Read `config.yaml → flags.task_sizing`.
-    - If `prompt_user` is true:
+    - Read `config.yaml → flags.task_sizing` and `flags.auto_approve`.
+    - **If `auto_approve` is `true` OR `prompt_user` is `false`:** use defaults from config
+      (`default_min`, `default_max`, `consolidation_threshold`) silently — no prompt.
+      When `auto_approve` is `true`, never prompt even if `prompt_user` is `true`.
+    - **Else** (`auto_approve` is `false` AND `prompt_user` is `true`):
 
       **IF task_execution_mode = "phase-iterative":**
         - ASK the user ONCE:
@@ -112,10 +115,9 @@ If preflight is not printed, the run is non-compliant.
           Press Enter to use defaults ({default_min}–{default_max}).
           ```
 
-    - Parse response. Empty → defaults from config (min: 2, max: 3).
+      - Parse response. Empty → defaults from config (min: 2, max: 3).
     - Inject into generation context as metadata field:
       `task_sizing: { min: X, max: Y, consolidation_threshold: Z }`
-    - If `prompt_user` is false: inject defaults silently (no prompt).
     - **Do NOT re-prompt during eval gate, feedback loop, or regeneration.**
       The task_sizing metadata persists for the lifetime of this artifact generation.
 6. **Telemetry — signal artifact start** (silent, non-blocking; starts phase clock on dashboard):
@@ -293,6 +295,8 @@ After step 11 completes with `--status passed`, **do NOT stop**. Instead:
 5. Continue looping until **no more artifacts** have `status: "ready"` (all approved or
    the final artifact `tasks.md` is approved).
 6. When the loop ends, print a summary of all artifacts processed and their eval scores.
+7. **Auto-start implementation:** Output "All artifacts approved. Auto-starting implementation..."
+   and automatically invoke `/opsx-apply <change-name>`. Do NOT prompt the user to run `/opsx-apply`.
 
 **CRITICAL: The per-artifact loop is: step 5 → 6 → 7 → 8 → 9 → 10 → 11 → 11b → 12 → loop back.
 Steps 11b and 12 MUST execute (when conditions match) before looping. Skipping them is a bug.**
