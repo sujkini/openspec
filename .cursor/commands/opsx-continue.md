@@ -137,14 +137,13 @@ If preflight is not printed, the run is non-compliant.
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --phase <N>
    ```
    Include `--phase` only for phase-iterative mode tasks artifact.
-9. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–5 exactly.
-   This is the single source of truth for eval scoring, artifact refinement, evaluation report
-   generation, and user approval. Read `config.yaml → flags.auto_approve`; if `true`,
-   STAGE_EVAL_GATE_PROMPT Step 5 auto-approves (no user prompt). Key paths used by the prompt:
+9. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–4 exactly.
+   This is the single source of truth for eval scoring, artifact refinement, and user approval.
+   Read `config.yaml → flags.auto_approve`; if `true`, STAGE_EVAL_GATE_PROMPT Step 4
+   auto-approves (no user prompt). Key paths used by the prompt:
    - Artifact-to-eval mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
    - Stage eval cases: `harness-evals/evals/<stage>_eval.yaml`
    - Eval results output: `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
-   - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
    - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
 10. **Telemetry — signal waiting for approval** (silent, non-blocking; emits `phase_progress` with eval score):
