@@ -5,7 +5,7 @@ category: Workflow
 description: Continue agile-workflow change - create next artifact, eval gate, refine, approve (OPSX)
 ---
 
-Continue working on a change by creating the **next** artifact, then **eval → refine artifact → approval**. When `config.yaml → flags.auto_approve` is `true`, auto-loops through **all** remaining artifacts without prompting (see "Auto-approve loop" section). When `false`, processes one artifact per invocation.
+Continue working on a change by creating the **next** artifact, then **eval → refine artifact → approval**. When `config.yaml → flags.auto_approve` is `true`, auto-loops through **all** remaining artifacts without prompting, then auto-invokes `/opsx-apply` (see "Auto-approve loop" section). When `false`, processes one artifact per invocation.
 
 **Input**: Optional change name after `/opsx-continue` (e.g. `/opsx-continue cm-830`).
 
@@ -90,8 +90,11 @@ If preflight is not printed, the run is non-compliant.
       - No state.yaml phase tracking needed at this stage.
 
 5c. **Task sizing prompt** (ONLY when next ready artifact is `tasks`):
-    - Read `config.yaml → flags.task_sizing`.
-    - If `prompt_user` is true:
+    - Read `config.yaml → flags.task_sizing` and `flags.auto_approve`.
+    - **If `auto_approve` is `true` OR `prompt_user` is `false`:** use defaults from config
+      (`default_min`, `default_max`, `consolidation_threshold`) silently — no prompt.
+      When `auto_approve` is `true`, never prompt even if `prompt_user` is `true`.
+    - **Else** (`auto_approve` is `false` AND `prompt_user` is `true`):
 
       **IF task_execution_mode = "phase-iterative":**
         - ASK the user ONCE:
@@ -112,10 +115,9 @@ If preflight is not printed, the run is non-compliant.
           Press Enter to use defaults ({default_min}–{default_max}).
           ```
 
-    - Parse response. Empty → defaults from config (min: 2, max: 3).
+      - Parse response. Empty → defaults from config (min: 2, max: 3).
     - Inject into generation context as metadata field:
       `task_sizing: { min: X, max: Y, consolidation_threshold: Z }`
-    - If `prompt_user` is false: inject defaults silently (no prompt).
     - **Do NOT re-prompt during eval gate, feedback loop, or regeneration.**
       The task_sizing metadata persists for the lifetime of this artifact generation.
 6. **Telemetry — signal artifact start** (silent, non-blocking; starts phase clock on dashboard):
@@ -135,14 +137,13 @@ If preflight is not printed, the run is non-compliant.
    python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "<artifact-id>" --phase <N>
    ```
    Include `--phase` only for phase-iterative mode tasks artifact.
-9. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–5 exactly.
-   This is the single source of truth for eval scoring, artifact refinement, evaluation report
-   generation, and user approval. Read `config.yaml → flags.auto_approve`; if `true`,
-   STAGE_EVAL_GATE_PROMPT Step 5 auto-approves (no user prompt). Key paths used by the prompt:
+9. **Stage eval gate** — read and follow **`{schema_root}/stage-gate/STAGE_EVAL_GATE_PROMPT.md`** Steps 1–4 exactly.
+   This is the single source of truth for eval scoring, artifact refinement, and user approval.
+   Read `config.yaml → flags.auto_approve`; if `true`, STAGE_EVAL_GATE_PROMPT Step 4
+   auto-approves (no user prompt). Key paths used by the prompt:
    - Artifact-to-eval mapping: `{schema_root}/stage-gate/artifact-eval-map.yaml`
    - Stage eval cases: `harness-evals/evals/<stage>_eval.yaml`
    - Eval results output: `openspec/changes/<name>/eval-results/<artifact-id>.yaml`
-   - Evaluation report output: `openspec/changes/<name>/eval-results/<artifact-id>_evaluation_report.md`
    - On user rejection: follow **`{schema_root}/stage-gate/USER_FEEDBACK_PROMPT.md`**
    - On `specs` rejection: **exit workflow** (schema `exit_on_reject.specs`) — do NOT regenerate; STOP
 10. **Telemetry — signal waiting for approval** (silent, non-blocking; emits `phase_progress` with eval score):
@@ -293,6 +294,8 @@ After step 11 completes with `--status passed`, **do NOT stop**. Instead:
 5. Continue looping until **no more artifacts** have `status: "ready"` (all approved or
    the final artifact `tasks.md` is approved).
 6. When the loop ends, print a summary of all artifacts processed and their eval scores.
+7. **Auto-start implementation:** Output "All artifacts approved. Auto-starting implementation..."
+   and automatically invoke `/opsx-apply <change-name>`. Do NOT prompt the user to run `/opsx-apply`.
 
 **CRITICAL: The per-artifact loop is: step 5 → 6 → 7 → 8 → 9 → 10 → 11 → 11b → 12 → loop back.
 Steps 11b and 12 MUST execute (when conditions match) before looping. Skipping them is a bug.**

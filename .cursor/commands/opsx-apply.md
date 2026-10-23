@@ -488,7 +488,8 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```
 2. **Implementation approval gate (approve / reject with feedback):**
    - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).
-   - ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
+   - **If `auto_approve` is `true`:** Log "Implementation gate auto-approved (auto_approve)." Proceed directly to step 5 (PR prompt). Do NOT ask Approve/Reject.
+   - **If `auto_approve` is `false`:** ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
      - **On approve:** proceed to step 5 (PR prompt).
      - **On reject:** user provides feedback. Increment `implementation_feedback_rounds` in
        `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
@@ -496,7 +497,7 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
        **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
        Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
        with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
-   - **Note:** This gate is NEVER auto-approved. `auto_approve` does not apply here.
+   - **Note:** Step 5 (PR prompt) is ALWAYS user-prompted regardless of `auto_approve`.
 
 5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
    ASK: **"Implementation approved. Would you like to raise a PR to the upstream repo? (Yes / No)"**
@@ -554,7 +555,8 @@ When all **current phase** tasks are marked complete:
 
 4. **Phase-level approval gate (approve / reject with feedback):**
    - Persist `phase_feedback_rounds: 0` to `state.yaml` (initialize if not present for this phase).
-   - ASK: **"Phase {N} development complete. All tasks pass verification. Approve the phase implementation? (Approve / Reject with feedback)"**
+   - **If `auto_approve` is `true`:** Log "Phase {N} gate auto-approved (auto_approve)." Proceed directly to step 5 (PR prompt). Do NOT ask Approve/Reject.
+   - **If `auto_approve` is `false`:** ASK: **"Phase {N} development complete. All tasks pass verification. Approve the phase implementation? (Approve / Reject with feedback)"**
      - **On approve:** proceed to step 5 (PR prompt).
      - **On reject:** user provides feedback. Increment `phase_feedback_rounds` in
        `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
@@ -563,7 +565,7 @@ When all **current phase** tasks are marked complete:
        **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
        Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
        with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
-   - **Note:** This gate is NEVER auto-approved. `auto_approve` does not apply here.
+   - **Note:** Step 5 (PR prompt) is ALWAYS user-prompted regardless of `auto_approve`.
 
 5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
    ASK: **"Phase {N} approved. Would you like to raise a PR to the upstream repo? (Yes / No, continue to Phase {N+1})"**
@@ -633,9 +635,9 @@ When all **current phase** tasks are marked complete:
        Since `auto_approve` is `true`, `/opsx-continue` will auto-loop through artifact
        approval and return with `tasks.md` approved (but Jira Story prompt still fires).
        Then loop back to **Step 4** to execute the new phase's tasks.
-       **Note:** When the auto_approve task loop completes the next phase, execution will
-       STOP at step 4 (phase-level approval gate) since that gate always prompts the user.
-8. YIELD (only when `auto_approve` is `false`; when `true`, the loop continues until hitting the phase-level gate)
+       When `auto_approve` is `true`, the phase-level approval gate (step 4) is auto-approved;
+       execution pauses only at the PR prompt (step 5), then continues to the next phase.
+8. YIELD (only when `auto_approve` is `false`; when `true`, the loop continues through phase gates and PR prompts until all phases complete)
 
 ## Guardrails
 

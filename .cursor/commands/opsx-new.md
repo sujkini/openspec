@@ -88,9 +88,7 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
    python -m openspec.telemetry.auto on-new --change "<name>" --jira-key "<JIRA-KEY>"
    ```
 10. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
-11. **STOP** — do not create artifacts yet.
-
-Present repo setup summary:
+11. Present repo setup summary:
 ```
 Repo setup complete:
   upstream:       {target_repo}
@@ -99,12 +97,21 @@ Repo setup complete:
   feature branch: {feature_branch}
 ```
 
-Prompt: `/opsx-continue` to create `validation.json`.
+12. Read `openspec/config.yaml` → `flags.auto_approve`.
+
+    **If `auto_approve` is `true`:**
+    - Output: "Auto-approve enabled. Auto-continuing to artifact generation..."
+    - Automatically invoke `/opsx-continue <name>` (same change name). Do NOT prompt the user to run `/opsx-continue`.
+    - Do not create artifacts in this command — `/opsx-continue` owns artifact generation.
+
+    **If `auto_approve` is `false`:**
+    - **STOP** — do not create artifacts yet.
+    - Prompt: `/opsx-continue` to create `validation.json`.
 
 ## Guardrails
 
 - Jira key or URL required; extract key from URL if URL provided
 - Target repo URL and local clone path required — ask if not provided inline
-- Repo setup (fork/reuse + feature branch) MUST complete before STOP
+- Repo setup (fork/reuse + feature branch) MUST complete before step 12 (STOP or auto-continue)
 - No working-folder mode — never skip fork workflow or feature branch
 - No planning artifacts in this command
