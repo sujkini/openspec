@@ -153,6 +153,57 @@ jira_metadata:
     jira_key/epic_key when explicit URLs are missing.
 
 # ---------------------------------------------------------------------------
+# fast_track — skip spec/plan stages for simple changes (/opsx-new --fast-track)
+# ---------------------------------------------------------------------------
+fast_track:
+  description: >-
+    User opts in at /opsx-new with --fast-track. Skips validation, specs,
+    repo-assessment, and plan. Generates lightweight tasks.md from jira-spec.md
+    and operator context, then /opsx-apply. Tasks approval always prompts.
+  trigger: "--fast-track flag on /opsx-new"
+  persisted_in: openspec/changes/<change>/inputs/jira.yaml
+  field: workflow_mode
+  values:
+    fast-track: skip intermediate artifacts; FT path in /opsx-continue
+    full: default agile workflow
+  skipped_artifacts:
+    - validation
+    - specs
+    - repo-assessment
+    - plan
+  kept:
+    - tasks
+    - implementation
+  forced_overrides:
+    task_execution_mode: one-shot
+    task_sizing:
+      min: 1
+      max: 2
+      consolidation_threshold: 1
+  task_generation_inputs:
+    required:
+      - inputs/jira-spec.md
+    optional:
+      - agents.md
+      - harness-evals/constitution.md
+      - harness-evals/harness-docs/*.md
+    inline:
+      - quick file tree from local_clone_path
+  not_used:
+    - specs.md
+    - plan.md
+    - repo-assessment.md
+  eval_gate_on_tasks: skip
+  tasks_approval: always_prompted
+  telemetry:
+    skipped_artifacts: on-artifact-complete with label skipped:fast-track --batch
+    tasks: on-artifact-start, on-artifact-created, on-artifact-complete with label fast-track
+  command_refs:
+    new: opsx-new.md
+    continue: opsx-continue.md FAST-TRACK PATH FT-1 through FT-7
+    apply: opsx-apply.md
+
+# ---------------------------------------------------------------------------
 # e2e_exclusion — workflow-wide policy: discard e2e phases and tasks
 # ---------------------------------------------------------------------------
 e2e_exclusion:

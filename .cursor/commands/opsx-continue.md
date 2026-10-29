@@ -24,7 +24,84 @@ Continue working on a change by creating the **next** artifact, then **eval → 
 2. `openspec status --change "<name>" --json`
 3. Read `openspec/changes/<name>/inputs/jira.yaml` (required).
 
-**PREFLIGHT LOG** (mandatory — print before artifact generation):
+**Step 3b — Fast-track gate** (immediately after step 3):
+- Read `workflow_mode` from `jira.yaml` (default: `full` if absent).
+- If `workflow_mode` is `full`: proceed to **PREFLIGHT LOG** and step 4 (existing full pipeline).
+- If `workflow_mode: fast-track`: execute **FAST-TRACK PATH** below only. Do NOT execute PREFLIGHT LOG (full), steps 4, 4b, 5, 5b, 5c, 6, 7, 8, 9, 10, 11, 11b, 12, or **Auto-approve loop**.
+
+---
+
+### FAST-TRACK PATH (self-contained — replaces steps 4–12 and Auto-approve loop)
+
+**HARD RULE:** When `workflow_mode: fast-track`, execute ONLY FT-1 through FT-7. Do NOT fall through to numbered full-pipeline steps. Do NOT pick artifacts via `openspec status` for validation/specs/repo-assessment/plan. If you reach step 4 or the Auto-approve loop during fast-track, STOP — that is a bug.
+
+**FT-1. Preflight log** (mandatory):
+```
+Preflight:
+  workflow_mode: fast-track
+  auto_approve: {true|false}
+  jira_issuetype: {value from jira.yaml}
+  local_clone_path: {from jira.yaml}
+  skipped_artifacts: validation, specs, repo-assessment, plan
+  task_execution_mode: one-shot (forced)
+  task_sizing: 1-2 (forced)
+```
+
+**FT-2. Mark skipped artifacts as done + close their telemetry phases:**
+- For each artifact id in `validation`, `specs`, `repo-assessment`, `plan`:
+  - Run `openspec instructions <artifact-id> --change "<name>" --json` and read `outputPath`.
+  - Write stub at `outputPath`: `<!-- Skipped: fast-track mode -->`
+- Fire telemetry to create then immediately close each skipped phase (silent, non-blocking).
+  `on-artifact-start` creates the phase row; `on-artifact-complete` closes it.
+  Without both, the phase is silently dropped from the dashboard.
+  ```bash
+  python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "validation" --batch
+  python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "validation" --status passed --score 0 --label "skipped:fast-track" --batch
+  python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "specs" --batch
+  python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "specs" --status passed --score 0 --label "skipped:fast-track" --batch
+  python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "repo-assessment" --batch
+  python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "repo-assessment" --status passed --score 0 --label "skipped:fast-track" --batch
+  python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "plan" --batch
+  python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "plan" --status passed --score 0 --label "skipped:fast-track" --batch
+  ```
+
+**FT-3. Context gathering** (inline — not persisted as artifacts):
+- Read **`agents.md`** from operator repo root. If absent, proceed PROVISIONAL.
+- Read **`harness-evals/constitution.md`** if present (not blocking if absent).
+- Read all **`harness-evals/harness-docs/*.md`** files.
+- **Quick file tree:** `cd` to `local_clone_path` from `jira.yaml`; run `find . -type f -name '*.go' | head -80` (or equivalent for the repo's primary language).
+- Keep gathered context in memory for FT-4.
+
+**FT-4. Generate lightweight tasks.md:**
+- ```bash
+  python -m openspec.telemetry.auto on-artifact-start --change "<name>" --artifact "tasks"
+  ```
+- Force `task_execution_mode: one-shot` and `task_sizing: { min: 1, max: 2, consolidation_threshold: 1 }` (no prompt).
+- `openspec instructions tasks --change "<name>" --json` → generate tasks at `outputPath` using:
+  - `inputs/jira-spec.md`, FT-3 context (`agents.md`, constitution, harness-docs, file tree)
+  - Do NOT use specs.md, plan.md, repo-assessment.md content (stubs only).
+- ```bash
+  python -m openspec.telemetry.auto on-artifact-created --change "<name>" --artifact "tasks"
+  ```
+
+**FT-5. Skip eval gate** — do NOT run stage evals on tasks. Log: "Fast-track: eval gate skipped."
+
+**FT-6. Present tasks for approval (ALWAYS prompted — `auto_approve` does NOT skip this):**
+- Show tasks.md content.
+- ASK: **"Fast-track tasks generated from Jira ticket. Review the intended changes above. Approve and proceed to implementation? (Approve / Reject with feedback)"**
+- **On approve:**
+  ```bash
+  python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "tasks" --status passed --score 0 --label "fast-track"
+  ```
+  - If `auto_approve: true`: output "Tasks approved. Auto-starting implementation..." and invoke `/opsx-apply <name>`.
+  - If `auto_approve: false`: output "Tasks approved. Run `/opsx-apply` to start implementation." STOP.
+- **On reject:** regenerate tasks with feedback (max `max_feedback_rounds`); re-present FT-6.
+
+**FT-7. END OF FAST-TRACK PATH.** Do not run full-pipeline steps. Next command: `/opsx-apply`.
+
+---
+
+**PREFLIGHT LOG** (full workflow only — skip when `workflow_mode: fast-track`):
 
 ```
 Preflight:
@@ -320,6 +397,7 @@ Stop after user approval/rejection of the current artifact and completion of any
 - User rejection feedback loop **may** patch `{schema_root}/templates/` when required; write summaries to `feedback_stage_artifacts/`
 - `target_repo` and `local_clone_path` set at `/opsx-new`; required before repo-assessment
 - Do not create the next artifact until the current one passes eval (auto_approve bypasses the prompt, not the eval gate)
+- **Fast-track:** when `workflow_mode: fast-track`, use FAST-TRACK PATH only (FT-1–FT-7); never enter full-pipeline steps or Auto-approve loop
 - **No background sub-agents** — Do NOT launch background sub-agents, background shells, or Task-tool agents with `run_in_background=true` during `/opsx-continue`. Telemetry hooks execute in the main agent session only; background work cannot be metered and produces missing or incorrect metrics.
 
 ## Batch / Continue-All Telemetry

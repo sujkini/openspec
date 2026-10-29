@@ -65,7 +65,8 @@ This installs everything — workflow files, commands, skills, and dependencies 
 | Step | Command                                            | What it does                                                                            |
 | ---- | -------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 1    | `/opsx-new <JIRA-KEY> <upstream-url> <clone-path>` | Starts a change: forks upstream (or reuses existing fork clone), creates feature branch |
-| 2    | `/opsx-continue`                                   | Moves through each stage (validation → specs → repo-assessment → plan → tasks)          |
+| 1b   | `/opsx-new <JIRA-KEY> --fast-track <upstream-url> <clone-path>` | Same setup; skips validation/specs/repo-assessment/plan — lightweight tasks then implement |
+| 2    | `/opsx-continue`                                   | Moves through each stage (validation → specs → repo-assessment → plan → tasks), or fast-track tasks only |
 | 3    | `/opsx-apply`                                      | Implements code in the fork clone on the feature branch                                 |
 
 
@@ -75,6 +76,12 @@ You will be prompted to approve at each stage before moving to the next. After c
 
 ```
 /opsx-new CM-830 https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
+
+**Fast-track** (simple bug fixes, config tweaks, single-file edits — skips spec/plan stages; you still approve lightweight `tasks.md` before code):
+
+```
+/opsx-new CM-1380 --fast-track https://github.com/org/my-operator /home/you/code/my-operator-fork
 ```
 
 If you already have a fork cloned at the path, OpenSpec reuses it (validates `origin` is your fork, not upstream).
