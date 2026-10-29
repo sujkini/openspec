@@ -159,7 +159,7 @@ fast_track:
   description: >-
     User opts in at /opsx-new with --fast-track. Skips validation, specs,
     repo-assessment, and plan. Generates lightweight tasks.md from jira-spec.md
-    and operator context, then /opsx-apply. Tasks approval always prompts.
+    and operator context, then /opsx-apply. Tasks approval respects auto_approve.
   trigger: "--fast-track flag on /opsx-new"
   persisted_in: openspec/changes/<change>/inputs/jira.yaml
   field: workflow_mode
@@ -194,7 +194,7 @@ fast_track:
     - plan.md
     - repo-assessment.md
   eval_gate_on_tasks: skip
-  tasks_approval: always_prompted
+  tasks_approval: respects_auto_approve    # auto-approved when auto_approve: true; prompted when false
   telemetry:
     skipped_artifacts: on-artifact-complete with label skipped:fast-track --batch
     tasks: on-artifact-start, on-artifact-created, on-artifact-complete with label fast-track

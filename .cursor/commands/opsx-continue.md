@@ -86,16 +86,24 @@ Preflight:
 
 **FT-5. Skip eval gate** — do NOT run stage evals on tasks. Log: "Fast-track: eval gate skipped."
 
-**FT-6. Present tasks for approval (ALWAYS prompted — `auto_approve` does NOT skip this):**
-- Show tasks.md content.
-- ASK: **"Fast-track tasks generated from Jira ticket. Review the intended changes above. Approve and proceed to implementation? (Approve / Reject with feedback)"**
-- **On approve:**
+**FT-6. Tasks approval gate** (respects `auto_approve` — same as normal flow):
+- Read `config.yaml → flags.auto_approve`.
+- **If `auto_approve` is `true`:**
+  - Log tasks.md summary (task count, file targets) — do NOT prompt.
+  - Output: "Fast-track: auto-approving tasks (`auto_approve: true`)."
   ```bash
   python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "tasks" --status passed --score 0 --label "fast-track"
   ```
-  - If `auto_approve: true`: output "Tasks approved. Auto-starting implementation..." and invoke `/opsx-apply <name>`.
-  - If `auto_approve: false`: output "Tasks approved. Run `/opsx-apply` to start implementation." STOP.
-- **On reject:** regenerate tasks with feedback (max `max_feedback_rounds`); re-present FT-6.
+  - Output: "Tasks approved. Auto-starting implementation..." and invoke `/opsx-apply <name>`.
+- **If `auto_approve` is `false`:**
+  - Show tasks.md content.
+  - ASK: **"Fast-track tasks generated from Jira ticket. Review the intended changes above. Approve and proceed to implementation? (Approve / Reject with feedback)"**
+  - **On approve:**
+    ```bash
+    python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "tasks" --status passed --score 0 --label "fast-track"
+    ```
+    Output: "Tasks approved. Run `/opsx-apply` to start implementation." STOP.
+  - **On reject:** regenerate tasks with feedback (max `max_feedback_rounds`); re-present FT-6.
 
 **FT-7. END OF FAST-TRACK PATH.** Do not run full-pipeline steps. Next command: `/opsx-apply`.
 

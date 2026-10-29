@@ -94,7 +94,7 @@ For simple changes — bug fixes, config tweaks, minor edits — add `--fast-tra
 /opsx-new CM-1380 --fast-track https://github.com/org/my-operator /home/you/code/my-operator-fork
 ```
 
-**How it works:** OpenSpec skips validation, specs, repo-assessment, and plan. Instead it reads your Jira ticket, scans the repo, and generates 1–2 lightweight tasks. You approve the tasks, then implementation runs as normal.
+**How it works:** OpenSpec skips validation, specs, repo-assessment, and plan. Instead it reads your Jira ticket, scans the repo, and generates 1–2 lightweight tasks. You approve the tasks (auto-approved when `auto_approve: true`), then implementation runs as normal.
 
 **Full workflow vs fast-track:**
 
@@ -103,7 +103,7 @@ For simple changes — bug fixes, config tweaks, minor edits — add `--fast-tra
 | **Stages** | validation → specs → repo-assessment → plan → tasks → implement | tasks → implement |
 | **Best for** | Epics, new features, multi-file changes | Bug fixes, config changes, one-liner edits |
 | **Tasks** | Structured (phases, dependency graph, coverage matrix) | Lightweight (1–2 tasks, flat list) |
-| **You approve** | Each artifact + each task | Tasks only (one checkpoint before code) |
+| **You approve** | Each artifact + each task (auto when `auto_approve: true`) | Tasks only (auto when `auto_approve: true`) |
 
 You can use `--fast-track` with any ticket type — Epics, Bugs, Tasks, Stories. It's your call.
 
