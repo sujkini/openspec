@@ -94,7 +94,8 @@ Preflight:
   ```bash
   python -m openspec.telemetry.auto on-artifact-complete --change "<name>" --artifact "tasks" --status passed --score 0 --label "fast-track"
   ```
-  - Output: "Tasks approved. Auto-starting implementation..." and invoke `/opsx-apply <name>`.
+  - Output: "Tasks approved. Auto-starting implementation..." and immediately invoke `/opsx-apply <name>`.
+  - **Do NOT proceed to FT-7.** The `/opsx-apply` invocation is the terminal action.
 - **If `auto_approve` is `false`:**
   - Show tasks.md content.
   - ASK: **"Fast-track tasks generated from Jira ticket. Review the intended changes above. Approve and proceed to implementation? (Approve / Reject with feedback)"**
@@ -105,7 +106,8 @@ Preflight:
     Output: "Tasks approved. Run `/opsx-apply` to start implementation." STOP.
   - **On reject:** regenerate tasks with feedback (max `max_feedback_rounds`); re-present FT-6.
 
-**FT-7. END OF FAST-TRACK PATH.** Do not run full-pipeline steps. Next command: `/opsx-apply`.
+**FT-7. END OF FAST-TRACK PATH** (only reached when `auto_approve: false`)**:**
+Do not run full-pipeline steps. If `auto_approve` was `true`, you should NOT be here — `/opsx-apply` was already invoked in FT-6. Next user command: `/opsx-apply`.
 
 ---
 
