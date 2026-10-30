@@ -8,6 +8,9 @@ description: Implement tasks — one task per invocation, state machine driven (
 Implement an OpenSpec change. State-machine driven with externalized state at `implementation/state.yaml`.
 
 Read `config.yaml → flags.auto_approve` at the start of every invocation.
+Read `openspec/changes/<name>/inputs/jira.yaml` → `workflow_mode` when present.
+
+> **When `workflow_mode: fast-track`:** Tasks were generated from `jira-spec.md` and operator context (agents.md, harness-docs) without full specs/plan/repo-assessment. Force **one-shot** task execution. Implementation flow is unchanged.
 
 > **When `auto_approve` is `false`:** ONE task per invocation.
 > After presenting a task for approval, YIELD and wait for the user to approve/reject.
@@ -82,6 +85,7 @@ After reading state.yaml and config.yaml, print this block before any task execu
 
 ```
 Preflight:
+  workflow_mode: {fast-track|full from jira.yaml}
   auto_approve: {true|false}
   codegen_mode: {ai-helpers|direct}
   task_execution_mode: {phase-iterative|one-shot}
@@ -134,7 +138,9 @@ Read `openspec/changes/<name>/implementation/state.yaml`.
 If file doesn't exist, initialize from template.
 
 Read `openspec/config.yaml` → `flags.codegen_mode`. If not set, default to `direct`.
+Read `openspec/changes/<name>/inputs/jira.yaml` → `workflow_mode`.
 Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default to `phase-iterative`.
+- **If `workflow_mode: fast-track`:** treat `task_execution_mode` as **one-shot** for this run (ignore config phase-iterative).
 
 ### 2. Handle current state
 

@@ -15,6 +15,7 @@ Start a new change for the **openspec-agile-workflow** pipeline.
 | **Target GitHub repo URL** (upstream) | **YES** | Asked if not provided inline |
 | **Local clone path** | **YES** | Asked if not provided inline — where the fork checkout lives |
 | **Change name** (kebab-case) | No | Optional; defaults to lowercase ticket slug (`PROJ-123` → `proj-123`) |
+| **`--fast-track`** | No | Optional; skips validation/specs/repo-assessment/plan — lightweight tasks only |
 
 There is **no working-folder mode**. All implementation edits happen in `local_clone_path` on `feature_branch` (fork workflow only).
 
@@ -27,6 +28,9 @@ There is **no working-folder mode**. All implementation edits happen in `local_c
 /opsx-new CM-830 my-change-name https://github.com/org/repo /home/you/code/my-operator-fork
 /opsx-new https://issues.redhat.com/browse/CM-830
 /opsx-new https://issues.redhat.com/browse/CM-830 https://github.com/org/repo /home/you/code/my-operator-fork
+/opsx-new CM-1380 --fast-track
+/opsx-new CM-1380 --fast-track https://github.com/org/repo /path/to/clone
+/opsx-new CM-1380 my-change-name --fast-track https://github.com/org/repo /path/to/clone
 ```
 
 Jira key pattern: `[A-Z][A-Z0-9]+-\d+`.
@@ -41,7 +45,8 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
    > "======================================================================"
    > "**You are about to interact with a Red Hat AI agent. This agent uses AI technology to assist you by responding to queries, generating content, or performing tasks. By proceeding, you acknowledge that all AI agent outputs are intended for internal use only and must be reviewed prior to use.**"
    > "======================================================================"
-2. Parse Jira key or URL (required), optional change name, optional upstream repo URL, optional local clone path.
+2. Parse Jira key or URL (required), optional `--fast-track` flag, optional change name, optional upstream repo URL, optional local clone path.
+   - If `--fast-track` is present anywhere in the command line, set `workflow_mode: fast-track`; otherwise `workflow_mode: full`.
    - If a Jira URL is provided (e.g. `https://issues.redhat.com/browse/CM-830`), extract the key from the path.
 3. **Ask for target repo URL** (if not provided inline):
    ASK: **"What is the target GitHub repository URL? (e.g. https://github.com/org/repo)"**
@@ -66,6 +71,7 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
      - Path exists but is not a valid fork of `target_repo` → fork + fresh clone or choose another path
 7. Write `openspec/changes/<name>/inputs/jira.yaml` with:
    - `jira_key`, `jira_url`, `target_repo`, `fork_repo_url`, `local_clone_path`, `feature_branch`, `repo_setup_at`, `created_at`
+   - `workflow_mode`: `fast-track` or `full` (from step 2)
 8. **Fetch ticket + epic metadata** → `inputs/jira-spec.md` + enrich `inputs/jira.yaml`:
    - Use Jira MCP `jira_get_issue` with `issue_key: "<JIRA-KEY>"` and
      `fields: "summary,status,issuetype,parent,customfield_10014"`.
@@ -80,14 +86,16 @@ If no Jira key or URL, ask once. Do **not** proceed without it.
    - Write ticket description + acceptance criteria to `inputs/jira-spec.md`.
    - If Jira MCP is unavailable, ask the user to paste ticket content into `inputs/jira-spec.md`
      and manually provide epic info if known (optional).
-   - **Note:** Spec-understanding phase telemetry does NOT start here — it begins at
-     `/opsx-continue` step 6 (`on-artifact-start --artifact validation`). `/opsx-new` only
-     registers the run.
+   - **Note:** Spec-understanding phase telemetry for full workflow begins at
+     `/opsx-continue` (`on-artifact-start --artifact validation`). Fast-track skips validation;
+     tasks telemetry begins in `/opsx-continue` FT-4.
 9. **Telemetry — register run** (silent, non-blocking):
    ```bash
    python -m openspec.telemetry.auto on-new --change "<name>" --jira-key "<JIRA-KEY>"
    ```
-10. `openspec status --change "<name>"` and `openspec instructions validation --change "<name>"`.
+10. `openspec status --change "<name>"`.
+    - **If `workflow_mode: full`:** also run `openspec instructions validation --change "<name>"`.
+    - **If `workflow_mode: fast-track`:** do NOT run validation instructions (validation is skipped).
 11. Present repo setup summary:
 ```
 Repo setup complete:
@@ -100,13 +108,15 @@ Repo setup complete:
 12. Read `openspec/config.yaml` → `flags.auto_approve`.
 
     **If `auto_approve` is `true`:**
-    - Output: "Auto-approve enabled. Auto-continuing to artifact generation..."
+    - If `workflow_mode: fast-track`: output "Fast-track mode. Auto-continuing to task generation..."
+    - Else: output "Auto-approve enabled. Auto-continuing to artifact generation..."
     - Automatically invoke `/opsx-continue <name>` (same change name). Do NOT prompt the user to run `/opsx-continue`.
     - Do not create artifacts in this command — `/opsx-continue` owns artifact generation.
 
     **If `auto_approve` is `false`:**
     - **STOP** — do not create artifacts yet.
-    - Prompt: `/opsx-continue` to create `validation.json`.
+    - If `workflow_mode: fast-track`: prompt: `/opsx-continue` to generate tasks.
+    - Else: prompt: `/opsx-continue` to create `validation.json`.
 
 ## Guardrails
 

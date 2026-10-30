@@ -65,7 +65,8 @@ This installs everything — workflow files, commands, skills, and dependencies 
 | Step | Command                                            | What it does                                                                            |
 | ---- | -------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 1    | `/opsx-new <JIRA-KEY> <upstream-url> <clone-path>` | Starts a change: forks upstream (or reuses existing fork clone), creates feature branch |
-| 2    | `/opsx-continue`                                   | Moves through each stage (validation → specs → repo-assessment → plan → tasks)          |
+| 1b   | `/opsx-new <JIRA-KEY> --fast-track <upstream-url> <clone-path>` | Same setup; skips validation/specs/repo-assessment/plan — lightweight tasks then implement |
+| 2    | `/opsx-continue`                                   | Moves through each stage (validation → specs → repo-assessment → plan → tasks), or fast-track tasks only |
 | 3    | `/opsx-apply`                                      | Implements code in the fork clone on the feature branch                                 |
 
 
@@ -77,7 +78,34 @@ You will be prompted to approve at each stage before moving to the next. After c
 /opsx-new CM-830 https://github.com/org/my-operator /home/you/code/my-operator-fork
 ```
 
+**Fast-track** (simple bug fixes, config tweaks, single-file edits — skips spec/plan stages; you still approve lightweight `tasks.md` before code):
+
+```
+/opsx-new CM-1380 --fast-track https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
+
 If you already have a fork cloned at the path, OpenSpec reuses it (validates `origin` is your fork, not upstream).
+
+#### Fast-Track Mode
+
+For simple changes — bug fixes, config tweaks, minor edits — add `--fast-track` to skip the detailed analysis stages and go straight to implementation:
+
+```
+/opsx-new CM-1380 --fast-track https://github.com/org/my-operator /home/you/code/my-operator-fork
+```
+
+**How it works:** OpenSpec skips validation, specs, repo-assessment, and plan. Instead it reads your Jira ticket, scans the repo, and generates 1–2 lightweight tasks. You approve the tasks (auto-approved when `auto_approve: true`), then implementation runs as normal.
+
+**Full workflow vs fast-track:**
+
+| | Full | Fast-track |
+|---|------|-----------|
+| **Stages** | validation → specs → repo-assessment → plan → tasks → implement | tasks → implement |
+| **Best for** | Epics, new features, multi-file changes | Bug fixes, config changes, one-liner edits |
+| **Tasks** | Structured (phases, dependency graph, coverage matrix) | Lightweight (1–2 tasks, flat list) |
+| **You approve** | Each artifact + each task (auto when `auto_approve: true`) | Tasks only (auto when `auto_approve: true`) |
+
+You can use `--fast-track` with any ticket type — Epics, Bugs, Tasks, Stories. It's your call.
 
 #### QE (E2E Tests)
 

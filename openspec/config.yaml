@@ -26,6 +26,9 @@ flags:
                                   # task_sizing uses defaults silently (no sizing prompt).
   max_feedback_rounds: 3          # Max user rejection + refinement loops per artifact before halting (USER_FEEDBACK_PROMPT.md)
   exit_on_all_tasks_complete: true # Exit implementation stage automatically when all tasks in tasks.md are marked [x]
+  # workflow_mode is per-change (set via --fast-track at /opsx-new, stored in inputs/jira.yaml).
+  # fast-track: skips validation/specs/repo-assessment/plan; lightweight tasks from jira-spec.md
+  # + agents.md/harness-docs. Respects auto_approve (tasks auto-approved when true). Forces one-shot + 1-2 tasks.
 
   # task_execution_mode controls how tasks.md is generated and implemented:
   #   "one-shot"        — generate ALL tasks for ALL plan phases at once, implement sequentially,
