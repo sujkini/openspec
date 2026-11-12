@@ -38,17 +38,19 @@ Read `openspec/changes/<name>/inputs/jira.yaml` → `workflow_mode` when present
 ```
 auto_approve=true (default):
   phase-iterative:
-    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → PHASE_COMPLETE → auto-trigger /opsx-continue → ...
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → ... → PHASE_COMPLETE → [REVIEW_GATE] → PR_PROMPT → auto-trigger /opsx-continue → ...
   one-shot:
-    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → EXECUTING_TASK → ... → COMPLETE
+    any mode:    IDLE → EXECUTING_TASK → RUNNING_TESTS → [EVAL_GATE] → IDLE → ... → [REVIEW_GATE] → COMPLETE
 
 auto_approve=false:
   phase-iterative:
-    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
-    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → IDLE/COMPLETE
+    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → [REVIEW_GATE] → PR_PROMPT → IDLE/COMPLETE
+    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → PHASE_COMPLETE → [REVIEW_GATE] → PR_PROMPT → IDLE/COMPLETE
   one-shot:
-    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → COMPLETE
-    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → COMPLETE
+    ai-helpers:  IDLE → EXECUTING_TASK → RUNNING_TESTS → EVAL_GATE → AWAITING_APPROVAL → IDLE → ... → [REVIEW_GATE] → COMPLETE
+    direct:      IDLE → EXECUTING_TASK → RUNNING_TESTS → AWAITING_APPROVAL → IDLE → ... → [REVIEW_GATE] → COMPLETE
+
+Note: [REVIEW_GATE] runs /oape:review + /oape:implement-review-fixes. Controlled by config.yaml → flags.review_gate. Skipped when false.
 ```
 
 **When `auto_approve` is `false`:** The orchestrator reads state, executes ONE task, writes state, and YIELDS.
@@ -89,6 +91,9 @@ Preflight:
   auto_approve: {true|false}
   codegen_mode: {ai-helpers|direct}
   task_execution_mode: {phase-iterative|one-shot}
+  review_gate: {true|false}
+  review_auto_fix: {true|false}
+  review_block_on_critical: {true|false}
   current_state: {state from state.yaml}
   current_task: {task_id or none}
   jira_issuetype: {Epic|Story|...}
@@ -148,8 +153,12 @@ Read `openspec/config.yaml` → `flags.task_execution_mode`. If not set, default
 |-------|--------|
 | `IDLE` | Pick next pending task → go to step 3 |
 | `AWAITING_APPROVAL` | Read user response (approve/reject) → handle |
-| `PHASE_COMPLETE` | (phase-iterative only) Phase-level approval gate → PR prompt → advance to next phase or COMPLETE |
+| `PHASE_COMPLETE` | (phase-iterative only) Phase-level approval gate → review gate (step 6a) → PR prompt → advance to next phase or COMPLETE |
 | `PHASE_FEEDBACK` | (phase-iterative/one-shot) Resuming from crash during feedback loop — read `phase_feedback_rounds` and re-prompt |
+| `REVIEW_GATE` | Pre-PR review gate — resume review from state.yaml → review.status |
+| `REVIEW_RUNNING` | Resume from crash — re-run /oape:review |
+| `REVIEW_FIXING` | Resume from crash — re-run auto-fix loop |
+| `REVIEW_APPROVAL` | Read user response to review results (approve/reject/override) |
 | `COMPLETE` | Announce done, suggest `/opsx-archive` → STOP |
 | `EXECUTING_TASK` | Resume from crash — re-run current task |
 
@@ -494,16 +503,38 @@ When ALL tasks in tasks.md §3 are marked `- [x]`:
    ```
 2. **Implementation approval gate (approve / reject with feedback):**
    - Persist `implementation_feedback_rounds: 0` to `state.yaml` (initialize if not present).
-   - **If `auto_approve` is `true`:** Log "Implementation gate auto-approved (auto_approve)." Proceed directly to step 5 (PR prompt). Do NOT ask Approve/Reject.
+   - **If `auto_approve` is `true`:** Log "Implementation gate auto-approved (auto_approve)." Proceed directly to step 3 (review gate). Do NOT ask Approve/Reject.
    - **If `auto_approve` is `false`:** ASK: **"All tasks complete. Implementation passes verification. Approve the full implementation? (Approve / Reject with feedback)"**
-     - **On approve:** proceed to step 5 (PR prompt).
+     - **On approve:** proceed to step 3 (review gate).
      - **On reject:** user provides feedback. Increment `implementation_feedback_rounds` in
        `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
        the fixes, re-run verification. Then prompt again:
        **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
-       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
-       with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
-   - **Note:** Step 5 (PR prompt) is ALWAYS user-prompted regardless of `auto_approve`.
+       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 3
+       with a warning: "Max feedback rounds reached. Proceeding to review gate.").
+
+3. **Pre-PR Review Gate** (see schema `code_review_gate`):
+   Read `config.yaml → flags.review_gate`.
+   **IF `review_gate` is `false`:** Log "Review gate disabled." Skip to step 5 (PR prompt).
+   **IF `review_gate` is `true`:**
+   Read and follow **`{schema_root}/stage-gate/REVIEW_GATE_PROMPT.md`** Steps 1–8 exactly.
+   - Set state: `REVIEW_GATE`. Write state.yaml.
+   - Run `/oape:review <jira_key> <base_ref>` → capture JSON report.
+   - IF issues found AND `review_auto_fix`: auto-fix loop (max `review_max_fix_rounds`).
+   - Write `implementation/review-report.md`.
+   - Update `state.yaml → review` block.
+   - Present review results (verdict, issues found/fixed/remaining).
+   - Approval gate:
+     - Clean / non-critical remaining + `auto_approve`: auto-approve.
+     - CRITICAL remaining + `review_block_on_critical`: ALWAYS prompt (override/re-review/stop).
+     - On approve: proceed to step 5 (PR prompt).
+     - On reject: re-review (max 2 rounds).
+   - **Telemetry — signal review complete** (silent, non-blocking):
+     ```bash
+     python -m openspec.telemetry.auto on-review-complete --change "<name>" --verdict "<verdict>" --issues <total> --fixed <fixed> --remaining <remaining>
+     ```
+
+4. **Note:** Step 5 (PR prompt) is ALWAYS user-prompted regardless of `auto_approve`.
 
 5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
    ASK: **"Implementation approved. Would you like to raise a PR to the upstream repo? (Yes / No)"**
@@ -561,16 +592,37 @@ When all **current phase** tasks are marked complete:
 
 4. **Phase-level approval gate (approve / reject with feedback):**
    - Persist `phase_feedback_rounds: 0` to `state.yaml` (initialize if not present for this phase).
-   - **If `auto_approve` is `true`:** Log "Phase {N} gate auto-approved (auto_approve)." Proceed directly to step 5 (PR prompt). Do NOT ask Approve/Reject.
+   - **If `auto_approve` is `true`:** Log "Phase {N} gate auto-approved (auto_approve)." Proceed directly to step 4a (review gate). Do NOT ask Approve/Reject.
    - **If `auto_approve` is `false`:** ASK: **"Phase {N} development complete. All tasks pass verification. Approve the phase implementation? (Approve / Reject with feedback)"**
-     - **On approve:** proceed to step 5 (PR prompt).
+     - **On approve:** proceed to step 4a (review gate).
      - **On reject:** user provides feedback. Increment `phase_feedback_rounds` in
        `state.yaml`. Analyze the feedback, identify which tasks/files need changes, apply
        the fixes in the working copy, re-run verification (`go build`, `go test`,
        `make verify` as applicable). Then prompt again:
        **"Feedback addressed (round {N}/3). Changes applied: <brief summary>. Approve now? (Approve / Reject with feedback)"**
-       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 5
-       with a warning: "Max feedback rounds reached. Proceeding to PR prompt.").
+       Repeat until approved or max 3 rounds (on 3rd rejection, force-proceed to step 4a
+       with a warning: "Max feedback rounds reached. Proceeding to review gate.").
+
+4a. **Pre-PR Review Gate** (see schema `code_review_gate`):
+   Read `config.yaml → flags.review_gate`.
+   **IF `review_gate` is `false`:** Log "Review gate disabled." Skip to step 5 (PR prompt).
+   **IF `review_gate` is `true`:**
+   Read and follow **`{schema_root}/stage-gate/REVIEW_GATE_PROMPT.md`** Steps 1–8 exactly.
+   - Set state: `REVIEW_GATE`. Write state.yaml.
+   - Run `/oape:review <jira_key> <base_ref>` → capture JSON report.
+   - IF issues AND `review_auto_fix`: auto-fix loop (max `review_max_fix_rounds`).
+   - Write `implementation/review-report.md`.
+   - Update `state.yaml → review` block.
+   - Present review results (verdict, issues found/fixed/remaining).
+   - Approval gate:
+     - Clean / non-critical remaining + `auto_approve`: auto-approve.
+     - CRITICAL remaining + `review_block_on_critical`: ALWAYS prompt.
+     - On approve: proceed to step 5 (PR prompt).
+     - On reject: re-review (max 2 rounds).
+   - **Telemetry — signal review complete:**
+     ```bash
+     python -m openspec.telemetry.auto on-review-complete --change "<name>" --phase <N> --verdict "<verdict>" --issues <total> --fixed <fixed> --remaining <remaining>
+     ```
    - **Note:** Step 5 (PR prompt) is ALWAYS user-prompted regardless of `auto_approve`.
 
 5. **PR prompt (ALWAYS prompted — auto_approve does NOT apply):**
@@ -648,7 +700,7 @@ When all **current phase** tasks are marked complete:
 ## Guardrails
 
 - **Read state.yaml FIRST** — every invocation, no exceptions
-- **Read codegen_mode and auto_approve** — from config.yaml, every invocation
+- **Read codegen_mode, auto_approve, and review_gate** — from config.yaml, every invocation
 - **When `auto_approve` is `false`: ONE task per response** — NEVER implement two tasks in one invocation
 - **When `auto_approve` is `true`: ALL tasks in a loop** — auto-approve each task and immediately proceed to the next; no YIELD between tasks
 - **YIELD after approval question** (only when `auto_approve` is `false`) — HARD STOP. End your response.

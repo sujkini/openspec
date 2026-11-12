@@ -30,6 +30,16 @@ flags:
   # fast-track: skips validation/specs/repo-assessment/plan; lightweight tasks from jira-spec.md
   # + agents.md/harness-docs. Respects auto_approve (tasks auto-approved when true). Forces one-shot + 1-2 tasks.
 
+  # review_gate controls the automated pre-PR code review:
+  #   When true, /opsx-apply runs /oape:review after all tasks complete (per phase
+  #   in phase-iterative, all tasks in one-shot) and before the PR prompt.
+  #   Issues are auto-fixed via /oape:implement-review-fixes. CRITICAL issues
+  #   block PR creation by default (override with review_block_on_critical: false).
+  review_gate: true                  # Enable pre-PR review gate
+  review_auto_fix: true              # Auto-apply fixes from review
+  review_max_fix_rounds: 2           # Max auto-fix iterations before presenting results
+  review_block_on_critical: true     # Block PR when unresolved CRITICAL issues remain
+
   # task_execution_mode controls how tasks.md is generated and implemented:
   #   "one-shot"        — generate ALL tasks for ALL plan phases at once, implement sequentially,
   #                       single PR at the end

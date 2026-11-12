@@ -4,8 +4,8 @@
 # DO NOT manually edit unless recovering from a broken state.
 
 machine:
-  # ai-helpers mode states: IDLE | EXECUTING_TASK | RUNNING_TESTS | EVAL_GATE | AWAITING_APPROVAL | COMPLETE
-  # direct mode states:     IDLE | EXECUTING_TASK | RUNNING_TESTS | AWAITING_APPROVAL | COMPLETE
+  # ai-helpers mode states: IDLE | EXECUTING_TASK | RUNNING_TESTS | EVAL_GATE | AWAITING_APPROVAL | REVIEW_GATE | REVIEW_RUNNING | REVIEW_FIXING | REVIEW_APPROVAL | COMPLETE
+  # direct mode states:     IDLE | EXECUTING_TASK | RUNNING_TESTS | AWAITING_APPROVAL | REVIEW_GATE | REVIEW_RUNNING | REVIEW_FIXING | REVIEW_APPROVAL | COMPLETE
   state: IDLE
   current_task_id: null
   current_task_index: 0
@@ -53,3 +53,19 @@ rejections: []
 # Example:
 #   - round: 1
 #     feedback: "Missing error handling for nil pointer"
+
+# Pre-PR code review gate state (see schema code_review_gate)
+# Updated by /opsx-apply step 6a and /opsx-review
+review:
+  # Status: not_started | running | fixing | approval | passed | failed
+  status: not_started
+  report_path: ""           # Path to implementation/review-report.md
+  fix_rounds: 0             # Number of auto-fix iterations completed
+  issues_total: 0           # Total issues found by /oape:review
+  issues_fixed: 0           # Issues auto-fixed by /oape:implement-review-fixes
+  issues_remaining: 0       # Unresolved issues after auto-fix
+  verdict: ""               # Approved | Changes Requested
+  last_reviewed_at: ""      # ISO8601 timestamp
+  review_base_ref: ""       # Base ref used for diff (e.g. origin/main)
+  blocked_by_critical: false # True if CRITICAL issues remain and review_block_on_critical is true
+  review_feedback_rounds: 0 # User rejection + re-review rounds (max 2)

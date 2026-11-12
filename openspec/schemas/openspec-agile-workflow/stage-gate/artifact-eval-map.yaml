@@ -55,6 +55,20 @@ artifacts:
 
 eval_results_dir: openspec/changes/<change-name>/eval-results/
 
+# Pre-PR code review gate (runs after implementation, before PR)
+# See schema code_review_gate and stage-gate/REVIEW_GATE_PROMPT.md
+code_review:
+  stage: implementation
+  runs_after: all tasks complete (per phase or one-shot)
+  runs_before: PR prompt
+  review_engine: /oape:review (.cursor/commands/review.md)
+  auto_fixer: /oape:implement-review-fixes (.cursor/commands/implement-review-fixes.md)
+  gate_prompt: stage-gate/REVIEW_GATE_PROMPT.md
+  report_template: templates/review-report-template.md
+  report_output: openspec/changes/<change-name>/implementation/review-report.md
+  config_key: flags.review_gate
+  default: true
+
 # Evaluation reports — REMOVED (eval-results/<artifact-id>.yaml is sufficient)
 # The agent uses eval-results YAML for refinement and scoring.
 # No separate _evaluation_report.md is generated.

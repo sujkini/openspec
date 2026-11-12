@@ -696,6 +696,132 @@ code_generation_eval_gate:
     - approved_upstream_artifacts
 
 # ---------------------------------------------------------------------------
+# code_review_gate — automated pre-PR code review during /opsx-apply
+# ---------------------------------------------------------------------------
+code_review_gate:
+  description: >-
+    Automated pre-PR code review that runs after all tasks in a phase
+    (phase-iterative) or all tasks (one-shot) are complete, before the PR
+    prompt. Uses the /oape:review engine for analysis (5 modules: Golang
+    Logic & Safety, Bash Scripts, OLM Metadata, Build Consistency,
+    Context-Adaptive) and /oape:implement-review-fixes for auto-remediation.
+    Review results are persisted in implementation/review-report.md and
+    state.yaml. The gate is skippable via config.yaml → flags.review_gate.
+  runs_during: implementation
+  runs_after:
+    - all_phase_tasks_complete (phase-iterative)
+    - all_tasks_complete (one-shot)
+  runs_before:
+    - pr_prompt
+  review_engine:
+    command: /oape:review
+    command_file: review.md
+    description: >-
+      Principal-engineer-level code review covering Golang logic & safety,
+      Bash scripts, OLM metadata, build consistency, and context-adaptive
+      analysis. Produces a structured JSON report with verdict, issues[], and
+      scores.
+  auto_fixer:
+    command: /oape:implement-review-fixes
+    command_file: implement-review-fixes.md
+    description: >-
+      Automatically applies code fixes from the review report, prioritized
+      by severity (CRITICAL first). Re-verifies with go build/vet after fixes.
+  config_keys:
+    review_gate: flags.review_gate
+    review_auto_fix: flags.review_auto_fix
+    review_max_fix_rounds: flags.review_max_fix_rounds
+    review_block_on_critical: flags.review_block_on_critical
+  defaults:
+    review_gate: true
+    review_auto_fix: true
+    review_max_fix_rounds: 2
+    review_block_on_critical: true
+  review_scope:
+    base_ref: >-
+      Fork default branch (main or master). Determined from
+      `git symbolic-ref refs/remotes/origin/HEAD` or fallback to origin/main.
+    head_ref: "feature_branch HEAD (from inputs/jira.yaml → feature_branch)"
+    jira_key: "from inputs/jira.yaml → jira_key"
+    diff_command: "git diff ${base_ref}...HEAD"
+  state_tracking:
+    stored_in: openspec/changes/<change>/implementation/state.yaml
+    fields:
+      review_status:
+        type: string
+        enum: [not_started, running, fixing, approval, passed, failed]
+        default: not_started
+      review_report_path:
+        type: string
+        description: "Path to implementation/review-report.md"
+      review_fix_rounds:
+        type: integer
+        default: 0
+      review_issues_total:
+        type: integer
+        default: 0
+      review_issues_fixed:
+        type: integer
+        default: 0
+      review_issues_remaining:
+        type: integer
+        default: 0
+      review_verdict:
+        type: string
+        enum: ["", Approved, "Changes Requested"]
+      review_blocked_by_critical:
+        type: boolean
+        default: false
+      last_reviewed_at:
+        type: string
+        description: "ISO8601 timestamp of last review run"
+  report:
+    path: openspec/changes/<change>/implementation/review-report.md
+    template: templates/review-report-template.md
+    write_on: review_complete
+  flow: >-
+    phase_complete (or all_tasks_complete) →
+    check review_gate flag →
+    (false → skip to pr_prompt) |
+    (true → set REVIEW_GATE → run /oape:review → capture JSON report →
+      (no issues → set review_status: passed → pr_prompt) |
+      (issues AND review_auto_fix → set REVIEW_FIXING →
+        invoke /oape:implement-review-fixes → re-verify →
+        re-review → repeat up to max_fix_rounds →
+        present results → user approval →
+        (approve → pr_prompt) | (reject → re-review)))
+  approval_prompt: >-
+    Read config.yaml → flags.auto_approve AND check review_block_on_critical.
+    IF auto_approve is true AND no blocking criticals: auto-approve review gate.
+    IF review_block_on_critical AND CRITICAL issues remain: ALWAYS prompt
+    regardless of auto_approve: "N CRITICAL issues remain unresolved.
+    Proceeding to PR is not recommended. Override and proceed anyway?
+    (Override / Re-review with feedback)"
+    OTHERWISE: "Pre-PR review complete. Verdict: {verdict}. {N} issues found,
+    {M} auto-fixed, {R} remaining. Approve and proceed to PR?
+    (Approve / Reject with feedback)"
+  on_reject:
+    steps:
+      - Capture user feedback verbatim
+      - Incorporate feedback into the review context
+      - Re-run /oape:review with focus on user-identified areas
+      - Re-run auto-fix if applicable
+      - Max 2 re-review rounds
+    do_not:
+      - Modify approved upstream artifacts (specs, plan, tasks)
+      - Skip verification after fixes
+  telemetry:
+    on_review_start: >-
+      python -m openspec.telemetry.auto on-review-start
+      --change "<name>" --phase <N>
+    on_review_complete: >-
+      python -m openspec.telemetry.auto on-review-complete
+      --change "<name>" --phase <N> --verdict <verdict>
+      --issues <total> --fixed <fixed> --remaining <remaining>
+  never_auto_approved:
+    - "review_block_on_critical override (CRITICAL issues present)"
+
+# ---------------------------------------------------------------------------
 # user_approval_feedback_gate — revision loop when user rejects at approval
 # ---------------------------------------------------------------------------
 user_approval_feedback_gate:

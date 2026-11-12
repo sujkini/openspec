@@ -148,6 +148,9 @@ flags:
   codegen_mode: direct            # or: ai-helpers
   task_execution_mode: phase-iterative  # or: one-shot
   auto_approve: true              # auto-approve artifacts + per-task code; phase/PR/Jira gates always prompted
+  review_gate: true               # enable pre-PR code review gate
+  review_auto_fix: true           # auto-apply review fixes
+  review_block_on_critical: true  # block PR on unresolved CRITICAL issues
 ```
 
 
@@ -156,6 +159,8 @@ flags:
 | `codegen_mode`        | `ai-helpers` / `direct`        | Code generation strategy                                                                                                   |
 | `task_execution_mode` | `phase-iterative` / `one-shot` | How tasks are grouped and PRs raised                                                                                       |
 | `auto_approve`        | `true` / `false`               | Auto-approve artifacts and per-task code approval. Phase approval, PR creation, and Jira creation are NEVER auto-approved. |
+| `review_gate`         | `true` / `false`               | Pre-PR automated code review gate. Runs /oape:review + auto-fix before PR prompt.                                          |
+| `review_block_on_critical` | `true` / `false`          | Block PR creation when unresolved CRITICAL issues remain from review.                                                      |
 
 
 ### Operator documentation
@@ -624,10 +629,20 @@ The agent either **reuses** an existing fork clone at that path or **forks + clo
 | `/opsx-new PROJ-123`    | Start a change from a Jira key                                          |
 | `/opsx-continue`        | Create next artifact; eval gate; approval                               |
 | `/opsx-apply`           | Implement tasks — one at a time, approval after each                    |
+| `/opsx-review`          | Pre-PR code review gate (auto or manual)                                |
 | `/opsx-e2e`             | Generate E2E tests for a phase/final PR                                 |
 | `/opsx-archive`         | Archive a completed change                                              |
 | `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-mado as an MR |
 
+
+#### Pre-PR Code Review
+
+
+| Step | Command        | What it does                                          |
+| ---- | -------------- | ----------------------------------------------------- |
+| 1    | `/opsx-review` | Run automated code review (standalone or from apply)  |
+
+The review gate runs automatically at the phase boundary (after all tasks complete, before PR prompt) when `flags.review_gate: true` (default). It uses `/oape:review` to analyze code and `/oape:implement-review-fixes` to auto-fix issues. CRITICAL issues block PR creation by default.
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
 
@@ -765,7 +780,7 @@ Update `eval-generation/input/feature-bundle.yaml` with the next completed featu
 ## Pipeline Overview
 
 ```
-validation → specs → repo-assessment → [constitution.md required] → plan → tasks → implementation → [E2E] → archive
+validation → specs → repo-assessment → [constitution.md required] → plan → tasks → implementation → [REVIEW GATE] → PR → [E2E] → archive
 ```
 
 
