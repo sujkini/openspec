@@ -11,22 +11,28 @@ agile workflow (`/opsx-new → /opsx-continue → /opsx-apply`) and the QE
 workflow (`/opsx-e2e`) end to end on OpenShift CI, driven by the **OpenAI
 Codex CLI** instead of an interactive editor:
 
+> **Note:** CI currently targets the [swghosh/oap-openspec-worfklow](https://github.com/swghosh/oap-openspec-worfklow)
+> fork of [sujkini/openspec](https://github.com/sujkini/openspec) on the
+> `onboard-ci` branch, so the whole pipeline can be validated end to end
+> before moving to the upstream repo (a config-rename in
+> `openshift/release` is all that takes).
+
 | Job | Prow context | Trigger | Runs |
 | --- | --- | --- | --- |
-| `pull-ci-sujkini-openspec-main-agile-workflow` | `ci/prow/agile-workflow` | `/test agile-workflow` | Codex plans and implements a Jira change on a target operator repo, then raises a PR |
-| `pull-ci-sujkini-openspec-main-qe-workflow` | `ci/prow/qe-workflow` | `/test qe-workflow` | Codex generates E2E tests for a PR, provisions an AWS cluster, deploys + runs the tests, then raises a PR with the tests |
+| `pull-ci-swghosh-oap-openspec-worfklow-onboard-ci-agile-workflow` | `ci/prow/agile-workflow` | `/test agile-workflow` | Codex plans and implements a Jira change on a target operator repo, then raises a PR |
+| `pull-ci-swghosh-oap-openspec-worfklow-onboard-ci-qe-workflow` | `ci/prow/qe-workflow` | `/test qe-workflow` | Codex generates E2E tests for a PR, provisions an AWS cluster, deploys + runs the tests, then raises a PR with the tests |
 
 ## User flow
 
-1. Create a branch on `sujkini/openspec`.
+1. Create a branch on `swghosh/oap-openspec-worfklow` targeting `onboard-ci`.
 2. Edit the ARG defaults in `prow-workflow/agile-workflow.Dockerfile` or
    `prow-workflow/qe-workflow.Dockerfile`.
 3. For the agile workflow, replace `prow-workflow/jira-spec.md` with the
    content of the Jira ticket referenced by `JIRA_KEY` (there is no Jira MCP
    on CI — this file is the spec source).
-4. Open a PR. The matching job triggers automatically because of
-   `run_if_changed: ^prow-workflow/(agile|qe)-workflow`. Re-run manually with
-   `/test agile-workflow` or `/test qe-workflow`.
+4. Open a PR against the `onboard-ci` branch. The matching job triggers
+   automatically because of `run_if_changed: ^prow-workflow/(agile|qe)-workflow`.
+   Re-run manually with `/test agile-workflow` or `/test qe-workflow`.
 5. Watch the job on Prow. The log streams the Codex session; artifacts
    (`openspec-changes-<name>.tar.gz`, telemetry reports, codex session logs)
    are attached to the job. The job log prints `PR_CREATED: <url>` lines for
@@ -110,11 +116,13 @@ no execution and raises no PR.
 
 ## Notes
 
-- Jobs are pinned to the `build13` build cluster, where the
-  `oap-lts-codex-sa` and `openshift-app-platform-shift-github-bot` secrets
-  live.
+- Jobs run on the `build13` build cluster (where the `oap-lts-codex-sa` and
+  `openshift-app-platform-shift-github-bot` secrets live), except the
+  QE workflow, which the scheduler places on an AWS-capable cluster
+  (`build03`) because it provisions a cluster via `ipi-aws`; its credentials
+  are pulled from GSM at runtime, so this works from any build cluster.
 - The worker image used by a run is the latest **promoted** one, so changes
-  to the runner or prompts land on `main` (postsubmit promotion) before user
+  to the runner or prompts land on `onboard-ci` (postsubmit promotion) before user
   workflow PRs pick them up. Use `/pj-rehearse` to test in-flight changes.
 - The QE job provisions an AWS cluster via the `ipi-aws` chain; the OCP
   version pinned in the ci-operator config (`releases.latest`) controls the
