@@ -124,7 +124,7 @@ After test generation, you will be prompted to raise a PR.
 | Step | Command                                                                                                               | Required?                                                                               |
 | ---- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 1    | `/opsx-archive`                                                                                                       | **Mandatory** — collects your feedback (time saved, story points) and finalizes metrics |
-| 2    | `/opsx-publish-metrics`                                                                                               | **Recommended** — publishes metrics to the shared dashboard via PR                      |
+| 2    | `/opsx-publish-metrics`                                                                                               | **Recommended** — publishes metrics to the dashboard (`main` push, or MR if denied)        |
 | 3    | [Feedback Form](https://docs.google.com/spreadsheets/d/1lBhSpvjtceexzHGc-dF37F6ho2y4msUnXm5hg52gMus/edit?usp=sharing) | **Mandatory** — submit the external agent feedback form                                 |
 
 
@@ -584,16 +584,18 @@ diffing `metrics-report.json` → `global_health.total_tokens_consumed` and the
 /opsx-publish-metrics [change-name]
 ```
 
-Standalone command (not auto-triggered by `/opsx-archive`) that forks
-[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado)
-via `glab` CLI (or GitLab API), branches, and opens an MR adding this change's
+Standalone command (not auto-triggered by `/opsx-archive`) that clones
+[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado),
+commits on **`main`**, and pushes directly (if permitted; otherwise **MR fallback** from your fork) this change's
 `metrics-report.json` (and `qe-metrics.json`, if this change ran `/opsx-e2e`) under
-`data/open-spec-matrics/operators/<operator>/`. The operator folder is derived
-automatically from `metrics-report.json → operator_name`. Publishing doesn't require
-`report_status.complete`/`qe_report_status.complete` to be `true` — it warns on
-incomplete data but doesn't block. Note that merging the resulting MR does not
-automatically update the live dashboard; the dashboard repo owner must separately
-trigger data processing.
+`data/open-spec-matrics/operators/<operator>/`. The operator folder is derived from
+`metrics-report.json → operator_name` (normalized; user can override when wrong).
+
+**Pre-push guards (hard block):** non-empty `jira_task_name` and `jira_task_link`;
+if `jira_epic_name` is empty, staging uses `jira_task_name` as epic name; `productivity_metrics`
+and `report_status.complete` must be set (`/opsx-archive` required). Requires GitLab
+permission to push to upstream `main` (maintainers). Updating `main` does not alone
+refresh the live dashboard; the dashboard repo owner may still trigger data processing.
 
 ---
 
@@ -626,7 +628,7 @@ The agent either **reuses** an existing fork clone at that path or **forks + clo
 | `/opsx-apply`           | Implement tasks — one at a time, approval after each                    |
 | `/opsx-e2e`             | Generate E2E tests for a phase/final PR                                 |
 | `/opsx-archive`         | Archive a completed change                                              |
-| `/opsx-publish-metrics` | Publish metrics-report.json / qe-metrics.json to open-spec-mado as an MR |
+| `/opsx-publish-metrics` | Publish metrics JSON to open-spec-mado `main` (direct push; MR fallback if denied) |
 
 
 ### OAPE commands (ai-helpers mode only, during `/opsx-apply`)
@@ -933,7 +935,7 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 | `/opsx-apply`           | Write                                 | Implement tasks one at a time with per-task approval |
 | `/opsx-e2e`             | Write                                 | Generate E2E tests from a PR or ADR                  |
 | `/opsx-archive`         | Write                                 | Archive a completed change                           |
-| `/opsx-publish-metrics` | Write (external repo, via glab/GitLab API) | Fork/branch/MR metrics files to open-spec-mado       |
+| `/opsx-publish-metrics` | Write (external repo, via glab/Git) | Commit/push metrics files to open-spec-mado `main`   |
 | `/opsx-constitute`      | Write                                 | Generate constitution.md from harness-docs           |
 
 
@@ -997,17 +999,18 @@ The OpenSpec AI Agent is a **spec-first, gated development assistant** for Kuber
 
 **Prohibited actions:**
 
-- Push to protected branches or merge to main/master
+- Push to protected branches or merge to main/master (except **`/opsx-publish-metrics`** pushing JSON to `anankuma/open-spec-mado` `main` only)
 - Access files outside the working directory or fork checkout
 - Execute arbitrary network requests beyond GitHub and Jira APIs
 - Modify previously approved artifacts (specs, plan, repo-assessment are immutable once approved)
 - Append to source files using `>>` or `tee -a` (in-place edits only)
 
 **Explicit exception — `/opsx-publish-metrics`:** the one command permitted to write outside
-the operator working directory/fork. It only ever writes the two local telemetry JSON files
-(`metrics-report.json`, `qe-metrics.json`) verbatim, only to a fork of
-`anankuma/open-spec-mado` on GitLab, and only as an MR — it never merges. It is a standalone,
-user-invoked command (never triggered autonomously by another command).
+the operator working directory/fork. It pushes staged telemetry JSON
+(`metrics-report.json`, and `qe-metrics.json` when present) to
+`anankuma/open-spec-mado` on GitLab **`main`** via direct commit/push when the user has write
+access; otherwise fork branch + MR (step 6b). Staging may only set `jira_epic_name` from
+`jira_task_name` when epic was empty. It is standalone and never triggered autonomously by another command.
 
 - Launch background sub-agents during `/opsx-apply` or `/opsx-continue`
 - Auto-approve phase gates, PR creation, or Jira ticket creation regardless of configuration
@@ -1087,8 +1090,8 @@ The agent operates under the executing developer's identity and inherits their e
 - **Git operations:** Uses the developer's local SSH keys or configured Git credentials
 - **GitHub API:** Uses the personal access token from `config.yaml → credentials.github.token`
 - **Jira API:** Uses the personal API token from `config.yaml → credentials.jira.api_token`
-- `**/opsx-publish-metrics`:** uses the `user-github` Cursor MCP server (the developer's own
-authenticated GitHub identity via Cursor), separate from `config.yaml → credentials.github.token`
+- **`/opsx-publish-metrics`:** uses the developer's GitLab credentials (`glab` / SSH or PAT on
+  `gitlab.cee.redhat.com`), not GitHub
 
 The agent cannot access any repository, Jira project, or API the user is not already authorized to access. No service accounts are used. All operations run under the developer's identity with their existing RBAC permissions.
 

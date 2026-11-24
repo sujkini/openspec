@@ -2,19 +2,20 @@
 name: /opsx-publish-metrics
 id: opsx-publish-metrics
 category: Workflow
-description: Publish a change's metrics-report.json and qe-metrics.json to the open-spec-mado GitLab repo as a merge request
+description: Publish metrics-report.json and qe-metrics.json to open-spec-mado on main (direct push, no MR)
 argument-hint: "[change-name]"
 ---
 
 Publish a change's telemetry (`metrics-report.json` and, if present, `qe-metrics.json`) to
-[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado) as a merge request:
-fork the repo (if not already forked), create a branch, push the files under the correct
-operator folder, and open an MR against `main`.
+[anankuma/open-spec-mado](https://gitlab.cee.redhat.com/anankuma/open-spec-mado) on **`main`**
+via a direct commit and push to upstream `main` (MR fallback if push denied): copy files under
+`data/open-spec-matrics/operators/<operator>/`, commit, and `git push origin main`.
+
+Run only after **`/opsx-archive`** has captured productivity feedback — pre-push guards
+hard-block incomplete reports.
 
 This is a **standalone command**, run manually whenever you want to publish — it is
-NOT triggered automatically by `/opsx-archive`. Typically run once a change is fully
-archived and its metrics are complete, but it also works on a live (not yet archived)
-change if you want to publish interim progress.
+NOT triggered automatically by `/opsx-archive`.
 
 **Input**: Optionally specify a change name. If omitted, check conversation context;
 if still ambiguous, list both active changes (`openspec list --json`) and archived
@@ -33,14 +34,19 @@ Do NOT proceed to step 1 until authentication is verified.**
    ```
    If missing → STOP: "Install glab first (`dnf install glab` or https://gitlab.com/gitlab-org/cli)."
 
-2. Check existing auth:
+2. If `glab api user` fails with keyring but works in the user's GUI terminal, set
+   `export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"` and `unset GITLAB_TOKEN`
+   so glab uses the OS keyring (never echo tokens).
+
+3. Check existing auth:
    ```bash
    glab auth status --hostname gitlab.cee.redhat.com 2>&1
    ```
+   Or verify API: `glab api user` returns your username.
 
-3. **If already authenticated** for `gitlab.cee.redhat.com` → skip to step 7 (git protocol).
+4. **If already authenticated** for `gitlab.cee.redhat.com` → skip to step 8 (git protocol).
 
-4. **If NOT authenticated**, STOP and prompt the user (steps 4–6 and 8–9 apply only in this branch):
+5. **If NOT authenticated**, STOP and prompt the user:
 
    ```
    Before publishing metrics, export your GitLab token in the terminal.
@@ -54,22 +60,22 @@ Do NOT proceed to step 1 until authentication is verified.**
    Reply 'done' when exported.
    ```
 
-5. **Do NOT proceed** until the user replies `done` or `yes`.
+6. **Do NOT proceed** until the user replies `done` or `yes`.
 
-6. Verify the token is set (never echo or log the value):
+7. Verify the token is set (never echo or log the value):
    ```bash
    [ -n "$GITLAB_TOKEN" ] && echo "GITLAB_TOKEN is set" || echo "GITLAB_TOKEN is NOT set"
    ```
    If NOT set → STOP: "GITLAB_TOKEN is not set in this shell. Export it in the
    Cursor integrated terminal and reply 'done' again."
 
-7. **Ask git protocol** (use **AskQuestion**):
+8. **Ask git protocol** (use **AskQuestion**):
    - **HTTPS (Recommended)** — default for token auth; clone/push via `https://gitlab.cee.redhat.com/...`
    - **SSH** — clone/push via `git@gitlab.cee.redhat.com:...` (requires SSH key configured)
 
-   Default to **HTTPS** if the user skips or does not choose.
+   Default to **SSH** when `glab auth status` shows SSH configured and the user skips.
 
-8. Log in non-interactively using the exported token (skip if step 3 already authenticated):
+9. Log in non-interactively using the exported token (skip if step 4 already authenticated):
    ```bash
    glab auth login \
      --hostname gitlab.cee.redhat.com \
@@ -77,13 +83,14 @@ Do NOT proceed to step 1 until authentication is verified.**
      --git-protocol <https|ssh>
    ```
 
-9. Verify login succeeded (always run, even if step 3 was authenticated):
-   ```bash
-   glab auth status --hostname gitlab.cee.redhat.com
-   ```
-   If verification fails → STOP with the error output. Do not continue.
+10. Verify login succeeded:
+    ```bash
+    glab auth status --hostname gitlab.cee.redhat.com
+    glab api user
+    ```
+    If verification fails → STOP with the error output. Do not continue.
 
-10. Persist the chosen protocol for this run as `GIT_PROTOCOL` (`https` or `ssh`).
+11. Persist the chosen protocol for this run as `GIT_PROTOCOL` (`https` or `ssh`).
 
 **Security guardrails for this step:**
 - NEVER ask the user to paste the token in chat
@@ -94,54 +101,121 @@ Do NOT proceed to step 1 until authentication is verified.**
 
 The change may already be archived (moved to `openspec/changes/archive/YYYY-MM-DD-<name>/`)
 or still live (`openspec/changes/<name>/`). Check both locations, preferring the
-archived one if both somehow exist:
+archived one if both somehow exist. Also accept change dirs at the repo root when used
+outside `openspec/changes/` (same `telemetry/` layout).
 
 ```bash
 ls openspec/changes/archive/*-<name>/telemetry/ 2>/dev/null
 ls openspec/changes/<name>/telemetry/ 2>/dev/null
+ls <name>/telemetry/ 2>/dev/null
 ```
 
 Read whichever of these exist from the resolved directory:
-- `telemetry/metrics-report.json` (development metrics)
+- `telemetry/metrics-report.json` (development metrics — required for publish)
 - `telemetry/qe-metrics.json` (QE/E2E metrics — only if `/opsx-e2e` ran for this change)
 
-**If neither file exists:** STOP — "No telemetry found for `<name>`. Run `/opsx-apply`
-(and `/opsx-archive`) first." Do not proceed.
+**If `metrics-report.json` does not exist:** STOP — "No development telemetry found for
+`<name>`. Run `/opsx-apply` (and `/opsx-archive`) first." Do not proceed.
 
-### 2. Check completeness (warn, don't block)
+### 2. Pre-push publish guard (HARD BLOCK — before touching GitLab)
 
-- If `metrics-report.json` exists: check `report_status.complete`.
-- If `qe-metrics.json` exists: check `qe_report_status.complete`.
+Run guards on staging copies in a temp directory. **Do not clone the dashboard repo**
+until all guards pass.
 
-If either is `false`, warn the user:
-**"⚠ `<file>` is marked incomplete (`report_status.complete: false` — missing
-`<missing_fields>`). This usually means `/opsx-archive` hasn't fully run yet.
-Publish anyway?"** — proceed only if the user confirms.
+#### 2a. Prepare staging JSON (allowed normalization only)
 
-### 3. Determine the operator folder name
+For each file to publish, copy the source to `$STAGED_DIR/<basename>` then apply **only**
+this metadata fix:
 
-Read `operator_name` from `metrics-report.json` (top-level field, set automatically
-by `telemetry/report.py` from `git remote get-url origin` at telemetry-generation time).
+- If `jira_epic_name` is empty/null/whitespace **and** `jira_task_name` is non-empty after
+  trim → set `jira_epic_name` to `jira_task_name` in the staging copy.
 
-- **If `metrics-report.json` exists:** use its `operator_name` field.
-- **If only `qe-metrics.json` exists** (no dev metrics were ever generated for this
-  change): run `git remote get-url origin` directly and derive the name the same way
-  (strip `.git`, take the last path segment).
+Use a short Python script (preferred) or `jq` — never hand-edit token counts, phases,
+tasks, or productivity numbers.
 
-**Normalize** to the dashboard repo's folder convention — lowercase, hyphens → underscores:
+```bash
+STAGED_DIR="$(mktemp -d)"
+SRC_METRICS="<path-to-change>/telemetry/metrics-report.json"
+SRC_QE="<path-to-change>/telemetry/qe-metrics.json"   # omit if missing
+
+cp "$SRC_METRICS" "$STAGED_DIR/metrics-report.json"
+test -f "$SRC_QE" && cp "$SRC_QE" "$STAGED_DIR/qe-metrics.json"
+
+python3 <<'PY'
+import json, sys
+from pathlib import Path
+
+STAGED = Path(sys.argv[1])
+
+def nonempty(s):
+    return bool(s and str(s).strip())
+
+def guard_metrics(path: Path) -> None:
+    data = json.loads(path.read_text())
+    task = data.get("jira_task_name") or ""
+    link = data.get("jira_task_link") or ""
+    if not nonempty(task):
+        sys.exit(f"STOP: {path.name}: jira_task_name is empty. Fix inputs/jira.yaml (jira_summary) and regenerate the report.")
+    if not nonempty(link):
+        sys.exit(f"STOP: {path.name}: jira_task_link is empty. Ensure jira_key is set and regenerate the report.")
+    if not nonempty(data.get("jira_epic_name") or ""):
+        data["jira_epic_name"] = task.strip()
+    if not nonempty(data.get("jira_epic_name")):
+        sys.exit(f"STOP: {path.name}: jira_epic_name and jira_task_name are both empty.")
+    pm = data.get("productivity_metrics")
+    if pm is None:
+        sys.exit(f"STOP: {path.name}: productivity_metrics not captured. Run /opsx-archive first.")
+    rs = data.get("report_status") or {}
+    if rs.get("complete") is not True:
+        missing = rs.get("missing_fields") or []
+        sys.exit(f"STOP: {path.name}: report incomplete (missing: {missing}). Run /opsx-archive first.")
+    if pm.get("story_points_delivered") is None:
+        sys.exit(f"STOP: {path.name}: productivity_metrics.story_points_delivered is missing.")
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+def guard_qe(path: Path) -> None:
+    data = json.loads(path.read_text())
+    task = data.get("jira_task_name") or ""
+    link = data.get("jira_task_link") or ""
+    if not nonempty(task):
+        sys.exit(f"STOP: {path.name}: jira_task_name is empty.")
+    if not nonempty(link):
+        sys.exit(f"STOP: {path.name}: jira_task_link is empty.")
+    if not nonempty(data.get("jira_epic_name") or "") and nonempty(task):
+        data["jira_epic_name"] = task.strip()
+    qpm = data.get("qe_productivity_metrics") or data.get("productivity_metrics")
+    qrs = data.get("qe_report_status") or data.get("report_status") or {}
+    if qpm is None:
+        sys.exit(f"STOP: {path.name}: QE productivity not captured. Complete QE archive prompts.")
+    if qrs.get("complete") is not True:
+        missing = qrs.get("missing_fields") or []
+        sys.exit(f"STOP: {path.name}: QE report incomplete (missing: {missing}).")
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+guard_metrics(STAGED / "metrics-report.json")
+qe = STAGED / "qe-metrics.json"
+if qe.is_file():
+    guard_qe(qe)
+PY "$STAGED_DIR"
 ```
-cert-manager  → cert_manager
-ZTWIM         → ztwim
-must-gather   → must_gather
-```
 
-If the normalized name doesn't match one of the dashboard's existing operator folders,
-**that's fine — proceed anyway.** The push will implicitly create the new folder.
+On any STOP message → exit the command and show the user how to fix (`/opsx-archive`,
+`inputs/jira.yaml`, regenerate telemetry). **Do not offer "publish anyway".**
 
-### 4. Determine filenames
+#### 2b. Operator folder (optional override)
 
-Read `jira_key` from `metrics-report.json → jira_task_link` (extract the trailing
-path segment) or from `inputs/jira.yaml → jira_key` if the change is still live.
+Read `operator_name` from staged `metrics-report.json`. If empty or clearly wrong for the
+operator repo (e.g. `openspec` when the user says `cert-manager`), use **AskQuestion** once:
+**"Dashboard operator folder? (default: `<normalized operator_name>`)"** — normalize:
+lowercase, hyphens → underscores (`cert-manager` → `cert_manager`).
+
+If only `qe-metrics.json` is published (should not happen — dev metrics required), derive
+from `git remote get-url origin` the same way as `telemetry/report.py`.
+
+### 3. Determine filenames
+
+Read `jira_key` from `metrics-report.json → run.jira_key` or `jira_task_link` (trailing
+segment) or from `inputs/jira.yaml → jira_key`.
 
 Read `codegen_mode` from `openspec/config.yaml → flags.codegen_mode` (default: `direct`).
 
@@ -154,184 +228,168 @@ Build target filenames:
 
 | File | Target path |
 |------|-------------|
-| `metrics-report.json` | `data/open-spec-matrics/operators/<operator>/<JIRA_KEY>-<codegen_mode>[-<model_slug>]-metrics-report.json` |
-| `qe-metrics.json` | `data/open-spec-matrics/operators/<operator>/QE/<JIRA_KEY>-qe-metrics.json` |
+| Staged dev metrics | `data/open-spec-matrics/operators/<operator>/<JIRA_KEY>-<codegen_mode>[-<model_slug>]-metrics-report.json` |
+| Staged qe metrics (if any) | `data/open-spec-matrics/operators/<operator>/QE/<JIRA_KEY>-qe-metrics.json` |
 
-Only include a row for a file that actually exists (from step 1).
-
-### 5. Fork and clone the dashboard repo
+### 4. Clone dashboard repo on `main`
 
 ```bash
-GITLAB_UPSTREAM="https://gitlab.cee.redhat.com/anankuma/open-spec-mado.git"
+GITLAB_REPO="anankuma/open-spec-mado"
 WORK_DIR="$(mktemp -d)"
 ```
 
-1. **Fork** (if not already forked):
-   ```bash
-   glab repo fork anankuma/open-spec-mado --clone=false 2>/dev/null || true
-   ```
-   If `glab` is not available, instruct the user:
-   "Fork https://gitlab.cee.redhat.com/anankuma/open-spec-mado via the GitLab UI, then re-run this command."
+| `GIT_PROTOCOL` | Clone URL |
+|----------------|-----------|
+| `https` | `https://gitlab.cee.redhat.com/anankuma/open-spec-mado.git` |
+| `ssh` | `git@gitlab.cee.redhat.com:anankuma/open-spec-mado.git` |
 
-2. **Determine fork URL** from `GIT_PROTOCOL` chosen in step 0:
-   ```bash
-   GL_USER=$(glab auth status --hostname gitlab.cee.redhat.com 2>&1 | grep -oP 'Logged in to .* as \K\S+')
-   ```
-   Do NOT fall back to `git config user.name` — if `GL_USER` is empty, STOP (auth broken).
+```bash
+git clone --branch main "$CLONE_URL" "$WORK_DIR/open-spec-mado"
+cd "$WORK_DIR/open-spec-mado"
+git pull --ff-only origin main
+```
 
-   | `GIT_PROTOCOL` | `FORK_URL` |
-   |----------------|------------|
-   | `https` (default) | `https://gitlab.cee.redhat.com/${GL_USER}/open-spec-mado.git` |
-   | `ssh` | `git@gitlab.cee.redhat.com:${GL_USER}/open-spec-mado.git` |
+If clone/pull fails → STOP with error.
 
-3. **Clone and create branch:**
-   ```bash
-   git clone --depth 1 "$FORK_URL" "$WORK_DIR/open-spec-mado"
-   cd "$WORK_DIR/open-spec-mado"
-   git remote add upstream "$GITLAB_UPSTREAM" 2>/dev/null || true
-   git fetch upstream main
-   git checkout -b "metrics/<jira-key-lowercase>-$(date +%Y%m%d-%H%M)" upstream/main
-   ```
-
-### 6. Copy files and commit
+### 5. Copy staged files, commit
 
 ```bash
 OPERATOR_DIR="data/open-spec-matrics/operators/<operator>"
 mkdir -p "$OPERATOR_DIR"
-cp <path-to-metrics-report.json> "$OPERATOR_DIR/<dev-filename>"
+cp "$STAGED_DIR/metrics-report.json" "$OPERATOR_DIR/<dev-filename>"
 
-# Only if qe-metrics.json exists:
+# Only if qe-metrics was staged in step 2:
 mkdir -p "$OPERATOR_DIR/QE"
-cp <path-to-qe-metrics.json> "$OPERATOR_DIR/QE/<qe-filename>"
+cp "$STAGED_DIR/qe-metrics.json" "$OPERATOR_DIR/QE/<qe-filename>"
 
 git add "$OPERATOR_DIR/"
 git commit -m "Add <JIRA_KEY> metrics for <operator>"
 ```
 
-### 7. Push branch (always attempt)
+Single atomic commit for both files when QE is included.
+
+### 6. Push to upstream `main` (preferred)
 
 ```bash
-git push -u origin "metrics/<branch-name>"
+git push origin main
 ```
 
-If push fails → STOP with error. Do not attempt MR creation.
+- **On success** → continue to step 8 (report **direct** success).
+- **On permission denied** (`not allowed to push`, `403`, `deny updating a protected ref`) →
+  **do not stop** — run **step 6b (MR fallback)** using the **same commit** already created
+  in step 5 (do not re-run guards or change staged file content).
 
-### 7b. Open merge request (attempt — degrade gracefully on failure)
+### 6b. MR fallback (no write access to upstream `main`)
 
-Try to open an MR against the upstream repo:
-```bash
-glab mr create \
-  --hostname gitlab.cee.redhat.com \
-  --repo anankuma/open-spec-mado \
-  --source-branch "metrics/<branch-name>" \
-  --target-branch main \
-  --title "Add <JIRA_KEY> metrics — <operator>" \
-  --description "$(cat <<'EOF'
-## Metrics for <JIRA_KEY> (<operator>)
+Use when step 6 fails. Goal: push the metrics commit to **your fork** on a short-lived branch
+and open an MR into `anankuma/open-spec-mado` `main`.
 
-| Metric | Value |
-|--------|-------|
-| Story points delivered | <productivity_metrics.story_points_delivered, if present> |
-| Time saved | <productivity_metrics.time_saved_hours> hours (est.) |
-| Satisfaction | <productivity_metrics.satisfaction_rating>/5 |
-| Total tokens | <global_health.total_tokens_consumed> |
-| Estimated cost | $<global_health.estimated_cost_usd> |
-| QE story points | <qe productivity_metrics.story_points_delivered, if included> |
-| QE time saved | <qe productivity_metrics.time_saved_hours> hours (if included) |
-| QE satisfaction | <qe productivity_metrics.satisfaction_rating>/5 (if included) |
+1. **Resolve GitLab username** (required for `--head`):
+   ```bash
+   export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+   GL_USER=$(glab api user 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['username'])")
+   test -n "$GL_USER" || GL_USER=$(glab auth status --hostname gitlab.cee.redhat.com 2>&1 | grep -oP 'Logged in to .* as \K\S+' | head -1)
+   ```
+   If empty → STOP (auth broken).
 
-Generated by `/opsx-publish-metrics`.
-EOF
-)"
-```
+2. **Ensure fork exists:**
+   ```bash
+   glab repo fork anankuma/open-spec-mado --clone=false 2>/dev/null || true
+   ```
 
-**If MR creation fails** (auth, permissions, cross-project, or any `glab` error):
-- Do NOT fail the whole command — the branch push (step 7) is the critical part
-- Output partial success:
+3. **Branch name** (from repo cwd after step 5):
+   ```bash
+   BRANCH="metrics/<jira-key-lowercase>-$(date +%Y%m%d-%H%M)"
+   ```
 
-```
-## Metrics Published (MR manual step required)
+4. **Push commit to fork** (still in `$WORK_DIR/open-spec-mado`; `origin` is upstream):
+   ```bash
+   # GIT_PROTOCOL ssh (default):
+   FORK_PUSH="git@gitlab.cee.redhat.com:${GL_USER}/open-spec-mado.git"
+   # or https:
+   # FORK_PUSH="https://gitlab.cee.redhat.com/${GL_USER}/open-spec-mado.git"
 
-Branch pushed: https://gitlab.cee.redhat.com/<GL_USER>/open-spec-mado/-/tree/metrics/<branch-name>
+   git branch "$BRANCH"
+   git push "$FORK_PUSH" "$BRANCH:$BRANCH"
+   ```
+   If push fails → STOP with fork push error.
 
-MR could not be created automatically (<error summary>).
-Create the MR manually:
-https://gitlab.cee.redhat.com/anankuma/open-spec-mado/-/merge_requests/new?merge_request%5Bsource_branch%5D=metrics/<branch-name>&merge_request%5Btarget_branch%5D=main
-```
+5. **Open MR** (attempt; degrade gracefully):
+   ```bash
+   glab mr create \
+     --repo anankuma/open-spec-mado \
+     --head "${GL_USER}/open-spec-mado" \
+     --source-branch "$BRANCH" \
+     --target-branch main \
+     --title "Add <JIRA_KEY> metrics — <operator>" \
+     --description "$(cat <<'EOF'
+   ## Metrics for <JIRA_KEY> (<operator>)
 
-Fall back to GitLab API only if `glab mr create` fails and `$GITLAB_TOKEN` is set:
-```bash
-curl --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-  "https://gitlab.cee.redhat.com/api/v4/projects/${GL_USER}%2Fopen-spec-mado/merge_requests" \
-  --data-urlencode "source_branch=metrics/<branch-name>" \
-  --data-urlencode "target_branch=main" \
-  --data-urlencode "title=Add <JIRA_KEY> metrics — <operator>" \
-  --data-urlencode "description=<summary table>"
-```
-If API also fails → keep the manual MR URL from above.
+   Publish staged telemetry to `data/open-spec-matrics/operators/<operator>/`.
+   Generated by `/opsx-publish-metrics` (MR fallback — no upstream main write access).
+   EOF
+   )" \
+     --yes
+   ```
+
+   **If `glab mr create` fails:** report **partial success** — fork branch URL + manual MR link:
+   `https://gitlab.cee.redhat.com/anankuma/open-spec-mado/-/merge_requests/new?merge_request%5Bsource_branch%5D=<branch>`
+   (user sets source project to `${GL_USER}/open-spec-mado` and target to `anankuma/open-spec-mado` `main`).
+
+6. Continue to step 8 — report **MR fallback** success (include MR URL when created).
 
 ### 8. Cleanup and report
 
 ```bash
-rm -rf "$WORK_DIR"
+rm -rf "$WORK_DIR" "$STAGED_DIR"
 ```
 
-Output the MR URL and remind the user:
-
-**"MR opened: `<MR URL>`. The dashboard repo owner needs to merge this MR for the data to appear."**
-
-## Output On Success
+## Output On Success (direct `main` push)
 
 ```
 ## Metrics Published
 
 **Change:** <change-name>
 **Operator:** <operator folder>
+**Method:** direct push
+**Commit:** <short-sha> on anankuma/open-spec-mado main
 **Files published:**
-- data/open-spec-matrics/operators/<operator>/<dev-filename>          (if included)
-- data/open-spec-matrics/operators/<operator>/QE/<qe-filename>        (if included)
-**Branch:** <your-username>:metrics/<branch-name>
-**MR:** <MR URL>
+- data/open-spec-matrics/operators/<operator>/<dev-filename>
+- data/open-spec-matrics/operators/<operator>/QE/<qe-filename>   (if included)
+**Tree:** https://gitlab.cee.redhat.com/anankuma/open-spec-mado/-/tree/main/data/open-spec-matrics/operators/<operator>
 ```
 
-## Output On Partial Success (branch pushed, MR manual)
+## Output On Success (MR fallback)
 
 ```
-## Metrics Published (MR manual step required)
+## Metrics Published (MR fallback)
 
 **Change:** <change-name>
 **Operator:** <operator folder>
-**Files published:**
-- data/open-spec-matrics/operators/<operator>/<dev-filename>          (if included)
-- data/open-spec-matrics/operators/<operator>/QE/<qe-filename>        (if included)
-**Branch:** https://gitlab.cee.redhat.com/<GL_USER>/open-spec-mado/-/tree/metrics/<branch-name>
-**MR:** Create manually — see link above
+**Method:** fork branch + merge request (upstream main push denied)
+**Branch:** <GL_USER>/open-spec-mado:`<branch>`
+**Files published:** (same paths as above, on branch)
+**MR:** <MR URL>
 ```
+
+Remind: a maintainer must **merge the MR** for data to land on upstream `main`. Merging does not
+alone refresh the live dashboard — the dashboard owner may still trigger data processing.
 
 ## Guardrails
 
-- **Step 0 (GitLab auth) is mandatory** — do not fork, clone, push, or open an MR
-  until `glab auth status --hostname gitlab.cee.redhat.com` succeeds.
+- **Step 0 (GitLab auth) is mandatory** — verify `glab api user` before cloning.
+- **Pre-push guard (step 2) is mandatory** — productivity and Jira metadata must pass;
+  no interim/partial publish to `main`.
 - **Never ask the user to paste `GITLAB_TOKEN` in chat** — export in terminal only.
 - **Never echo, log, or write `GITLAB_TOKEN`** to any file or command output.
-- **Default git protocol is HTTPS** — use SSH only when the user explicitly chooses it in step 0.
-- **Never invent metrics.** Only publish the raw JSON exactly as written by
-  `telemetry/report.py` / `telemetry/qe_metrics.py` — do not summarize, reformat,
-  round, or edit values before pushing.
-- **Do not publish if neither file exists** for the resolved change — stop with a
-  clear error (step 1).
-- **Warn but don't hard-block on incompleteness** (step 2) — unlike `/opsx-archive`,
-  this command is not a compliance gate; the user may legitimately want to publish
-  partial/interim data.
-- **Required-field parity with the target repo:** ensure non-empty `jira_task_name` and
-  `jira_task_link` on every JSON file pushed. Both `metrics-report.json` (via
-  `telemetry/jira_metadata.py`) and `qe-metrics.json` already populate these —
-  do not push a file where either is empty; if empty, tell the user to ensure
-  `inputs/jira.yaml` has `jira_key`/`jira_summary` set, then regenerate the report.
-- **Use a single atomic commit** covering both files — do not make two separate
-  commits/MRs for one change.
-- **This command never merges the MR** — that requires the target repo owner's action.
-- **Prefer `glab` CLI** for fork/MR operations. If MR creation fails after a
-  successful push, output the manual MR URL — do not discard the pushed branch.
-- **If `glab` is not installed**, STOP at step 0 and tell the user to install glab
-  (`dnf install glab` or https://gitlab.com/gitlab-org/cli).
+- **Never invent metrics.** Publish telemetry from staging copies that differ from source
+  **only** by the `jira_epic_name` ← `jira_task_name` fallback when epic was empty.
+- **`metrics-report.json` is required** — QE-only publish is not supported.
+- **Use a single atomic commit** covering dev + QE files in one push.
+- **Prefer direct `main` push** to `anankuma/open-spec-mado`. If upstream push is denied,
+  **automatically fall back** to fork branch + MR (step 6b); do not re-validate or alter staged JSON.
+- **This command never merges the MR** — maintainer merge is required after fallback.
+- **Do not modify** the change's source `telemetry/*.json` on disk when applying epic
+  fallback — only the staging copy that gets committed to GitLab.
+- **If `glab` is not installed**, STOP at step 0 (`dnf install glab` or
+  https://gitlab.com/gitlab-org/cli).
