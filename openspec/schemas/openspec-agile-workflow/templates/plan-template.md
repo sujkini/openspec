@@ -29,9 +29,15 @@ If inputs conflict:
 - Do NOT invent file paths, APIs, ports, feature gates, or behaviors not evidenced by the inputs.
 - If repo_assessment.md indicates partial tooling / low confidence, include explicit verification
   prerequisites rather than guessing.
-- **COMPLETENESS IS MANDATORY (target ≥80–85%):** Output ALL sections §0 through §8 in full.
+- **COMPLETENESS IS MANDATORY (target ≥80–85%):** Output ALL sections §0 through §9 in full.
   If length-constrained, shorten phase prose — NEVER stop mid-table or mid-phase. §8 MUST list every
   open question row completely or state "None — all decisions resolved in this plan."
+- **NO SILENT DESCOPE:** Every FR and every `SR` from validated_specs.md MUST be either (a) placed in
+  an implementation phase, or (b) recorded in §9 Deviations from specification. A requirement may not
+  simply be absent. You MUST NOT justify dropping or deferring a requirement by citing the source
+  ("per EP", "per spec", "sufficient per the enhancement") when the source in fact requires it —
+  re-read the SR's verbatim anchor before writing any such rationale. Narrowing scope ("MVP",
+  "later", "not required for now") is a Deviation and must be declared in §9, not buried in prose.
 - **Repo-grounded reality check is mandatory in §1:** Cross-reference repo_assessment.md §0/§1/§11.1.
   If the assessment says a feature is NOT on the pinned branch, plan greenfield work — do NOT frame
   phases as "verify existing implementation" or "harden existing controller" without branch evidence.
@@ -77,6 +83,7 @@ Output EXACTLY ONE markdown document using these headings and order:
 ## 6. Verification matrix (maps to spec acceptance)
 ## 7. Risks, migrations, and operational follow-ups
 ## 8. Open questions / SME decisions
+## 9. Deviations from specification
 
 ### Phase template (repeat for every phase)
 Each phase MUST include these bullets:
@@ -112,6 +119,9 @@ Before finalizing, verify:
 - [ ] Target files come only from repo_assessment.md or are marked UNVERIFIED + discovery step
 - [ ] §5 contains NO standalone e2e-only phases (e2e belongs in §6 only)
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)
+- [ ] §6 rows cite spec ids (FR/SC/SR); every behavioral-constraint FR and every test-obligation SR has a row
+- [ ] Every FR and SR from specs.md is either placed in a phase OR listed in §9 Deviations — none silently absent
+- [ ] §9 present; each deviation has "Source-cite verified? = yes"; no rationale misattributes a cut to the source
 - [ ] §7 risks derived from repo_assessment §5 and §11.1 UNVERIFIED items
 - [ ] §8 complete — every open question has owner + default assumption; no truncated rows
 - [ ] No false "already exists" claims contradicted by repo_assessment branch verification
@@ -209,13 +219,17 @@ co-generation stays inside implementation phases/tasks.
 
 ### § 6. Verification matrix (maps to spec acceptance)
 
-| Category | Coverage | Files / Suites |
-|----------|----------|----------------|
-| Unit | what unit tests cover | file paths from repo_assessment |
-| Integration | what integration tests cover | file paths |
-| E2E | what e2e tests cover | file paths |
-| Manual / Cluster | manual verification steps | runbook commands |
-| N/A | what is not tested and why | - |
+Each row MUST cite the spec id(s) it verifies (`FR-xx`, `SC-xx`, or `SR-xx`) — not prose alone.
+Every `test-obligation` SR from specs.md must appear in a row at its correct tier (unit vs
+cluster/e2e). Behavioral-constraint FRs (drift repair, precedence, ordering) must each have a row.
+
+| Category | Spec ids (FR/SC/SR) | Coverage | Files / Suites |
+|----------|---------------------|----------|----------------|
+| Unit | FR-xx, SR-xx | what unit tests cover | file paths from repo_assessment |
+| Integration | FR-xx | what integration tests cover | file paths |
+| E2E | SR-xx (cluster-tier) | what e2e tests cover | file paths |
+| Manual / Cluster | SC-xx | manual verification steps | runbook commands |
+| N/A | - | what is not tested and why | - |
 
 ### § 7. Risks, migrations, and operational follow-ups
 
@@ -233,6 +247,24 @@ answer it (SME / constitution / agents.md / downstream repo), and what the plan 
 answer arrives before Task Creation.
 
 If no open questions: "None — all decisions resolved in this plan."
+
+### § 9. Deviations from specification
+
+Declare every requirement from validated_specs.md that this plan does NOT fully implement in the
+planned phases — whether deferred, reduced, or dropped. This section makes scope cuts visible to the
+approver instead of letting them disappear silently. An empty ledger is allowed and MUST be stated
+explicitly as "None — every FR and SR is placed in a phase."
+
+| Spec id (FR/SR) | Requirement | Deviation (defer / reduce / drop) | Rationale | Source-cite verified? |
+|-----------------|-------------|-----------------------------------|-----------|-----------------------|
+| SR-xx | [requirement] | defer to follow-up | [why] | yes — re-read anchor; source does NOT require it here |
+
+Rules:
+- A deviation's Rationale MUST NOT claim the source permits the cut when the source's `SR` anchor
+  requires it. Re-read the verbatim anchor; set "Source-cite verified?" to `yes` only after checking.
+  If the source requires it and you are cutting it anyway, say so plainly ("source requires this;
+  deferred for capacity — needs approver sign-off") rather than misattributing the decision to the source.
+- Deferring a requirement the source requires is an approver decision — flag it for explicit sign-off.
 
 ---
 

@@ -62,6 +62,7 @@ Patterns that good assessments demonstrate and your output MUST match:
 - Explicit "dead code / do not edit" traps called out in §1.3 and §2
 - §4.2 as a numbered hook/pipeline table with error behavior column
 - §5 entries state WHAT to reuse and WHEN (not just file paths)
+- §5.1 keep/drop/adapt table present whenever an exemplar is reused for only part of its behavior
 - §6 guardrails grouped by category (Structural, API, Build, Deployment, Codegen, Security)
 - §7 change-cascade table with real `make` / `hack/verify-*` commands from the Makefile
 - §8.2 copy-paste-ready test commands
@@ -245,6 +246,25 @@ to avoid proposing redundant or conflicting changes.*
 Include library dependencies that provide reusable patterns:
 * `dependency@version` — use for [specific capability]. Do not reimplement.
 
+### 5.1 Partial Exemplar Reuse (keep / drop / adapt)
+
+*When the feature will follow an existing exemplar (a sibling controller/component) for only PART of
+its behavior, you MUST enumerate that exemplar's FULL relevant behavior set so nothing is dropped
+implicitly.* Selective reuse ("copy the asset list but not the apply mechanics") silently loses the
+exemplar's other behaviors (e.g. its drift watch, its metadata/label handling, its resource ordering)
+— a recurring source of missed requirements. For each exemplar cited for partial reuse, emit a table:
+
+| Exemplar behavior | Decision (keep / drop / adapt) | Reason |
+|-------------------|--------------------------------|--------|
+| Asset/manifest list pattern | keep | matches feature need |
+| Apply mechanics (e.g. SSA vs update-with-retry) | adapt | this component uses a different apply path |
+| Drift watch / re-enqueue on managed-object change | [keep/drop/adapt] | [must be an explicit decision, not silent] |
+| Metadata/label handling & precedence | [keep/drop/adapt] | [explicit] |
+| Resource ordering / sequencing | [keep/drop/adapt] | [explicit] |
+
+Every behavior the exemplar exhibits must have an explicit decision. A `drop` requires a one-line
+reason; nothing inherited from an exemplar may be left unstated.
+
 ## 6. Architectural Guardrails
 *Rules the Planner MUST follow based on current repository patterns.*
 *Each guardrail must cite evidence (file, pattern, or convention observed).*
@@ -397,6 +417,7 @@ Before finalizing your assessment, verify ALL items pass:
 - [ ] Section 4.1 lists configurable fields in tables (abbreviate if needed — do not omit section)
 - [ ] Section 4.2 is a numbered hook/pipeline table with error behavior — from reading code, not file names
 - [ ] Sections 5–6 present (Reusable Assets + Guardrails by category) — mandatory, not optional
+- [ ] §5.1 present when an exemplar is partially reused: every exemplar behavior has an explicit keep/drop/adapt decision (watch, metadata/labels, ordering all addressed)
 - [ ] Section 7 has a concrete change cascade table with real verification commands from Makefile/hack/
 - [ ] Section 8.2 has copy-paste-ready test commands (use actual Makefile target names)
 - [ ] Section 9.4 has at least one "How to add..." walkthrough based on observed patterns

@@ -13,6 +13,14 @@ Planning/codegen agents fail when specs omit scope boundaries, testable acceptan
 ## Task
 1) Evaluate COMPLETENESS and QUALITY using the rubric below.
 2) Score each dimension 0–100 with brief justification internally (do not add a separate prose section unless output_mode allows summary).
+2a) **Surface behavioral constraints and test obligations.** Scan the ENTIRE spec — including the
+   sections downstream stages skim (Implementation Details/Notes/Constraints, Test Plan, Workflow,
+   Support Procedures) — and extract (i) `behavioral_constraints`: technology-agnostic behavioral
+   guarantees the spec states (e.g. "watch and repair drift", "restore managed objects when edited
+   out of band", "operator-owned values take precedence over user values", "apply X before Y"), and
+   (ii) `test_obligations`: anything the spec requires be tested, each tagged `unit` or `cluster`.
+   These feed the downstream Source Requirement Ledger so constraints are not lost when the spec is
+   abstracted. Extract only what the spec states — do not invent.
 3) Emit ONE JSON object matching the schema below. The JSON MUST be valid and parseable.
 4) If output_mode is json_plus_summary (default), AFTER the JSON object, output up to 8 bullet lines of executive summary (no code fences). If output_mode is json_only, emit JSON only.
 
@@ -73,6 +81,12 @@ Set overall_status to:
     "overall_score": 0,
     "overall_status": "PASS|NEEDS_REVISION|BLOCKED",
     "missing_elements": ["string"],
+    "behavioral_constraints": [
+      { "constraint": "technology-agnostic behavioral guarantee", "quote": "verbatim from spec", "section": "source section" }
+    ],
+    "test_obligations": [
+      { "obligation": "what must be tested", "tier": "unit|cluster", "quote": "verbatim from spec", "section": "Test Plan" }
+    ],
     "quality_issues": [
       { "type": "Ambiguity|Testability|Sizing|Consistency", "quote": "string", "suggestion": "string" }
     ],
