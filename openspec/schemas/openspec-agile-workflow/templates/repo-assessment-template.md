@@ -280,13 +280,19 @@ Organize guardrails by category:
 ## 7. Change Cascade Checklist
 *When you change X, you MUST also change Y. This is the most critical section for the Planning Agent —
 it prevents plans that miss cascading steps and fail CI.*
-*Format as a table mapping trigger → required cascading changes → verification command.*
+*Format as a table mapping trigger → required cascading changes → **committed output files** → verification command.*
+Each row MUST name the **regenerated artifact paths a PR is required to include** (not just the make
+target), so downstream plan/tasks can make them acceptance items. A marker/annotation that is not
+regenerated into its output file does not take effect.
 
-| When you change... | You must also... | Verify with... |
-|---|---|---|
-| Example: API type fields in `api/` | Regenerate deepcopy, update CRD bases, regenerate bundle, update swagger | `make generate && make manifests && make bundle && make verify` |
+| When you change... | You must also... | Committed output files | Verify with... |
+|---|---|---|---|
+| Example: API type fields in `api/` | Regenerate deepcopy, CRD bases, bundle, swagger | `zz_generated.deepcopy.go`, `config/crd/bases/*.yaml`, `bundle/manifests/*`, `api/.../swagger.json` | `make generate && make manifests && make bundle && make verify` |
+| Example: kubebuilder RBAC marker in a controller | Regenerate role + bundle ClusterRole | `config/rbac/role.yaml`, `bundle/manifests/*clusterrole*` | `make manifests && make bundle` |
+| Example: new bindata asset (YAML) | Regenerate embedded bindata | `pkg/operator/assets/bindata.go` | `make update-bindata && make verify-bindata` |
 
 Include ALL cascades discovered in the codebase (type changes, RBAC, images, bindata, etc.).
+Every cascade row's "Committed output files" column is mandatory.
 
 ## 8. Test & CI Reference
 *How to test changes and what CI will enforce — the Planning Agent must include test tasks in every plan.*
@@ -419,6 +425,7 @@ Before finalizing your assessment, verify ALL items pass:
 - [ ] Sections 5–6 present (Reusable Assets + Guardrails by category) — mandatory, not optional
 - [ ] §5.1 present when an exemplar is partially reused: every exemplar behavior has an explicit keep/drop/adapt decision (watch, metadata/labels, ordering all addressed)
 - [ ] Section 7 has a concrete change cascade table with real verification commands from Makefile/hack/
+- [ ] §7 every cascade row names the committed output files (regenerated artifacts), not only the make target
 - [ ] Section 8.2 has copy-paste-ready test commands (use actual Makefile target names)
 - [ ] Section 9.4 has at least one "How to add..." walkthrough based on observed patterns
 - [ ] Section 11.1 honestly lists UNVERIFIED items AND branch-specific absences

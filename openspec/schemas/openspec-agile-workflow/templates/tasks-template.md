@@ -80,6 +80,20 @@ When `phase_scope` is absent (task_execution_mode = "one-shot"): generate all ph
     A behavioral constraint that is unit-testable (e.g. metadata precedence, drift repair via fake
     client) is a unit-tier obligation and MUST get a named unit test in a task — it is a defect to
     leave it to the e2e stage.
+    **Parameter coverage:** if an obligation enumerates multiple inputs (several label keys, ports,
+    peer namespaces), the named test(s) MUST assert EACH enumerated input — one test covering all, or
+    one named test per input. A test asserting only a subset (e.g. `owned-by` but not the
+    `app.kubernetes.io/*` keys the source lists) does NOT discharge the obligation.
+4b) **Change-Cascade Closure (mandatory):** Any task that adds or edits a **cascade trigger** (a
+    kubebuilder RBAC marker, an API/CRD type field, a new bindata asset, an image reference — per
+    repo-assessment §7) MUST include in its §4 Acceptance BOTH (i) the regeneration command
+    (`make manifests` / `make bundle` / `make update-bindata`) AND (ii) the **regenerated output
+    files as committed artifacts** (e.g. `config/rbac/role.yaml`, `bundle/manifests/*`,
+    `pkg/operator/assets/bindata.go`). A marker/field without its regenerated artifact is incomplete
+    and fails CI / has no runtime effect.
+4c) **Delivery-obligation tasks (mandatory):** Every `delivery-obligation` SR (documentation,
+    upgrade/migration notes, runbook/support procedures) MUST have a covering task that produces the
+    artifact (e.g. a documentation task with the target doc path). These are not e2e and are in scope.
 5) **E2e exclusion (mandatory):** Do NOT create e2e or Testing_Agent tasks — e2e is out of
    OAPE scope. Note discarded e2e coverage in §0 as "e2e — out of OAPE scope" but do not
    emit rows in §3 or payloads in §4.
@@ -119,10 +133,17 @@ One bullet per FR-xx / SC-xx / AC-xx with covering Task IDs.
 
 ### Source Requirements & Test Obligations → Task Coverage
 One bullet per `SR-xx` from the specs.md Source Requirement Ledger — especially every
-`behavioral-constraint` and `test-obligation` SR — with its covering Task ID(s) and, for
-unit-tier obligations, the **named test** that discharges it. Every unit-tier obligation must
-show a named test; every cluster/e2e-tier obligation must be marked "routed to e2e stage
-(out of OAPE scope)". No SR may be absent from this list.
+`behavioral-constraint`, `test-obligation`, and `delivery-obligation` SR — with its covering Task
+ID(s) and, for unit-tier obligations, the **named test** that discharges it. Every unit-tier
+obligation must show a named test; every cluster/e2e-tier obligation must be marked "routed to e2e
+stage (out of OAPE scope)"; every `delivery-obligation` SR must show a covering task (e.g. a
+documentation task). No SR may be absent from this list.
+
+### Change-Cascade Coverage
+One bullet per cascade trigger introduced (from repo-assessment §7 — RBAC marker, API/CRD field,
+bindata asset, image ref) → covering Task ID → the regenerated output files that task MUST commit
+(e.g. `config/rbac/role.yaml`, `bundle/manifests/*`, `pkg/operator/assets/bindata.go`). If no
+cascade trigger is touched, state "None".
 
 ### User Stories → Task Coverage
 One bullet per US-00x with covering Task IDs.
@@ -186,6 +207,10 @@ decomposition), then apply these consolidation rules to the result.
 2. **Merge mechanics:** Combine the smaller task's Objective, Target file(s), and
    Acceptance criteria into the host task's §4 payload. Remove the merged Task ID
    from §1, §2, §3. Update Depends On references.
+   **Preserve on merge:** consolidation MUST NOT drop cascade-closure items (§4b
+   regeneration command + committed output files), delivery-obligation tasks (§4c),
+   or any named test. Merging moves these into the host task's Acceptance; it never
+   deletes them. A cascade trigger always keeps its regeneration acceptance item.
 3. **Cap:** Merged task complexity must not exceed 5.
 4. **Range enforcement:**
    - count > max → consolidate aggressively (raise threshold to 3 if needed)
@@ -208,7 +233,11 @@ consolidation_threshold: 2) and apply consolidation rules. Never generate more t
 ## Quality self-check (target ≥75%)
 Before finalizing, verify:
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
-- [ ] §0 lists every SR-xx (incl. every behavioral-constraint and test-obligation) with covering Task IDs
+- [ ] §0 lists every SR-xx (incl. every behavioral-constraint, test-obligation, and delivery-obligation) with covering Task IDs
+- [ ] §0 Change-Cascade Coverage lists every cascade trigger (from repo-assessment §7) → covering task → committed output files (or "None")
+- [ ] Every `delivery-obligation` SR has a covering task (e.g. a documentation task producing the artifact)
+- [ ] Every task that adds a cascade trigger names its regeneration command AND committed regenerated files in §4 Acceptance (§4b)
+- [ ] Every multi-input test-obligation names test(s) covering EACH enumerated input (all label keys/ports/peers), not a subset
 - [ ] Every unit-tier test-obligation SR has a NAMED test in some task's §4 Acceptance (not generic acceptance)
 - [ ] Every cluster/e2e-tier obligation is marked "routed to e2e stage (out of OAPE scope)" — none silently dropped
 - [ ] §0 lists every US-00x from specs.md with ≥1 covering Task ID
@@ -304,10 +333,15 @@ One bullet per spec requirement (FR-xx, SC-xx, AC-xx) and plan phase, each with 
 cover it. Every spec goal and every plan phase must appear.
 
 #### Source Requirements & Test Obligations → Task Coverage
-One bullet per SR-xx from the specs.md Source Requirement Ledger (especially behavioral-constraint
-and test-obligation SRs), each with covering Task ID(s). For unit-tier obligations, name the test
-that discharges it; for cluster/e2e-tier, mark "routed to e2e stage (out of OAPE scope)". Every SR
+One bullet per SR-xx from the specs.md Source Requirement Ledger (especially behavioral-constraint,
+test-obligation, and delivery-obligation SRs), each with covering Task ID(s). For unit-tier
+obligations, name the test that discharges it; for cluster/e2e-tier, mark "routed to e2e stage (out
+of OAPE scope)"; for delivery-obligations, name the covering task (e.g. documentation). Every SR
 must appear.
+
+#### Change-Cascade Coverage
+One bullet per cascade trigger introduced (repo-assessment §7) → covering Task ID → committed output
+files (`config/rbac/role.yaml`, `bundle/manifests/*`, `pkg/operator/assets/bindata.go`, …), or "None".
 
 #### User Stories → Task Coverage
 One bullet per US-00x with covering Task IDs.

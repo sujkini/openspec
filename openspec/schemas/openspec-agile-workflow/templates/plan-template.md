@@ -121,6 +121,8 @@ Before finalizing, verify:
 - [ ] §6 verification matrix has rows for Unit, Integration, E2E, Manual (or N/A with reason)
 - [ ] §6 rows cite spec ids (FR/SC/SR); every behavioral-constraint FR and every test-obligation SR has a row
 - [ ] Every FR and SR from specs.md is either placed in a phase OR listed in §9 Deviations — none silently absent
+- [ ] Every `delivery-obligation` SR (docs/upgrade/runbook) is placed in a phase (e.g. a documentation deliverable)
+- [ ] Every cascade trigger a phase introduces has its regeneration command in Verification hooks AND its regenerated output files in Target files (no conditional "regen only if…")
 - [ ] §9 present; each deviation has "Source-cite verified? = yes"; no rationale misattributes a cut to the source
 - [ ] §7 risks derived from repo_assessment §5 and §11.1 UNVERIFIED items
 - [ ] §8 complete — every open question has owner + default assumption; no truncated rows
@@ -178,6 +180,14 @@ require explicit justification.
 
 #### 3.5 Packaging / OLM (if applicable)
 OLM/CSV ownership rules, bundle layout, image references, feature gates/TechPreview markers.
+
+**Change-cascade closure (MANDATORY):** Whenever a phase touches a **cascade trigger** from
+repo-assessment §7 — a kubebuilder RBAC marker, an API/CRD type field, a new bindata asset, or an
+image reference — regeneration is **required, not conditional**. Do NOT write "regenerate only if
+unrelated packaging is touched". The phase's **Target files MUST list the regenerated output files**
+(e.g. `config/rbac/role.yaml`, `bundle/manifests/*`, `pkg/operator/assets/bindata.go`) and its
+**Verification hooks MUST include the regeneration command** (`make manifests` / `make bundle` /
+`make update-bindata`). A marker without its regenerated artifact has no runtime effect.
 
 ### § 4. Dependencies & sequencing graph
 

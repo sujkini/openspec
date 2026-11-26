@@ -29,20 +29,26 @@ recovered by any later stage.
 ## Task
 0) **Source Requirement Extraction (MANDATORY — do this FIRST).**
    Before writing stories, read the ENTIRE source (ticket/EP) and enumerate every atomic
-   requirement as `SR-001`, `SR-002`, …. Do not summarize sections away — sweep the sections
-   pipelines routinely skim: **Implementation Details/Notes/Constraints, Test Plan,
-   Workflow/Workflow Description, Support Procedures, Risks and Mitigations**, not just
-   Summary/Goals. For each `SR` capture:
-   - a **type tag**: `functional` | `behavioral-constraint` | `test-obligation` | `non-goal`
+   requirement as `SR-001`, `SR-002`, …. Do not summarize sections away — **sweep EVERY heading**,
+   not just the "requirements"-looking ones. Sections pipelines routinely skip but MUST be swept:
+   **Summary, Motivation, Goals/Non-Goals, Implementation Details/Notes/Constraints, Test Plan,
+   Workflow/Workflow Description, Support Procedures, Risks and Mitigations, Graduation Criteria,
+   Upgrade/Downgrade Strategy, Operational Aspects**. Treat every heading as in-scope. For each
+   `SR` capture:
+   - a **type tag**: `functional` | `behavioral-constraint` | `test-obligation` | `delivery-obligation` | `non-goal`
    - a short **verbatim anchor** (quote ≤ ~15 words) + the source section it came from, so any
      later "per source / per EP" claim can be checked against the actual text.
    Flag as `behavioral-constraint` any requirement expressed with constraint verbs:
    *watch/observe, reconcile, restore/repair drift, take precedence / override / win over,
    before/after ordering, must-not*. Flag as `test-obligation` anything the source's Test Plan
-   requires be tested (unit OR cluster/e2e). This `SR` ledger is emitted in specs.md (see the
-   "Source Requirement Ledger" and "Source Requirement → FR/SC Coverage" sections of the template)
-   and is the backbone every downstream stage traces against. Do NOT invent requirements the
-   source does not state.
+   requires be tested (unit OR cluster/e2e). Flag as `delivery-obligation` any **non-code artifact
+   the source requires to ship** — documentation, upgrade/migration notes, runbook/support
+   procedures, sample manifests — cued by prose like *"Documentation states / must state",
+   "document that", "runbook", "upgrade requires", "on downgrade"*. These soft/process obligations
+   use no constraint verb and are the ones most often missed, so look for them deliberately.
+   This `SR` ledger is emitted in specs.md (see the "Source Requirement Ledger" and
+   "Source Requirement → FR/SC Coverage" sections of the template) and is the backbone every
+   downstream stage traces against. Do NOT invent requirements the source does not state.
 1) Extract user stories from the ticket. Assign stable IDs (US-001, US-002, …) and priorities
    (P1 critical, P2 important, P3 nice-to-have).
    Each story must be independently testable with acceptance scenarios in Given/When/Then format.
@@ -101,6 +107,8 @@ Follow the output template structure exactly.
     or to a documented Non-Goal — ZERO silently dropped source requirements.
   - Every `behavioral-constraint` SR is expressed as an FR (not discarded as "implementation detail").
   - Every `test-obligation` SR is represented by an FR/SC (unit- or cluster-tier) — none omitted.
+  - Every source heading was swept (incl. Summary / Graduation Criteria / Upgrade / Operational) — no section skipped.
+  - Every `delivery-obligation` SR (documentation, upgrade/migration notes, runbook/support) is covered by an FR/SC or a documented Non-Goal.
   - Every user story has a stable ID (US-001, US-002, …).
   - Every FR maps to ≥1 Given/When/Then scenario; every P1 story has ≥2 scenarios.
   - Story → FR Traceability table is present; every FR appears in ≥1 story mapping.
@@ -117,7 +125,7 @@ Follow the output template structure exactly.
 <!--
   Atomic enumeration of EVERY requirement in the source (ticket/EP), produced in Task step 0.
   This is the backbone all downstream stages (plan, tasks) trace against. One row per SR.
-  type: functional | behavioral-constraint | test-obligation | non-goal
+  type: functional | behavioral-constraint | test-obligation | delivery-obligation | non-goal
   anchor: short verbatim quote (≤~15 words) + source section — enables "per source" claims to be verified.
   Do NOT invent requirements not stated in the source.
 -->
@@ -127,7 +135,8 @@ Follow the output template structure exactly.
 | SR-001 | functional | [what the source requires] | "[quote]" — [section] |
 | SR-002 | behavioral-constraint | [behavioral guarantee, e.g. auto-restore on external edit] | "[quote]" — [section] |
 | SR-003 | test-obligation | [what must be tested] (unit\|cluster) | "[quote]" — Test Plan |
-| SR-004 | non-goal | [explicitly out of scope] | "[quote]" — Non-Goals |
+| SR-004 | delivery-obligation | [non-code artifact that must ship, e.g. documentation / upgrade note] | "[quote]" — Graduation Criteria |
+| SR-005 | non-goal | [explicitly out of scope] | "[quote]" — Non-Goals |
 
 ## User Scenarios & Testing *(mandatory)*
 
