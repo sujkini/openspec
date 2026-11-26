@@ -91,9 +91,16 @@ When `phase_scope` is absent (task_execution_mode = "one-shot"): generate all ph
     files as committed artifacts** (e.g. `config/rbac/role.yaml`, `bundle/manifests/*`,
     `pkg/operator/assets/bindata.go`). A marker/field without its regenerated artifact is incomplete
     and fails CI / has no runtime effect.
-4c) **Delivery-obligation tasks (mandatory):** Every `delivery-obligation` SR (documentation,
-    upgrade/migration notes, runbook/support procedures) MUST have a covering task that produces the
-    artifact (e.g. a documentation task with the target doc path). These are not e2e and are in scope.
+4c) **Delivery-obligation tasks (mandatory):** Disposition each `delivery-obligation` SR by its
+    recorded `target` (from specs.md):
+    - **`in-repo`** → **IN SCOPE: create a task that PRODUCES the artifact** at the repo's in-repo
+      path (use the docs/samples location from repo-assessment §12 Quick-Nav, e.g.
+      `docs/<feature>.md`), with that file named in the task's §4 Acceptance. Do NOT route an
+      in-repo artifact out of scope — that silently loses the deliverable.
+    - **`external-repo`** → route out: mark in §0 "SR-xx — routed to `<external repo>` (out of OAPE
+      scope)" (e.g. openshift-docs). Do not emit a task.
+    If a delivery-obligation SR has no `target`, treat it as `in-repo` (produce it). These in-repo
+    tasks are not e2e and are in scope.
 5) **E2e exclusion (mandatory):** Do NOT create e2e or Testing_Agent tasks — e2e is out of
    OAPE scope. Note discarded e2e coverage in §0 as "e2e — out of OAPE scope" but do not
    emit rows in §3 or payloads in §4.
@@ -136,8 +143,9 @@ One bullet per `SR-xx` from the specs.md Source Requirement Ledger — especiall
 `behavioral-constraint`, `test-obligation`, and `delivery-obligation` SR — with its covering Task
 ID(s) and, for unit-tier obligations, the **named test** that discharges it. Every unit-tier
 obligation must show a named test; every cluster/e2e-tier obligation must be marked "routed to e2e
-stage (out of OAPE scope)"; every `delivery-obligation` SR must show a covering task (e.g. a
-documentation task). No SR may be absent from this list.
+stage (out of OAPE scope)"; every `in-repo` `delivery-obligation` SR must show a producing task with
+its artifact path, while every `external-repo` one is marked "routed to <external repo> (out of OAPE
+scope)". No SR may be absent from this list.
 
 ### Change-Cascade Coverage
 One bullet per cascade trigger introduced (from repo-assessment §7 — RBAC marker, API/CRD field,
@@ -235,7 +243,7 @@ Before finalizing, verify:
 - [ ] §0 lists every FR-xx, SC-xx, and plan phase with covering Task IDs
 - [ ] §0 lists every SR-xx (incl. every behavioral-constraint, test-obligation, and delivery-obligation) with covering Task IDs
 - [ ] §0 Change-Cascade Coverage lists every cascade trigger (from repo-assessment §7) → covering task → committed output files (or "None")
-- [ ] Every `delivery-obligation` SR has a covering task (e.g. a documentation task producing the artifact)
+- [ ] Every `in-repo` `delivery-obligation` SR has a producing task with its artifact path; every `external-repo` one is routed out (not silently dropped, not collapsed from in-repo)
 - [ ] Every task that adds a cascade trigger names its regeneration command AND committed regenerated files in §4 Acceptance (§4b)
 - [ ] Every multi-input test-obligation names test(s) covering EACH enumerated input (all label keys/ports/peers), not a subset
 - [ ] Every unit-tier test-obligation SR has a NAMED test in some task's §4 Acceptance (not generic acceptance)
@@ -336,7 +344,8 @@ cover it. Every spec goal and every plan phase must appear.
 One bullet per SR-xx from the specs.md Source Requirement Ledger (especially behavioral-constraint,
 test-obligation, and delivery-obligation SRs), each with covering Task ID(s). For unit-tier
 obligations, name the test that discharges it; for cluster/e2e-tier, mark "routed to e2e stage (out
-of OAPE scope)"; for delivery-obligations, name the covering task (e.g. documentation). Every SR
+of OAPE scope)"; for `in-repo` delivery-obligations, name the producing task + artifact path; for
+`external-repo` delivery-obligations, mark "routed to <external repo> (out of OAPE scope)". Every SR
 must appear.
 
 #### Change-Cascade Coverage

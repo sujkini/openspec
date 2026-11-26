@@ -46,6 +46,16 @@ recovered by any later stage.
    procedures, sample manifests — cued by prose like *"Documentation states / must state",
    "document that", "runbook", "upgrade requires", "on downgrade"*. These soft/process obligations
    use no constraint verb and are the ones most often missed, so look for them deliberately.
+   **For each `delivery-obligation`, also record a `target`: `in-repo` or `external-repo`.**
+   - `in-repo` = the artifact lives in the repository being changed (operator `docs/`, sample CRs,
+     in-tree runbooks). These are IN SCOPE and MUST be produced by a downstream task.
+   - `external-repo` = the source explicitly names a *different* repository or channel
+     (e.g. "openshift-docs", "release notes", "customer portal"). These are routed out of scope.
+   **Default to `in-repo` unless the source explicitly names an external repository.** A generic
+   "Documentation states…" is `in-repo`; only an explicit "documentation in openshift-docs" is
+   `external-repo`. A single source may yield BOTH (an in-repo operator doc AND an external
+   openshift-docs entry) — emit a separate SR for each; never collapse an in-repo doc into the
+   external bucket (that silently loses the artifact).
    This `SR` ledger is emitted in specs.md (see the "Source Requirement Ledger" and
    "Source Requirement → FR/SC Coverage" sections of the template) and is the backbone every
    downstream stage traces against. Do NOT invent requirements the source does not state.
@@ -109,6 +119,7 @@ Follow the output template structure exactly.
   - Every `test-obligation` SR is represented by an FR/SC (unit- or cluster-tier) — none omitted.
   - Every source heading was swept (incl. Summary / Graduation Criteria / Upgrade / Operational) — no section skipped.
   - Every `delivery-obligation` SR (documentation, upgrade/migration notes, runbook/support) is covered by an FR/SC or a documented Non-Goal.
+  - Every `delivery-obligation` SR records a target (`in-repo` or `external-repo`); default is in-repo — an in-repo doc is NOT collapsed into the external bucket.
   - Every user story has a stable ID (US-001, US-002, …).
   - Every FR maps to ≥1 Given/When/Then scenario; every P1 story has ≥2 scenarios.
   - Story → FR Traceability table is present; every FR appears in ≥1 story mapping.
@@ -127,6 +138,9 @@ Follow the output template structure exactly.
   This is the backbone all downstream stages (plan, tasks) trace against. One row per SR.
   type: functional | behavioral-constraint | test-obligation | delivery-obligation | non-goal
   anchor: short verbatim quote (≤~15 words) + source section — enables "per source" claims to be verified.
+  For delivery-obligation rows, append the target to the Type cell: `delivery-obligation (in-repo)`
+  or `delivery-obligation (external-repo)`. Default in-repo; external only when the source names a
+  different repo/channel (e.g. openshift-docs).
   Do NOT invent requirements not stated in the source.
 -->
 
@@ -135,8 +149,9 @@ Follow the output template structure exactly.
 | SR-001 | functional | [what the source requires] | "[quote]" — [section] |
 | SR-002 | behavioral-constraint | [behavioral guarantee, e.g. auto-restore on external edit] | "[quote]" — [section] |
 | SR-003 | test-obligation | [what must be tested] (unit\|cluster) | "[quote]" — Test Plan |
-| SR-004 | delivery-obligation | [non-code artifact that must ship, e.g. documentation / upgrade note] | "[quote]" — Graduation Criteria |
-| SR-005 | non-goal | [explicitly out of scope] | "[quote]" — Non-Goals |
+| SR-004 | delivery-obligation (in-repo) | [artifact that lives in this repo, e.g. operator docs page] | "[quote]" — Graduation Criteria |
+| SR-005 | delivery-obligation (external-repo) | [artifact in a named external repo, e.g. openshift-docs page] | "[quote]" — Tech Preview → GA |
+| SR-006 | non-goal | [explicitly out of scope] | "[quote]" — Non-Goals |
 
 ## User Scenarios & Testing *(mandatory)*
 

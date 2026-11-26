@@ -408,6 +408,7 @@ steps in the implementation plan.*
 | Add a new manifest | `path/to/bindata/` + `path/to/static_resource_controller` |
 | Change RBAC | `path/to/rbac/` (NOT the generated bundle) |
 | Add a test | `path/to/test/pattern_to_follow` |
+| Add/update in-repo docs | `docs/` (state the actual in-repo docs location + convention; "N/A — no in-repo docs dir" if none) |
 
 ---
 
